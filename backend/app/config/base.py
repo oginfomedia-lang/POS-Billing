@@ -28,6 +28,9 @@ class BaseConfig:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(
         hours=int(os.environ.get("JWT_ACCESS_TOKEN_HOURS", "12"))
     )
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(
+        days=int(os.environ.get("JWT_REFRESH_TOKEN_DAYS", "30"))
+    )
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 
