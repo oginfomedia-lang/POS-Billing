@@ -75,3 +75,79 @@ body {
 .status-offline {
   background: var(--danger);
 }
+
+/* ── Login ── */
+.login-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 70vh;
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 40px;
+  width: 360px;
+}
+.login-title { margin: 0 0 4px; font-size: 24px; }
+.login-subtitle { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+.login-error { background: #fee2e2; color: var(--danger); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Fields ── */
+.field-label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 500; }
+.field-input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 15px; color: var(--text); background: var(--surface); }
+.field-input:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+
+/* ── Buttons ── */
+.btn-primary { padding: 10px 20px; background: #2563eb; color: #fff; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-secondary { padding: 8px 16px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 14px; cursor: pointer; }
+.btn-secondary:hover { background: var(--bg); }
+.btn-sm { padding: 4px 10px; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.btn-sm:hover { background: var(--bg); }
+
+/* ── Admin pages ── */
+.admin-page { max-width: 1100px; margin: 0 auto; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.admin-header h2 { margin: 0; font-size: 22px; }
+.admin-actions { display: flex; gap: 10px; }
+.page-error { background: #fee2e2; color: var(--danger); padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+.loading-text { color: var(--muted); margin-bottom: 12px; }
+
+/* ── Tables ── */
+.data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.data-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; font-size: 13px; }
+.data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.data-table tr:hover td { background: var(--bg); }
+.table-actions { display: flex; gap: 6px; }
+.empty-row { text-align: center; color: var(--muted); padding: 24px; }
+.audit-table td:first-child { white-space: nowrap; }
+.ts-cell { font-size: 13px; color: var(--muted); }
+.audit-table code { font-size: 12px; background: var(--bg); padding: 2px 6px; border-radius: 3px; }
+
+/* ── Role badges ── */
+.role-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.role-admin { background: #dbeafe; color: #1e40af; }
+.role-manager { background: #d1fae5; color: #065f46; }
+.role-cashier { background: #f3f4f6; color: #374151; }
+
+/* ── Pagination ── */
+.pagination { display: flex; align-items: center; gap: 12px; margin-top: 20px; font-size: 14px; color: var(--muted); }
+.pagination button { padding: 6px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; justify-content: center; align-items: center; z-index: 100; }
+.modal-box { background: var(--surface); border-radius: 10px; padding: 28px; width: 400px; max-width: 95vw; }
+.modal-box h3 { margin: 0 0 16px; font-size: 18px; }
+.modal-form { display: flex; flex-direction: column; gap: 14px; }
+.modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.form-error { background: #fee2e2; color: var(--danger); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+.checkbox-label { flex-direction: row !important; align-items: center; gap: 8px !important; }
+
+/* ── Filter bar ── */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+.filter-input { max-width: 220px; }
