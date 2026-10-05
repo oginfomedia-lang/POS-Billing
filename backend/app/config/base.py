@@ -1,1 +1,41 @@
 """Settings common to all environments."""
+import os
+from datetime import timedelta
+
+DEV_SECRET = "dev-only-change-me"
+
+
+class BaseConfig:
+    ENV_NAME = "base"
+    DEBUG = False
+    TESTING = False
+
+    API_PREFIX = "/api/v1"
+
+    SECRET_KEY = os.environ.get("SECRET_KEY", DEV_SECRET)
+
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # pool_pre_ping drops dead connections (e.g. after a PostgreSQL restart).
+    # 5 counters + admin screens fit comfortably in this pool.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 10,
+    }
+
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", DEV_SECRET)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(
+        hours=int(os.environ.get("JWT_ACCESS_TOKEN_HOURS", "12"))
+    )
+
+    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
+
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+    LOG_FILE = os.environ.get("LOG_FILE") or None
+
+    @classmethod
+    def validate(cls) -> None:
+        """Fail fast when a required setting is missing."""
+        if not cls.SQLALCHEMY_DATABASE_URI:
+            raise RuntimeError("DATABASE_URL is not set. Copy backend/.env.example to backend/.env.")

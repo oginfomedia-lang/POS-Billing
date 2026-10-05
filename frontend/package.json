@@ -2,5 +2,31 @@
   "name": "pos-billing-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Supermarket POS counter app (Electron + React + TypeScript). Dependencies are added in Phase 0."
+  "description": "Supermarket POS counter app (Electron + React + TypeScript).",
+  "main": "out/main/main.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-vite build && electron-builder --win"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6"
+  }
 }

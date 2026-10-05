@@ -1,1 +1,13 @@
-# Windows installer build settings.
+# Windows installer build settings (run: npm run dist).
+appId: com.litecode.posbilling
+productName: POS Billing
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+win:
+  target: nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
