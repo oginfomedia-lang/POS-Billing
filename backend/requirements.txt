@@ -1,0 +1,1 @@
+# Production Python dependencies (Flask, SQLAlchemy, Flask-Migrate, Flask-JWT-Extended, psycopg, pydantic, waitress).

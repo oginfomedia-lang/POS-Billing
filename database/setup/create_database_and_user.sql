@@ -1,0 +1,1 @@
+-- Creates the pos_db database and pos_app user.

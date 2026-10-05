@@ -1,0 +1,31 @@
+# Environment / secrets
+.env
+*.env
+!.env.example
+scripts/backup/backup_config.ps1
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Electron
+node_modules/
+dist/
+out/
+release/
+
+# Backups (never commit database dumps)
+backups/**/*
+!backups/**/
+!backups/**/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

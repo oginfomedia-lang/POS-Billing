@@ -1,0 +1,1 @@
+"""Active discount queries."""

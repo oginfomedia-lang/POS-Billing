@@ -1,0 +1,1 @@
+-- Inserts ADMIN, MANAGER and CASHIER roles.
