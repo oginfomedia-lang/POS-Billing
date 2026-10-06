@@ -5,6 +5,15 @@ from flask_jwt_extended import get_jwt, verify_jwt_in_request
 
 from app.errors.exceptions import PermissionDeniedError
 
+# Counter operations every role can perform.
+POS_PERMISSIONS = {
+    "shifts.open",
+    "shifts.read",
+    "sales.create",
+    "sales.read",
+    "sales.void",
+}
+
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "users.create",
@@ -18,15 +27,18 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "counters.read",
         "counters.update",
         "audit.read",
+        *POS_PERMISSIONS,
     },
     "manager": {
         "users.read",
         "stores.read",
         "counters.read",
+        *POS_PERMISSIONS,
     },
     "cashier": {
         "stores.read",
         "counters.read",
+        *POS_PERMISSIONS,
     },
 }
 

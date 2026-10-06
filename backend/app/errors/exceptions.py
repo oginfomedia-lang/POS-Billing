@@ -41,7 +41,8 @@ class ConflictError(AppError):
     code = "CONFLICT"
 
 
-class InsufficientStockError(ConflictError):
+class InsufficientStockError(AppError):
     """details = [{"product_id": ..., "product_name": ..., "requested": ..., "available": ...}]"""
 
+    status_code = 400
     code = "INSUFFICIENT_STOCK"

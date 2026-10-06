@@ -1,4 +1,4 @@
-// POS billing screen — Phase 2 placeholder.
+// POS home: entry point to billing, held bills and shift.
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -19,7 +19,11 @@ export function PosPage() {
           <button className="btn-secondary" onClick={logout}>Logout</button>
         </div>
       </div>
-      <p className="loading-text">Billing screen coming in Phase 2.</p>
+      <div className="pos-menu">
+        <button className="btn-primary" onClick={() => navigate('/pos/billing')}>Start Billing</button>
+        <button className="btn-secondary" onClick={() => navigate('/pos/held')}>Held Bills</button>
+        <button className="btn-secondary" onClick={() => navigate('/pos/open-shift')}>Open Shift</button>
+      </div>
     </div>
   );
 }
