@@ -1,14 +1,10 @@
 // Audit log viewer.
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
 import type { AuditLogOut, PagedResponse } from '../../types/api';
+import { AdminNav } from '../../components/admin/AdminNav';
 
 export function AuditLogsPage() {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
   const [logs, setLogs] = useState<AuditLogOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -53,12 +49,9 @@ export function AuditLogsPage() {
 
   return (
     <div className="admin-page">
+      <AdminNav />
       <div className="admin-header">
         <h2>Audit Logs</h2>
-        <div className="admin-actions">
-          <button className="btn-secondary" onClick={() => navigate('/admin/users')}>Users</button>
-          <button className="btn-secondary" onClick={logout}>Logout</button>
-        </div>
       </div>
 
       <div className="filter-bar">

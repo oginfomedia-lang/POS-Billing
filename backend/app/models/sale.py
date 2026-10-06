@@ -10,7 +10,7 @@ class Sale(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     bill_number = db.Column(db.String(40), unique=True, nullable=True)  # assigned on completion
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
-    counter_id = db.Column(db.Integer, db.ForeignKey("counters.id"), nullable=False)
+    counter_id = db.Column(db.Integer, db.ForeignKey("counters.id"), nullable=True)  # shifts may have no counter
     shift_id = db.Column(db.Integer, db.ForeignKey("cashier_shifts.id"), nullable=False, index=True)
     cashier_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     status = db.Column(
@@ -48,10 +48,12 @@ class SaleItem(TimestampMixin, db.Model):
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
     qty = db.Column(db.Integer, nullable=False)
-    line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before tax
-    tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before discount and tax
+    discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)  # on (line_total - discount_amount)
 
     sale = db.relationship("Sale", back_populates="items")
+    product = db.relationship("Product")
 
     def __repr__(self) -> str:
         return f"<SaleItem {self.product_name} x{self.qty}>"

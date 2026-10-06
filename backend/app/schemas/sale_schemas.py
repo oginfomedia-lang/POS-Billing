@@ -19,6 +19,7 @@ class SaleItemOut(BaseModel):
     tax_rate: Decimal
     qty: int
     line_total: Decimal
+    discount_amount: Decimal
     tax_amount: Decimal
 
     model_config = {"from_attributes": True}
@@ -28,7 +29,7 @@ class SaleOut(BaseModel):
     id: int
     bill_number: str | None
     store_id: int
-    counter_id: int
+    counter_id: int | None
     shift_id: int
     cashier_id: int
     status: SaleStatus
@@ -71,7 +72,7 @@ class ReceiptOut(BaseModel):
     store_address: str | None
     store_phone: str | None
     store_gstin: str | None
-    counter_code: str
+    counter_code: str | None
     cashier_name: str
     completed_at: datetime
     items: list[SaleItemOut]
@@ -80,3 +81,5 @@ class ReceiptOut(BaseModel):
     tax_amount: Decimal
     total: Decimal
     payments: list[PaymentOut]
+    receipt_header: str
+    receipt_footer: str

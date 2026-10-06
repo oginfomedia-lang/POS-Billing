@@ -13,15 +13,23 @@ from app.models.user import User
 from app.repositories.product_repository import ProductRepository
 from app.repositories.sale_repository import SaleRepository
 from app.schemas.sale_schemas import AddItemRequest, CompleteSaleRequest, HoldSaleRequest, UpdateItemRequest
-from app.services import audit_service, bill_number_service, inventory_service, payment_service, pricing_service
+from app.services import (
+    audit_service,
+    bill_number_service,
+    discount_service,
+    inventory_service,
+    payment_service,
+    pricing_service,
+)
 from app.services.shift_service import require_active_shift
 from app.utils.dates import now_ist
+from app.utils.money import money_mul
 from app.utils.transactions import transaction
 
 
 def create_draft(actor: User) -> tuple[Sale, bool]:
     """Return (sale, created). Reuses the cashier's open bill so a reload doesn't orphan drafts."""
-    shift = require_active_shift(actor)
+    shift = require_active_shift(actor.id)
     repo = SaleRepository()
     existing = repo.list_open(shift.id, actor.id)
     if existing:
@@ -38,7 +46,8 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
         _require_status(sale, SaleStatus.OPEN)
 
         product = ProductRepository().get_by_id(data.product_id)
-        if product is None or not product.is_active:
+        # store_id NULL = product sold in every store.
+        if product is None or not product.is_active or product.store_id not in (None, sale.store_id):
             raise NotFoundError(f"Product {data.product_id} not found.")
 
         item = SaleRepository().find_item(sale.id, product.id)
@@ -46,10 +55,10 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
             item.qty += data.qty
         else:
             item = SaleItem(
-                product_id=product.id,
+                product=product,
                 product_name=product.name,
-                unit_price=product.selling_price,
-                tax_rate=product.gst_rate,
+                unit_price=product.price,
+                tax_rate=product.tax_rate,
                 qty=data.qty,
             )
             sale.items.append(item)
@@ -89,12 +98,12 @@ def hold(sale_id: int, data: HoldSaleRequest, actor: User) -> Sale:
 
 
 def list_held(actor: User) -> list[Sale]:
-    shift = require_active_shift(actor)
+    shift = require_active_shift(actor.id)
     return SaleRepository().list_held(shift.id)
 
 
 def resume(sale_id: int, actor: User) -> Sale:
-    shift = require_active_shift(actor)
+    shift = require_active_shift(actor.id)
     repo = SaleRepository()
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
@@ -135,10 +144,10 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
 
         _recalculate(sale)
         payment = payment_service.build_payment(data.method, sale.total, data.cash_tendered, data.reference)
-        inventory_service.deduct_for_sale(sale.store_id, sale.items)
+        inventory_service.deduct_for_sale(sale.store_id, sale.items, sale.id)
 
         sale.payments.append(payment)
-        sale.bill_number = bill_number_service.next_bill_number(sale.store_id, sale.counter.code)
+        sale.bill_number = bill_number_service.next_bill_number(sale.store_id, sale.counter.code if sale.counter else None)
         sale.status = SaleStatus.PAID
         sale.completed_at = now_ist()
         audit_service.log(
@@ -177,11 +186,25 @@ def _get_item_or_404(sale: Sale, item_id: int) -> SaleItem:
 
 
 def _recalculate(sale: Sale) -> None:
+    """Re-prices every line with the discounts active now: line discounts first, then the bill discount."""
+    items = list(sale.items)
+    for item in items:
+        item.line_total = money_mul(item.unit_price, item.qty)
+
+    discounts = discount_service.active_for_store(sale.store_id)
+    line_off = discount_service.line_discounts(discounts, items)
+    net = [item.line_total - off for item, off in zip(items, line_off)]
+    bill_off = discount_service.best_bill_discount(discounts, sum(net, pricing_service.ZERO))
+    bill_share = pricing_service.allocate(bill_off, net)
+
     lines = []
-    for item in sale.items:
-        item.line_total, item.tax_amount = pricing_service.line_amounts(item.unit_price, item.qty, item.tax_rate)
-        lines.append((item.line_total, item.tax_amount))
-    totals = pricing_service.bill_totals(lines, sale.discount_amount or 0)
+    for item, off, share in zip(items, line_off, bill_share):
+        item.discount_amount = off + share
+        item.line_total, item.tax_amount = pricing_service.line_amounts(
+            item.unit_price, item.qty, item.tax_rate, item.discount_amount
+        )
+        lines.append((item.line_total, item.discount_amount, item.tax_amount))
+    totals = pricing_service.bill_totals(lines)
     sale.subtotal = totals["subtotal"]
     sale.discount_amount = totals["discount_amount"]
     sale.tax_amount = totals["tax_amount"]

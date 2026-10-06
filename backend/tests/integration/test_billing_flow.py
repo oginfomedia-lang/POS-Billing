@@ -2,8 +2,9 @@
 import pytest
 
 from app.extensions import db
-from app.models.inventory import Inventory
-from tests.factories import make_counter, make_product, make_shift
+from app.models.enums import InventoryTxnType
+from app.models.inventory import Inventory, InventoryTransaction
+from tests.factories import make_counter, make_product, make_shift, make_store
 
 pytestmark = pytest.mark.integration
 
@@ -20,7 +21,7 @@ def shift(cashier_user, counter):
 
 @pytest.fixture
 def product(store):
-    return make_product(store, name="Milk 1L", price="50.00", gst_rate="5.00", stock=10)
+    return make_product(store, name="Milk 1L", price="50.00", tax_rate="5.00", stock=10)
 
 
 def _draft(client, headers):
@@ -186,11 +187,31 @@ def test_receipt_for_open_sale_is_409(client, cashier_headers, shift):
     assert client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).status_code == 409
 
 
-def test_open_shift_endpoint(client, cashier_headers, counter):
-    assert client.get("/api/v1/shifts/active", headers=cashier_headers).status_code == 404
-    resp = client.post("/api/v1/shifts/open", json={"counter_code": "C01", "opening_cash": "500"}, headers=cashier_headers)
-    assert resp.status_code == 201
-    assert resp.get_json()["opening_cash"] == "500.00"
-    assert client.get("/api/v1/shifts/active", headers=cashier_headers).status_code == 200
-    resp = client.post("/api/v1/shifts/open", json={"counter_code": "C01"}, headers=cashier_headers)
-    assert resp.status_code == 409
+def test_sale_writes_ledger_row(client, cashier_headers, shift, store, product):
+    sid = _draft(client, cashier_headers)["id"]
+    client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id, "qty": 2}, headers=cashier_headers)
+    client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    txn = db.session.scalar(db.select(InventoryTransaction).where(InventoryTransaction.reference_id == sid))
+    assert txn.txn_type is InventoryTxnType.SALE
+    assert txn.qty == -2
+    assert txn.product_id == product.id
+
+
+def test_shift_without_counter_uses_c00(client, cashier_user, cashier_headers, store, product):
+    make_shift(cashier_user)
+    sid = _draft(client, cashier_headers)["id"]
+    client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id}, headers=cashier_headers)
+    data = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers).get_json()
+    assert data["bill_number"].startswith(f"ST{store.id:02d}-C00-")
+    receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
+    assert receipt["counter_code"] is None
+
+
+def test_product_from_other_store_rejected(client, cashier_headers, shift):
+    other_store = make_store(name="Other Store")
+    product = make_product(other_store, name="Other-store item")
+    product.store_id = other_store.id
+    db.session.commit()
+    sid = _draft(client, cashier_headers)["id"]
+    resp = client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id}, headers=cashier_headers)
+    assert resp.status_code == 404

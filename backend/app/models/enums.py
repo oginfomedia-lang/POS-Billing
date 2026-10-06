@@ -37,3 +37,9 @@ class ShiftStatus(str, enum.Enum):
 class DiscountType(str, enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
+
+
+class DiscountScope(str, enum.Enum):
+    BILL = "bill"
+    PRODUCT = "product"
+    CATEGORY = "category"

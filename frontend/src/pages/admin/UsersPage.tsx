@@ -1,16 +1,12 @@
 // User management: list, create, edit, reset PIN.
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
 import type { PagedResponse, StoreOut, UserOut, UserRole } from '../../types/api';
+import { AdminNav } from '../../components/admin/AdminNav';
 
 const ROLES: UserRole[] = ['admin', 'manager', 'cashier'];
 
 export function UsersPage() {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
   const [users, setUsers] = useState<UserOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
   const [total, setTotal] = useState(0);
@@ -130,14 +126,11 @@ export function UsersPage() {
 
   return (
     <div className="admin-page">
+      <AdminNav />
       <div className="admin-header">
         <h2>Users</h2>
         <div className="admin-actions">
           <button className="btn-primary" onClick={openCreate}>+ Add User</button>
-          <button className="btn-secondary" onClick={() => navigate('/admin/products')}>Products</button>
-          <button className="btn-secondary" onClick={() => navigate('/admin/categories')}>Categories</button>
-          <button className="btn-secondary" onClick={() => navigate('/admin/audit-logs')}>Audit Logs</button>
-          <button className="btn-secondary" onClick={logout}>Logout</button>
         </div>
       </div>
 

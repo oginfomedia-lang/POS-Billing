@@ -8,7 +8,7 @@ from app.repositories.base_repository import BaseRepository
 class SaleRepository(BaseRepository):
     model = Sale
 
-    def create_draft(self, shift_id: int, store_id: int, counter_id: int, cashier_id: int) -> Sale:
+    def create_draft(self, shift_id: int, store_id: int, counter_id: int | None, cashier_id: int) -> Sale:
         sale = Sale(
             shift_id=shift_id,
             store_id=store_id,

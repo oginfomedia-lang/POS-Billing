@@ -204,3 +204,21 @@ body {
   .pos-content { padding: 0; overflow: visible; }
   .receipt { border: none; margin: 0; }
 }
+
+/* ── Admin nav ── */
+.admin-nav { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.admin-nav-link { padding: 6px 12px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; }
+.admin-nav-link:hover { background: var(--surface); }
+.admin-nav-link.active { background: #2563eb; color: #fff; font-weight: 600; }
+.admin-nav-spacer { flex: 1; }
+
+/* ── Stores / inventory ── */
+.sub-section { margin-top: 28px; }
+.sub-section h3 { margin: 0; font-size: 18px; }
+.hint-text { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.clickable-row { cursor: pointer; }
+.selected-row td { background: #eff6ff !important; }
+.stock-badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.stock-low { background: #fef3c7; color: var(--warn); }
+.stock-out { background: #fee2e2; color: var(--danger); }
+.modal-wide { width: 640px; max-height: 85vh; overflow: auto; }

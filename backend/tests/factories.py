@@ -52,11 +52,11 @@ def make_product(
     store: Store,
     name: str = "Test Product",
     price: str = "10.00",
-    gst_rate: str = "5.00",
+    tax_rate: str = "5.00",
     stock: int = 100,
     barcode: str | None = None,
 ) -> Product:
-    product = Product(name=name, selling_price=Decimal(price), gst_rate=Decimal(gst_rate))
+    product = Product(name=name, price=Decimal(price), tax_rate=Decimal(tax_rate))
     product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
     db.session.add(product)
     db.session.flush()
@@ -65,13 +65,13 @@ def make_product(
     return product
 
 
-def make_shift(user: User, counter: Counter, opening_cash: str = "0.00") -> CashierShift:
+def make_shift(user: User, counter: Counter | None = None, opening_float: str = "0.00") -> CashierShift:
     shift = CashierShift(
-        store_id=counter.store_id,
-        counter_id=counter.id,
-        cashier_id=user.id,
+        store_id=counter.store_id if counter else user.store_id,
+        counter_id=counter.id if counter else None,
+        user_id=user.id,
         status=ShiftStatus.OPEN,
-        opening_cash=Decimal(opening_cash),
+        opening_float=Decimal(opening_float),
     )
     db.session.add(shift)
     db.session.commit()

@@ -20,6 +20,7 @@ function createWindow(): void {
 
   win.once('ready-to-show', () => {
     win.maximize();
+    win.webContents.openDevTools();
     win.show();
   });
 

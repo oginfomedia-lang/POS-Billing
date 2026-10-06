@@ -1,1 +1,53 @@
 """Inventory and stock movement schemas."""
+from __future__ import annotations
+
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, Field
+
+from app.models.enums import InventoryTxnType
+
+
+class StockLevelOut(BaseModel):
+    product_id: int
+    product_name: str
+    barcode: str | None
+    qty_on_hand: Decimal
+    low_stock_threshold: Decimal | None  # this product's own level; None = use the Settings default
+    effective_threshold: Decimal
+    is_low: bool
+
+
+class ThresholdRequest(BaseModel):
+    store_id: int
+    product_id: int
+    threshold: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=3)
+
+
+class StockInRequest(BaseModel):
+    store_id: int
+    product_id: int
+    qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    notes: str | None = Field(None, max_length=500)
+
+
+class AdjustStockRequest(BaseModel):
+    """Set the counted quantity (stock-take, damage, theft). A reason is required."""
+
+    store_id: int
+    product_id: int
+    new_qty: Decimal = Field(..., ge=0, max_digits=12, decimal_places=3)
+    notes: str = Field(..., min_length=1, max_length=500)
+
+
+class InventoryTxnOut(BaseModel):
+    id: int
+    product_id: int
+    txn_type: InventoryTxnType
+    qty: Decimal
+    reference_id: int | None
+    notes: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
