@@ -55,8 +55,9 @@ export function BillingPage() {
 
   function handleScan(code: string) {
     act(async () => {
-      const { product } = await getProductByBarcode(code);
-      await addItem(product.id);
+      const scanRes = await getProductByBarcode(code);
+      const qty = scanRes.is_variable_weight && scanRes.weight_kg ? scanRes.weight_kg : 1;
+      await addItem(scanRes.product.id, qty);
     });
   }
 

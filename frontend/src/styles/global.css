@@ -222,3 +222,50 @@ body {
 .stock-low { background: #fef3c7; color: var(--warn); }
 .stock-out { background: #fee2e2; color: var(--danger); }
 .modal-wide { width: 640px; max-height: 85vh; overflow: auto; }
+
+/* ── Barcode Chips & Badges ── */
+.barcode-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.barcode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-family: monospace;
+}
+.barcode-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-family: sans-serif;
+}
+.badge-manufacturer { background: #dbeafe; color: #1e40af; }
+.badge-inhouse { background: #d1fae5; color: #065f46; }
+.badge-scale { background: #fef3c7; color: #92400e; }
+.chip-remove-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+}
+.chip-remove-btn:hover {
+  font-weight: bold;
+}
+.barcode-scanner-box {
+  display: flex;
+  gap: 8px;
+}
+

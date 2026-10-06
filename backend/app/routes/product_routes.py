@@ -1,8 +1,9 @@
-"""Product and barcode endpoints, GET /products/barcode/<barcode>."""
+"""Product and barcode management API routes."""
 from flask import Blueprint, jsonify, request
 
 from app.schemas.common import PagedResponse, PaginationQuery
 from app.schemas.product_schemas import (
+    BarcodeOut,
     CategoryCreate,
     CategoryOut,
     CategoryUpdate,
@@ -86,11 +87,64 @@ def update_product(product_id: int):
     return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 200
 
 
+# ── Barcodes & POS Scanner ───────────────────────────────────────────────────
+
+@product_bp.post("/products/<int:id>/barcodes")
+@require_permission("products.update")
+def add_product_barcode(id: int):
+    body = request.get_json(force=True) or {}
+    barcode_str = body.get("barcode", "")
+    barcode_type = body.get("barcode_type", "MANUFACTURER")
+    is_primary = bool(body.get("is_primary", False))
+    pb = product_service.add_product_barcode(id, barcode_str, barcode_type, is_primary)
+    return jsonify(BarcodeOut.model_validate(pb).model_dump(mode="json")), 201
+
+
+@product_bp.delete("/products/<int:id>/barcodes/<string:barcode>")
+@require_permission("products.update")
+def remove_product_barcode(id: int, barcode: str):
+    product_service.remove_product_barcode(id, barcode)
+    return jsonify({"message": f"Barcode '{barcode}' removed."}), 200
+
+
+@product_bp.post("/products/<int:id>/generate-inhouse-barcode")
+@require_permission("products.update")
+def generate_inhouse_barcode_route(id: int):
+    pb = product_service.generate_and_save_inhouse_barcode(id)
+    return jsonify(BarcodeOut.model_validate(pb).model_dump(mode="json")), 201
+
+
+@product_bp.get("/pos/scan")
+@product_bp.get("/products/scan")
+@require_permission("products.read")
+def pos_scan_barcode():
+    scanned_val = request.args.get("barcode") or request.args.get("code") or ""
+    res = product_service.scan_barcode(scanned_val)
+    resp = ProductBarcodeOut(
+        product=ProductOut.model_validate(res["product"]),
+        scanned_barcode=res["scanned_barcode"],
+        is_variable_weight=res["is_variable_weight"],
+        weight_grams=res["weight_grams"],
+        weight_kg=res["weight_kg"],
+        unit_price=res["unit_price"],
+        calculated_price=res["calculated_price"],
+        qty_on_hand=res["qty_on_hand"],
+    )
+    return jsonify(resp.model_dump(mode="json")), 200
+
+
 @product_bp.get("/products/barcode/<string:barcode>")
 @require_permission("products.read")
 def get_by_barcode(barcode: str):
-    product = product_service.get_by_barcode(barcode)
-    inventory = product.inventory
-    qty = float(inventory.qty_on_hand) if inventory else None
-    resp = ProductBarcodeOut(product=ProductOut.model_validate(product), qty_on_hand=qty)
+    res = product_service.scan_barcode(barcode)
+    resp = ProductBarcodeOut(
+        product=ProductOut.model_validate(res["product"]),
+        scanned_barcode=res["scanned_barcode"],
+        is_variable_weight=res["is_variable_weight"],
+        weight_grams=res["weight_grams"],
+        weight_kg=res["weight_kg"],
+        unit_price=res["unit_price"],
+        calculated_price=res["calculated_price"],
+        qty_on_hand=res["qty_on_hand"],
+    )
     return jsonify(resp.model_dump(mode="json")), 200

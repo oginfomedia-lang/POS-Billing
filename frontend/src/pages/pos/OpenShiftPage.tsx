@@ -25,7 +25,7 @@ export function OpenShiftPage() {
     }
     try {
       // The shift records which till it runs on; bill numbers include that counter's code.
-      const counter = (await listCounters(storeId)).find((c) => c.code === counterCode && c.is_active);
+      const counter = (await listCounters(storeId)).find((c) => c.code.toLowerCase() === counterCode.toLowerCase() && c.is_active);
       if (!counter) {
         setError(`Counter ${counterCode} is not set up for your store. Ask an admin to add it, or fix counter.json.`);
         return;

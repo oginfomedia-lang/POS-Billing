@@ -16,6 +16,12 @@ class AppError(Exception):
         self.details = details
 
 
+class BadRequestError(AppError):
+    status_code = 400
+    code = "BAD_REQUEST"
+
+
+
 class ValidationError(AppError):
     status_code = 422
     code = "VALIDATION_ERROR"

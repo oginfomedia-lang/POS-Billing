@@ -1,3 +1,5 @@
+export type BarcodeType = 'MANUFACTURER' | 'IN_HOUSE' | 'PRICE_EMBEDDED';
+
 export interface CategoryOut {
   id: number;
   name: string;
@@ -8,16 +10,20 @@ export interface CategoryOut {
 export interface BarcodeOut {
   id: number;
   barcode: string;
+  barcode_type: BarcodeType;
   is_primary: boolean;
+  created_at?: string;
 }
 
 export interface ProductOut {
   id: number;
+  sku: string;
   name: string;
   description: string | null;
   category_id: number | null;
   price: string;
   tax_rate: string;
+  is_variable_weight: boolean;
   is_active: boolean;
   store_id: number | null;
   barcodes: BarcodeOut[];
@@ -25,5 +31,11 @@ export interface ProductOut {
 
 export interface ProductBarcodeOut {
   product: ProductOut;
+  scanned_barcode?: string;
+  is_variable_weight?: boolean;
+  weight_grams?: number | null;
+  weight_kg?: number | null;
+  unit_price?: string | number | null;
+  calculated_price?: string | number | null;
   qty_on_hand: number | null;
 }

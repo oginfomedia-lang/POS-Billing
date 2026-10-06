@@ -15,6 +15,32 @@ class ProductRepository(BaseRepository):
             .where(Product.is_active.is_(True))
         )
 
+    def find_by_sku(self, sku: str) -> Product | None:
+        sku = str(sku).strip()
+        if not sku:
+            return None
+
+        # Try exact SKU match first
+        product = db.session.scalar(
+            db.select(Product)
+            .where(Product.sku == sku)
+            .where(Product.is_active.is_(True))
+        )
+        if product:
+            return product
+
+        # Try numeric matching or stripping leading zeroes (e.g. '00123' matching '123' or 'SKU-123')
+        if sku.isdigit():
+            numeric_val = str(int(sku))
+            product = db.session.scalar(
+                db.select(Product)
+                .where((Product.sku == numeric_val) | (Product.sku == f"SKU-{numeric_val}"))
+                .where(Product.is_active.is_(True))
+            )
+
+        return product
+
+
     def list(
         self,
         page: int = 1,

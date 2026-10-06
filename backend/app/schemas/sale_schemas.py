@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
 
 from app.models.enums import SaleStatus
 from app.schemas.payment_schemas import PaymentOut
@@ -17,12 +18,23 @@ class SaleItemOut(BaseModel):
     product_name: str
     unit_price: Decimal
     tax_rate: Decimal
-    qty: int
+    qty: int | float
     line_total: Decimal
     discount_amount: Decimal
     tax_amount: Decimal
 
     model_config = {"from_attributes": True}
+
+    @field_validator("qty", mode="before")
+    @classmethod
+    def coerce_qty(cls, v: Any) -> int | float:
+        if v is None:
+            return 0
+        d = Decimal(str(v))
+        if d % 1 == 0:
+            return int(d)
+        return float(d)
+
 
 
 class SaleOut(BaseModel):
@@ -48,11 +60,12 @@ class SaleOut(BaseModel):
 
 class AddItemRequest(BaseModel):
     product_id: int = Field(..., ge=1)
-    qty: int = Field(1, ge=1, le=9999)
+    qty: Decimal = Field(Decimal("1"), ge=Decimal("0.001"), le=Decimal("9999"))
 
 
 class UpdateItemRequest(BaseModel):
-    qty: int = Field(..., ge=1, le=9999)
+    qty: Decimal = Field(..., ge=Decimal("0.001"), le=Decimal("9999"))
+
 
 
 class HoldSaleRequest(BaseModel):

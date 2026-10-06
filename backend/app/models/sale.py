@@ -47,7 +47,7 @@ class SaleItem(TimestampMixin, db.Model):
     product_name = db.Column(db.String(200), nullable=False)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
-    qty = db.Column(db.Integer, nullable=False)
+    qty = db.Column(db.Numeric(12, 3), nullable=False)
     line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before discount and tax
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)  # on (line_total - discount_amount)

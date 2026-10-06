@@ -55,14 +55,24 @@ def make_product(
     tax_rate: str = "5.00",
     stock: int = 100,
     barcode: str | None = None,
+    sku: str | None = None,
+    is_variable_weight: bool = False,
 ) -> Product:
-    product = Product(name=name, price=Decimal(price), tax_rate=Decimal(tax_rate))
+    unique_sku = sku or f"SKU-{uuid.uuid4().hex[:8]}"
+    product = Product(
+        sku=unique_sku,
+        name=name,
+        price=Decimal(price),
+        tax_rate=Decimal(tax_rate),
+        is_variable_weight=is_variable_weight,
+    )
     product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
     db.session.add(product)
     db.session.flush()
     db.session.add(Inventory(store_id=store.id, product_id=product.id, qty_on_hand=stock))
     db.session.commit()
     return product
+
 
 
 def make_shift(user: User, counter: Counter | None = None, opening_float: str = "0.00") -> CashierShift:

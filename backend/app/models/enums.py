@@ -43,3 +43,10 @@ class DiscountScope(str, enum.Enum):
     BILL = "bill"
     PRODUCT = "product"
     CATEGORY = "category"
+
+
+class BarcodeType(str, enum.Enum):
+    MANUFACTURER = "MANUFACTURER"
+    IN_HOUSE = "IN_HOUSE"
+    PRICE_EMBEDDED = "PRICE_EMBEDDED"
+

@@ -1,8 +1,48 @@
-import { useEffect, useState } from 'react';
-import { createProduct, listCategories, listProducts, updateProduct } from '../../services/api/productApi';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  createProduct,
+  deleteBarcode,
+  generateInhouseBarcode,
+  listCategories,
+  listProducts,
+  updateProduct,
+} from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
-import type { CategoryOut, ProductOut } from '../../types/product';
+import type { BarcodeType, CategoryOut, ProductOut } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+
+interface BarcodeItem {
+  barcode: string;
+  barcode_type: BarcodeType;
+}
+
+function calculateEan13Checksum(payload12: string): string {
+  if (payload12.length !== 12 || !/^\d+$/.test(payload12)) return '0';
+  let oddSum = 0;
+  let evenSum = 0;
+  for (let i = 0; i < 12; i++) {
+    const digit = parseInt(payload12[i], 10);
+    if (i % 2 === 0) oddSum += digit;
+    else evenSum += digit;
+  }
+  const total = oddSum + evenSum * 3;
+  return String((10 - (total % 10)) % 10);
+}
+
+function generateLocalInHouseCode(skuOrId: string): string {
+  const digitsOnly = skuOrId.replace(/\D/g, '') || String(Math.floor(Math.random() * 100000000));
+  const sku9 = digitsOnly.slice(-9).padStart(9, '0');
+  const payload12 = `290${sku9}`;
+  const checksum = calculateEan13Checksum(payload12);
+  return `${payload12}${checksum}`;
+}
+
+function inferBarcodeType(code: string): BarcodeType {
+  const clean = code.trim();
+  if (clean.startsWith('290') && clean.length === 13) return 'IN_HOUSE';
+  if (clean.startsWith('20') && clean.length === 13) return 'PRICE_EMBEDDED';
+  return 'MANUFACTURER';
+}
 
 export function ProductsPage() {
   const [products, setProducts] = useState<ProductOut[]>([]);
@@ -14,14 +54,20 @@ export function ProductsPage() {
 
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [target, setTarget] = useState<ProductOut | null>(null);
+  const [formSku, setFormSku] = useState('');
   const [formName, setFormName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formTax, setFormTax] = useState('0');
   const [formCategory, setFormCategory] = useState('');
-  const [formBarcodes, setFormBarcodes] = useState('');
+  const [formVariableWeight, setFormVariableWeight] = useState(false);
   const [formActive, setFormActive] = useState(true);
+  const [barcodesList, setBarcodesList] = useState<BarcodeItem[]>([]);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchAll(p = page) {
     setLoading(true);
@@ -41,36 +87,120 @@ export function ProductsPage() {
     }
   }
 
-  useEffect(() => { fetchAll(); }, [page]);
+  useEffect(() => {
+    fetchAll();
+  }, [page]);
+
+  useEffect(() => {
+    if (modal) {
+      setTimeout(() => barcodeInputRef.current?.focus(), 100);
+    }
+  }, [modal]);
 
   function openCreate() {
     setModal('create');
     setTarget(null);
-    setFormName(''); setFormPrice(''); setFormTax('0');
-    setFormCategory(''); setFormBarcodes(''); setFormActive(true); setFormError('');
+    setFormSku('');
+    setFormName('');
+    setFormPrice('');
+    setFormTax('0');
+    setFormCategory('');
+    setFormVariableWeight(false);
+    setBarcodesList([]);
+    setBarcodeInput('');
+    setFormActive(true);
+    setFormError('');
   }
 
   function openEdit(p: ProductOut) {
     setModal('edit');
     setTarget(p);
+    setFormSku(p.sku || '');
     setFormName(p.name);
     setFormPrice(String(p.price));
     setFormTax(String(p.tax_rate));
     setFormCategory(p.category_id ? String(p.category_id) : '');
+    setFormVariableWeight(p.is_variable_weight || false);
     setFormActive(p.is_active);
+    setBarcodesList(
+      p.barcodes
+        ? p.barcodes.map((b) => ({
+            barcode: b.barcode,
+            barcode_type: b.barcode_type || 'MANUFACTURER',
+          }))
+        : [],
+    );
+    setBarcodeInput('');
     setFormError('');
+  }
+
+  function handleAddBarcodeFromInput(e?: React.KeyboardEvent | React.MouseEvent) {
+    if (e && 'key' in e && e.key !== 'Enter') return;
+    if (e) e.preventDefault(); // Prevent modal form submit on Enter key from scanner
+
+    const code = barcodeInput.trim();
+    if (!code) return;
+
+    if (barcodesList.some((b) => b.barcode === code)) {
+      setFormError(`Barcode '${code}' is already added to this item.`);
+      return;
+    }
+
+    const bType = inferBarcodeType(code);
+    setBarcodesList([...barcodesList, { barcode: code, barcode_type: bType }]);
+    setBarcodeInput('');
+    setFormError('');
+  }
+
+  async function handleGenerateInHouse() {
+    setGenerating(true);
+    setFormError('');
+    try {
+      if (target?.id) {
+        const generated = await generateInhouseBarcode(target.id);
+        if (!barcodesList.some((b) => b.barcode === generated.barcode)) {
+          setBarcodesList([
+            ...barcodesList,
+            { barcode: generated.barcode, barcode_type: generated.barcode_type || 'IN_HOUSE' },
+          ]);
+        }
+      } else {
+        const localCode = generateLocalInHouseCode(formSku || formName || String(Date.now()));
+        if (!barcodesList.some((b) => b.barcode === localCode)) {
+          setBarcodesList([...barcodesList, { barcode: localCode, barcode_type: 'IN_HOUSE' }]);
+        }
+      }
+    } catch (err) {
+      setFormError(getErrorMessage(err));
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleRemoveBarcode(barcodeToRemove: string) {
+    if (target?.id) {
+      try {
+        await deleteBarcode(target.id, barcodeToRemove);
+      } catch {
+        // Ignore error if barcode wasn't saved on backend yet
+      }
+    }
+    setBarcodesList(barcodesList.filter((b) => b.barcode !== barcodeToRemove));
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true); setFormError('');
+    setSaving(true);
+    setFormError('');
     try {
       await createProduct({
+        sku: formSku || undefined,
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
-        category_id: formCategory ? parseInt(formCategory) : null,
-        barcodes: formBarcodes.split(',').map((b) => b.trim()).filter(Boolean),
+        category_id: formCategory ? parseInt(formCategory, 10) : null,
+        is_variable_weight: formVariableWeight,
+        barcodes: barcodesList,
       });
       setModal(null);
       fetchAll();
@@ -84,14 +214,18 @@ export function ProductsPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!target) return;
-    setSaving(true); setFormError('');
+    setSaving(true);
+    setFormError('');
     try {
       await updateProduct(target.id, {
+        sku: formSku,
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
-        category_id: formCategory ? parseInt(formCategory) : null,
+        category_id: formCategory ? parseInt(formCategory, 10) : null,
+        is_variable_weight: formVariableWeight,
         is_active: formActive,
+        barcodes: barcodesList,
       });
       setModal(null);
       fetchAll();
@@ -102,23 +236,44 @@ export function ProductsPage() {
     }
   }
 
+  function getBadgeClass(type: BarcodeType): string {
+    switch (type) {
+      case 'IN_HOUSE':
+        return 'badge-inhouse';
+      case 'PRICE_EMBEDDED':
+        return 'badge-scale';
+      default:
+        return 'badge-manufacturer';
+    }
+  }
+
   return (
     <div className="admin-page">
       <AdminNav />
       <div className="admin-header">
-        <h2>Products</h2>
+        <h2>Products Management</h2>
         <div className="admin-actions">
-          <button className="btn-primary" onClick={openCreate}>+ Add Product</button>
+          <button className="btn-primary" onClick={openCreate}>
+            + Add Product
+          </button>
         </div>
       </div>
 
       {error && <div className="page-error">{error}</div>}
-      {loading && <div className="loading-text">Loading…</div>}
+      {loading && <div className="loading-text">Loading products…</div>}
 
       <table className="data-table">
         <thead>
           <tr>
-            <th>Name</th><th>Price</th><th>Tax %</th><th>Category</th><th>Active</th><th>Barcodes</th><th>Actions</th>
+            <th>SKU</th>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Tax %</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Active</th>
+            <th>Barcodes</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -126,14 +281,39 @@ export function ProductsPage() {
             const cat = categories.find((c) => c.id === p.category_id);
             return (
               <tr key={p.id}>
+                <td><code>{p.sku}</code></td>
                 <td>{p.name}</td>
                 <td>₹{Number(p.price).toFixed(2)}</td>
                 <td>{Number(p.tax_rate).toFixed(1)}%</td>
                 <td>{cat?.name ?? '—'}</td>
+                <td>
+                  {p.is_variable_weight ? (
+                    <span className="barcode-badge badge-scale">Scale (Weight)</span>
+                  ) : (
+                    <span className="barcode-badge badge-manufacturer">Standard</span>
+                  )}
+                </td>
                 <td>{p.is_active ? '✓' : '—'}</td>
-                <td>{p.barcodes.map((b) => b.barcode).join(', ') || '—'}</td>
+                <td>
+                  <div className="barcode-chips-list">
+                    {p.barcodes && p.barcodes.length > 0 ? (
+                      p.barcodes.map((b) => (
+                        <span key={b.id || b.barcode} className="barcode-chip">
+                          {b.barcode}
+                          <span className={`barcode-badge ${getBadgeClass(b.barcode_type)}`}>
+                            {b.barcode_type || 'MFG'}
+                          </span>
+                        </span>
+                      ))
+                    ) : (
+                      '—'
+                    )}
+                  </div>
+                </td>
                 <td className="table-actions">
-                  <button className="btn-sm" onClick={() => openEdit(p)}>Edit</button>
+                  <button className="btn-sm" onClick={() => openEdit(p)}>
+                    Edit
+                  </button>
                 </td>
               </tr>
             );
@@ -142,46 +322,169 @@ export function ProductsPage() {
       </table>
 
       <div className="pagination">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>
-        <span>Page {page} · {total} products</span>
-        <button disabled={products.length < 25} onClick={() => setPage(page + 1)}>Next →</button>
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
+          ← Prev
+        </button>
+        <span>
+          Page {page} · {total} products
+        </span>
+        <button disabled={products.length < 25} onClick={() => setPage(page + 1)}>
+          Next →
+        </button>
       </div>
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <h3>{modal === 'create' ? 'Add Product' : `Edit ${target?.name}`}</h3>
+          <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h3>{modal === 'create' ? 'Add New Product' : `Edit ${target?.name}`}</h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={modal === 'create' ? handleCreate : handleEdit} className="modal-form">
-              <label className="field-label">Name
-                <input className="field-input" value={formName} onChange={(e) => setFormName(e.target.value)} required />
-              </label>
-              <label className="field-label">Price (₹)
-                <input className="field-input" type="number" step="0.01" min="0" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} required />
-              </label>
-              <label className="field-label">Tax Rate (%)
-                <input className="field-input" type="number" step="0.01" min="0" max="100" value={formTax} onChange={(e) => setFormTax(e.target.value)} />
-              </label>
-              <label className="field-label">Category
-                <select className="field-input" value={formCategory} onChange={(e) => setFormCategory(e.target.value)}>
-                  <option value="">— None —</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </label>
-              {modal === 'create' && (
-                <label className="field-label">Barcodes (comma-separated)
-                  <input className="field-input" value={formBarcodes} onChange={(e) => setFormBarcodes(e.target.value)} placeholder="1234567890123, 9876543210987" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <label className="field-label">
+                  Product SKU / Code
+                  <input
+                    className="field-input"
+                    value={formSku}
+                    onChange={(e) => setFormSku(e.target.value)}
+                    placeholder="e.g. SKU-00123"
+                  />
                 </label>
-              )}
+                <label className="field-label">
+                  Product Name
+                  <input
+                    className="field-input"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    required
+                    placeholder="e.g. DMart Premia Almonds"
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                <label className="field-label">
+                  Price (₹)
+                  <input
+                    className="field-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formPrice}
+                    onChange={(e) => setFormPrice(e.target.value)}
+                    required
+                  />
+                </label>
+                <label className="field-label">
+                  Tax Rate (%)
+                  <input
+                    className="field-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={formTax}
+                    onChange={(e) => setFormTax(e.target.value)}
+                  />
+                </label>
+                <label className="field-label">
+                  Category
+                  <select
+                    className="field-input"
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="field-label checkbox-label" style={{ marginTop: '4px' }}>
+                <input
+                  type="checkbox"
+                  checked={formVariableWeight}
+                  onChange={(e) => setFormVariableWeight(e.target.checked)}
+                />
+                <strong>Is Variable-Weight Item (Scale Produce / Loose Pack)?</strong>
+              </label>
+
+              <div className="field-label">
+                <span>Associated Barcodes</span>
+                <div className="barcode-scanner-box">
+                  <input
+                    ref={barcodeInputRef}
+                    className="field-input"
+                    style={{ flex: 1 }}
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={handleAddBarcodeFromInput}
+                    placeholder="Scan USB scanner or type barcode, then Enter"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => handleAddBarcodeFromInput()}
+                  >
+                    + Add
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleGenerateInHouse}
+                    disabled={generating}
+                  >
+                    {generating ? 'Generating…' : '⚡ Generate In-House Barcode'}
+                  </button>
+                </div>
+
+                <div className="barcode-chips-list" style={{ marginTop: '10px' }}>
+                  {barcodesList.map((b) => (
+                    <span key={b.barcode} className="barcode-chip">
+                      {b.barcode}
+                      <span className={`barcode-badge ${getBadgeClass(b.barcode_type)}`}>
+                        {b.barcode_type}
+                      </span>
+                      <button
+                        type="button"
+                        className="chip-remove-btn"
+                        onClick={() => handleRemoveBarcode(b.barcode)}
+                        title="Remove Barcode"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  {barcodesList.length === 0 && (
+                    <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                      No barcodes mapped yet. Scan or generate one above.
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {modal === 'edit' && (
                 <label className="field-label checkbox-label">
-                  <input type="checkbox" checked={formActive} onChange={(e) => setFormActive(e.target.checked)} />
-                  Active
+                  <input
+                    type="checkbox"
+                    checked={formActive}
+                    onChange={(e) => setFormActive(e.target.checked)}
+                  />
+                  Active Product
                 </label>
               )}
+
               <div className="modal-buttons">
-                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : modal === 'create' ? 'Create' : 'Save'}</button>
+                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? 'Saving…' : modal === 'create' ? 'Create Product' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>
