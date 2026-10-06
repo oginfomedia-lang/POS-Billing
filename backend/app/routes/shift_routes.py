@@ -2,6 +2,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.schemas.shift_schemas import CloseShiftRequest, OpenShiftRequest, ShiftOut
+from app.errors.exceptions import NotFoundError
 from app.services import auth_service, shift_service
 from app.utils.permissions import require_permission
 

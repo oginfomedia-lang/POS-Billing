@@ -9,8 +9,10 @@ import { UsersPage } from '../pages/admin/UsersPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { BillingPage } from '../pages/pos/BillingPage';
 import { CloseShiftPage } from '../pages/pos/CloseShiftPage';
+import { HeldBillsPage } from '../pages/pos/HeldBillsPage';
 import { OpenShiftPage } from '../pages/pos/OpenShiftPage';
 import { PosPage } from '../pages/pos/PosPage';
+import { ReprintPage } from '../pages/pos/ReprintPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
 export const router = createHashRouter([

@@ -1,7 +1,12 @@
 """Helpers to create test users, products, stock and sales."""
 import uuid
+from decimal import Decimal
 
 from app.extensions import db
+from app.models.enums import ShiftStatus
+from app.models.inventory import Inventory
+from app.models.product import Product, ProductBarcode
+from app.models.shift import CashierShift
 from app.models.store import Counter, Store
 from app.models.user import User
 from app.utils.security import hash_pin
@@ -41,3 +46,33 @@ def make_user(
     db.session.add(user)
     db.session.commit()
     return user
+
+
+def make_product(
+    store: Store,
+    name: str = "Test Product",
+    price: str = "10.00",
+    gst_rate: str = "5.00",
+    stock: int = 100,
+    barcode: str | None = None,
+) -> Product:
+    product = Product(name=name, selling_price=Decimal(price), gst_rate=Decimal(gst_rate))
+    product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
+    db.session.add(product)
+    db.session.flush()
+    db.session.add(Inventory(store_id=store.id, product_id=product.id, qty_on_hand=stock))
+    db.session.commit()
+    return product
+
+
+def make_shift(user: User, counter: Counter, opening_cash: str = "0.00") -> CashierShift:
+    shift = CashierShift(
+        store_id=counter.store_id,
+        counter_id=counter.id,
+        cashier_id=user.id,
+        status=ShiftStatus.OPEN,
+        opening_cash=Decimal(opening_cash),
+    )
+    db.session.add(shift)
+    db.session.commit()
+    return shift
