@@ -5,7 +5,7 @@ from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.extensions import db
 from app.models.category import Category
 from app.models.enums import BarcodeType
-from app.models.product import Product, ProductBarcode
+from app.models.product import INHOUSE_BARCODE_SEQ, Product, ProductBarcode
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product_schemas import (
@@ -58,10 +58,12 @@ def list_products(
     active_only: bool = False,
     category_id: int | None = None,
     store_id: int | None = None,
+    search: str | None = None,
 ) -> tuple[list[Product], int]:
     return ProductRepository().list(
         page=page, per_page=per_page,
         active_only=active_only, category_id=category_id, store_id=store_id,
+        search=search.strip() if search else None,
     )
 
 
@@ -234,24 +236,36 @@ def remove_product_barcode(product_id: int, barcode_str: str) -> None:
         db.session.delete(target)
 
 
-def generate_and_save_inhouse_barcode(product_id: int) -> ProductBarcode:
-    product = _get_product_or_404(product_id)
-    raw_identifier = product.sku or product.id
-    inhouse_barcode = generate_inhouse_barcode(raw_identifier)
+MAX_INHOUSE_NUMBER = 999_999_999  # 9 digits fit between the 290 prefix and the check digit
 
-    # Check uniqueness, retry with fallback if taken
-    existing = db.session.scalar(
-        db.select(ProductBarcode).where(ProductBarcode.barcode == inhouse_barcode)
-    )
-    if existing:
-        if existing.product_id == product.id:
-            return existing
-        inhouse_barcode = generate_inhouse_barcode(f"{product.id}{product.id}")
+
+def next_inhouse_barcode() -> str:
+    """Returns a new, unused in-house EAN-13 code (290 + 9-digit sequence number + check digit).
+
+    Works before the product exists (the Add Product form needs a code to show). Numbers
+    already used by older codes are skipped, so it never collides with an existing barcode.
+    """
+    for _ in range(1000):
+        number = db.session.scalar(db.select(INHOUSE_BARCODE_SEQ.next_value()))
+        if number > MAX_INHOUSE_NUMBER:
+            raise ConflictError("In-house barcode numbers are exhausted.")
+        code = generate_inhouse_barcode(number)
+        taken = db.session.scalar(db.select(ProductBarcode.id).where(ProductBarcode.barcode == code))
+        if not taken:
+            return code
+    raise ConflictError("Could not find a free in-house barcode. Try again.")
+
+
+def generate_and_save_inhouse_barcode(product_id: int) -> ProductBarcode:
+    """Gives the product an in-house barcode. A product keeps one: asking again returns the same code."""
+    product = _get_product_or_404(product_id)
+    for pb in product.barcodes:
+        if pb.barcode_type is BarcodeType.IN_HOUSE:
+            return pb
 
     with transaction():
-        pb = _add_barcode_to_product(product, inhouse_barcode, BarcodeType.IN_HOUSE, is_primary=False)
+        pb = _add_barcode_to_product(product, next_inhouse_barcode(), BarcodeType.IN_HOUSE, is_primary=not product.barcodes)
         db.session.flush()
-
     return pb
 
 

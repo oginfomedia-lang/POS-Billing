@@ -56,6 +56,7 @@ def list_products():
     items, total = product_service.list_products(
         page=q.page, per_page=q.per_page,
         active_only=active_only, category_id=category_id, store_id=store_id,
+        search=request.args.get("q"),
     )
     resp = PagedResponse.build(
         [ProductOut.model_validate(p).model_dump(mode="json") for p in items],
@@ -105,6 +106,13 @@ def add_product_barcode(id: int):
 def remove_product_barcode(id: int, barcode: str):
     product_service.remove_product_barcode(id, barcode)
     return jsonify({"message": f"Barcode '{barcode}' removed."}), 200
+
+
+@product_bp.post("/products/barcodes/generate")
+@require_permission("products.create")
+def generate_new_inhouse_barcode():
+    """A fresh unused in-house code, for the Add Product form (the product doesn't exist yet)."""
+    return jsonify({"barcode": product_service.next_inhouse_barcode(), "barcode_type": "IN_HOUSE"}), 200
 
 
 @product_bp.post("/products/<int:id>/generate-inhouse-barcode")

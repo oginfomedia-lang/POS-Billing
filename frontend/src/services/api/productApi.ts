@@ -17,6 +17,8 @@ export async function listProducts(params?: {
   per_page?: number;
   active_only?: boolean;
   category_id?: number;
+  /** Name or SKU contains, or exact barcode. */
+  q?: string;
 }): Promise<PagedResponse<ProductOut>> {
   const resp = await httpClient.get<PagedResponse<ProductOut>>('/products', { params });
   return resp.data;
@@ -68,6 +70,17 @@ export async function addBarcode(
 
 export async function deleteBarcode(id: number, barcode: string): Promise<void> {
   await httpClient.delete(`/products/${id}/barcodes/${encodeURIComponent(barcode)}`);
+}
+
+export async function getProduct(id: number): Promise<ProductOut> {
+  const resp = await httpClient.get<ProductOut>(`/products/${id}`);
+  return resp.data;
+}
+
+/** A fresh unused in-house code for a product that isn't saved yet. */
+export async function generateNewInhouseBarcode(): Promise<string> {
+  const resp = await httpClient.post<{ barcode: string }>('/products/barcodes/generate');
+  return resp.data.barcode;
 }
 
 export async function generateInhouseBarcode(id: number): Promise<BarcodeOut> {

@@ -34,6 +34,11 @@ export async function adjustStock(storeId: number, productId: number, newQty: st
   return resp.data;
 }
 
+/** Per-product low-stock level; null = use the store-wide default from Settings. */
+export async function setThreshold(storeId: number, productId: number, threshold: string | null): Promise<void> {
+  await httpClient.post('/inventory/threshold', { store_id: storeId, product_id: productId, threshold });
+}
+
 export async function getLedger(storeId: number, productId?: number): Promise<InventoryTxnOut[]> {
   const resp = await httpClient.get<InventoryTxnOut[]>('/inventory/ledger', {
     params: { store_id: storeId, product_id: productId },

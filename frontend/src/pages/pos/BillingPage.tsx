@@ -87,7 +87,7 @@ export function BillingPage() {
     try {
       const paid = await complete(method, cashTendered, reference);
       setDialog(null);
-      navigate(`/pos/reprint/${paid.id}`);
+      navigate(`/pos/reprint/${paid.id}?print=1`);
     } catch (err) {
       setDialogError(getErrorMessage(err));
     }
@@ -109,7 +109,7 @@ export function BillingPage() {
           <span>{user?.full_name}</span>
           <span className="status-muted">{sale ? `Bill #${sale.id}` : 'Starting bill…'}</span>
           {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button className="btn-secondary" onClick={() => navigate('/admin/users')}>Admin</button>
+            <button className="btn-secondary" onClick={() => navigate('/admin')}>Admin</button>
           )}
           <button className="btn-secondary" onClick={() => navigate('/pos/shift/close')}>Close Shift</button>
           <button className="btn-secondary" onClick={logout}>Logout</button>

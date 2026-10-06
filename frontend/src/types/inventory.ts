@@ -5,7 +5,8 @@ export interface StockLevelOut {
   product_name: string;
   barcode: string | null;
   qty_on_hand: string;
-  low_stock_threshold: string | null;
+  low_stock_threshold: string | null; // this product's own level; null = Settings default
+  effective_threshold: string;
   is_low: boolean;
 }
 

@@ -17,7 +17,7 @@ export function LoginPage() {
   useEffect(() => {
     if (isAuthenticated && user) {
       const dest =
-        user.role === 'admin' || user.role === 'manager' ? '/admin/users' : '/pos';
+        user.role === 'admin' || user.role === 'manager' ? '/admin' : '/pos';
       navigate(dest, { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
