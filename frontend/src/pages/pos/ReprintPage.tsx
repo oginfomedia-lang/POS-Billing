@@ -1,6 +1,6 @@
 // Find and reprint a completed bill.
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getReceipt } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -12,6 +12,9 @@ const METHOD_LABEL: Record<string, string> = { cash: 'Cash', card: 'Card', upi: 
 
 export function ReprintPage() {
   const { saleId } = useParams();
+  // ?print=1 (straight after payment) opens the print dialog automatically; reopening a past bill doesn't.
+  const [searchParams] = useSearchParams();
+  const autoPrint = searchParams.get('print') === '1';
   const navigate = useNavigate();
   const [receipt, setReceipt] = useState<ReceiptOut | null>(null);
   const [error, setError] = useState('');
@@ -30,7 +33,7 @@ export function ReprintPage() {
 
   // Open the print dialog once, after the receipt has rendered.
   useEffect(() => {
-    if (!receipt || printed.current) return;
+    if (!receipt || !autoPrint || printed.current) return;
     printed.current = true;
     const t = window.setTimeout(() => window.print(), 100);
     return () => window.clearTimeout(t);
@@ -56,6 +59,7 @@ export function ReprintPage() {
             {receipt.store_address && <div>{receipt.store_address}</div>}
             {receipt.store_phone && <div>Ph: {receipt.store_phone}</div>}
             {receipt.store_gstin && <div>GSTIN: {receipt.store_gstin}</div>}
+            {receipt.receipt_header && <div>{receipt.receipt_header}</div>}
           </header>
 
           <hr />
@@ -72,12 +76,20 @@ export function ReprintPage() {
             </thead>
             <tbody>
               {receipt.items.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.product_name}</td>
-                  <td className="num">{i.qty}</td>
-                  <td className="num">{i.unit_price}</td>
-                  <td className="num">{i.line_total}</td>
-                </tr>
+                <Fragment key={i.id}>
+                  <tr>
+                    <td>{i.product_name}</td>
+                    <td className="num">{i.qty}</td>
+                    <td className="num">{i.unit_price}</td>
+                    <td className="num">{i.line_total}</td>
+                  </tr>
+                  {Number(i.discount_amount) > 0 && (
+                    <tr>
+                      <td colSpan={3}>&nbsp;&nbsp;Discount</td>
+                      <td className="num">-{i.discount_amount}</td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -104,7 +116,7 @@ export function ReprintPage() {
             </div>
           ))}
 
-          <footer className="receipt-center receipt-footer">Thank you! Visit again.</footer>
+          {receipt.receipt_footer && <footer className="receipt-center receipt-footer">{receipt.receipt_footer}</footer>}
         </article>
       )}
     </div>

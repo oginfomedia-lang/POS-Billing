@@ -21,7 +21,8 @@ export interface SaleItemOut {
   unit_price: string;
   tax_rate: string;
   qty: number;
-  line_total: string;
+  line_total: string; // unit_price × qty, before discount
+  discount_amount: string;
   tax_amount: string;
 }
 
@@ -60,6 +61,8 @@ export interface ReceiptOut {
   tax_amount: string;
   total: string;
   payments: PaymentOut[];
+  receipt_header: string;
+  receipt_footer: string;
 }
 
 /** Methods the complete-sale endpoint accepts. */

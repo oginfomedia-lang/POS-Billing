@@ -5,6 +5,11 @@ from app.models.base import TimestampMixin, _now
 from app.models.enums import BarcodeType
 
 
+# Numbers for in-house barcodes (290 + 9 digits + check digit). A sequence never hands out
+# the same number twice, even under concurrent requests or for products not saved yet.
+INHOUSE_BARCODE_SEQ = db.Sequence("inhouse_barcode_seq", metadata=db.metadata)
+
+
 def _gen_sku() -> str:
     return f"SKU-{uuid.uuid4().hex[:8]}"
 

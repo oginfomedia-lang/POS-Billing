@@ -5,8 +5,13 @@ import { PosLayout } from '../components/layout/PosLayout';
 import { AuditLogsPage } from '../pages/admin/AuditLogsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { CountersPage } from '../pages/admin/CountersPage';
+import { DashboardPage } from '../pages/admin/DashboardPage';
+import { DiscountsPage } from '../pages/admin/DiscountsPage';
 import { InventoryPage } from '../pages/admin/InventoryPage';
+import { LabelPrintPage } from '../pages/admin/LabelPrintPage';
 import { ProductsPage } from '../pages/admin/ProductsPage';
+import { ReportsPage } from '../pages/admin/ReportsPage';
+import { SettingsPage } from '../pages/admin/SettingsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { BillingPage } from '../pages/pos/BillingPage';
@@ -40,12 +45,18 @@ export const router = createHashRouter([
       {
         element: <ProtectedRoute roles={['admin', 'manager']} />,
         children: [
+          { path: '/admin', element: <DashboardPage /> },
+          { path: '/admin/dashboard', element: <DashboardPage /> },
           { path: '/admin/users', element: <UsersPage /> },
           { path: '/admin/audit-logs', element: <AuditLogsPage /> },
           { path: '/admin/products', element: <ProductsPage /> },
           { path: '/admin/categories', element: <CategoriesPage /> },
           { path: '/admin/stores', element: <CountersPage /> },
           { path: '/admin/inventory', element: <InventoryPage /> },
+          { path: '/admin/labels', element: <LabelPrintPage /> },
+          { path: '/admin/discounts', element: <DiscountsPage /> },
+          { path: '/admin/reports', element: <ReportsPage /> },
+          { path: '/admin/settings', element: <SettingsPage /> },
         ],
       },
 

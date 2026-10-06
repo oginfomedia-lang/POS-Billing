@@ -44,7 +44,12 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
           onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         />
       </td>
-      <td className="num">{formatRupees(item.line_total)}</td>
+      <td className="num">
+        {formatRupees(item.line_total)}
+        {Number(item.discount_amount) > 0 && (
+          <div className="line-discount">− {formatRupees(item.discount_amount)}</div>
+        )}
+      </td>
       <td>
         <button className="btn-sm" disabled={disabled} onClick={() => onRemove(item.id)} title="Remove line">
           ✕

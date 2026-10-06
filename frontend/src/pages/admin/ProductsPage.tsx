@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   createProduct,
   deleteBarcode,
   generateInhouseBarcode,
+  generateNewInhouseBarcode,
   listCategories,
   listProducts,
   updateProduct,
@@ -16,27 +18,6 @@ interface BarcodeItem {
   barcode_type: BarcodeType;
 }
 
-function calculateEan13Checksum(payload12: string): string {
-  if (payload12.length !== 12 || !/^\d+$/.test(payload12)) return '0';
-  let oddSum = 0;
-  let evenSum = 0;
-  for (let i = 0; i < 12; i++) {
-    const digit = parseInt(payload12[i], 10);
-    if (i % 2 === 0) oddSum += digit;
-    else evenSum += digit;
-  }
-  const total = oddSum + evenSum * 3;
-  return String((10 - (total % 10)) % 10);
-}
-
-function generateLocalInHouseCode(skuOrId: string): string {
-  const digitsOnly = skuOrId.replace(/\D/g, '') || String(Math.floor(Math.random() * 100000000));
-  const sku9 = digitsOnly.slice(-9).padStart(9, '0');
-  const payload12 = `290${sku9}`;
-  const checksum = calculateEan13Checksum(payload12);
-  return `${payload12}${checksum}`;
-}
-
 function inferBarcodeType(code: string): BarcodeType {
   const clean = code.trim();
   if (clean.startsWith('290') && clean.length === 13) return 'IN_HOUSE';
@@ -45,6 +26,7 @@ function inferBarcodeType(code: string): BarcodeType {
 }
 
 export function ProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [total, setTotal] = useState(0);
@@ -165,10 +147,10 @@ export function ProductsPage() {
           ]);
         }
       } else {
-        const localCode = generateLocalInHouseCode(formSku || formName || String(Date.now()));
-        if (!barcodesList.some((b) => b.barcode === localCode)) {
-          setBarcodesList([...barcodesList, { barcode: localCode, barcode_type: 'IN_HOUSE' }]);
-        }
+        // Product not saved yet: the server hands out an unused code; it's attached when you click Create.
+        if (barcodesList.some((b) => b.barcode_type === 'IN_HOUSE')) return;
+        const code = await generateNewInhouseBarcode();
+        setBarcodesList([...barcodesList, { barcode: code, barcode_type: 'IN_HOUSE' }]);
       }
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -313,6 +295,14 @@ export function ProductsPage() {
                 <td className="table-actions">
                   <button className="btn-sm" onClick={() => openEdit(p)}>
                     Edit
+                  </button>
+                  <button
+                    className="btn-sm"
+                    onClick={() => navigate(`/admin/labels?product=${p.id}`, { state: { from: '/admin/products' } })}
+                    disabled={p.barcodes.length === 0}
+                    title={p.barcodes.length ? 'Print barcode stickers' : 'Add or generate a barcode first'}
+                  >
+                    Labels
                   </button>
                 </td>
               </tr>
