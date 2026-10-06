@@ -4,24 +4,29 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
-
-from app.models.enums import ShiftStatus
+from pydantic import BaseModel
 
 
 class ShiftOut(BaseModel):
+    model_config = {"from_attributes": True}
+
     id: int
+    user_id: int
     store_id: int
-    counter_id: int
-    cashier_id: int
-    status: ShiftStatus
-    opening_cash: Decimal
+    counter_id: int | None
+    status: str
+    opening_float: Decimal
+    expected_cash: Decimal | None
+    actual_cash: Decimal | None
     opened_at: datetime
     closed_at: datetime | None
 
-    model_config = {"from_attributes": True}
-
 
 class OpenShiftRequest(BaseModel):
-    counter_code: str = Field(..., min_length=1, max_length=10)
-    opening_cash: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    opening_float: Decimal = Decimal("0")
+    store_id: int
+    counter_id: int | None = None
+
+
+class CloseShiftRequest(BaseModel):
+    actual_cash: Decimal

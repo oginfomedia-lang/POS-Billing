@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
-import type { PagedResponse, UserOut, UserRole } from '../../types/api';
+import type { PagedResponse, StoreOut, UserOut, UserRole } from '../../types/api';
 
 const ROLES: UserRole[] = ['admin', 'manager', 'cashier'];
 
@@ -12,6 +12,7 @@ export function UsersPage() {
   const navigate = useNavigate();
 
   const [users, setUsers] = useState<UserOut[]>([]);
+  const [stores, setStores] = useState<StoreOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,7 @@ export function UsersPage() {
   const [formFullName, setFormFullName] = useState('');
   const [formPin, setFormPin] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('cashier');
+  const [formStoreId, setFormStoreId] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
@@ -32,11 +34,13 @@ export function UsersPage() {
     setLoading(true);
     setError('');
     try {
-      const resp = await httpClient.get<PagedResponse<UserOut>>('/users', {
-        params: { page: p, per_page: 25 },
-      });
-      setUsers(resp.data.items);
-      setTotal(resp.data.total);
+      const [usersResp, storesResp] = await Promise.all([
+        httpClient.get<PagedResponse<UserOut>>('/users', { params: { page: p, per_page: 25 } }),
+        httpClient.get<PagedResponse<StoreOut>>('/stores', { params: { per_page: 100 } }),
+      ]);
+      setUsers(usersResp.data.items);
+      setTotal(usersResp.data.total);
+      setStores(storesResp.data.items);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -50,7 +54,7 @@ export function UsersPage() {
     setModal('create');
     setTarget(null);
     setFormUsername(''); setFormFullName(''); setFormPin('');
-    setFormRole('cashier'); setFormActive(true); setFormError('');
+    setFormRole('cashier'); setFormStoreId(''); setFormActive(true); setFormError('');
   }
 
   function openEdit(u: UserOut) {
@@ -58,6 +62,7 @@ export function UsersPage() {
     setTarget(u);
     setFormFullName(u.full_name);
     setFormRole(u.role);
+    setFormStoreId(u.store_id ? String(u.store_id) : '');
     setFormActive(u.is_active);
     setFormError('');
   }
@@ -78,6 +83,7 @@ export function UsersPage() {
         full_name: formFullName,
         pin: formPin,
         role: formRole,
+        store_id: formStoreId ? parseInt(formStoreId) : null,
       });
       setModal(null);
       fetchUsers();
@@ -97,6 +103,7 @@ export function UsersPage() {
         full_name: formFullName,
         role: formRole,
         is_active: formActive,
+        store_id: formStoreId ? parseInt(formStoreId) : null,
       });
       setModal(null);
       fetchUsers();
@@ -127,6 +134,8 @@ export function UsersPage() {
         <h2>Users</h2>
         <div className="admin-actions">
           <button className="btn-primary" onClick={openCreate}>+ Add User</button>
+          <button className="btn-secondary" onClick={() => navigate('/admin/products')}>Products</button>
+          <button className="btn-secondary" onClick={() => navigate('/admin/categories')}>Categories</button>
           <button className="btn-secondary" onClick={() => navigate('/admin/audit-logs')}>Audit Logs</button>
           <button className="btn-secondary" onClick={logout}>Logout</button>
         </div>
@@ -185,6 +194,12 @@ export function UsersPage() {
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
+                  <label className="field-label">Store
+                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
+                      <option value="">— None —</option>
+                      {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </label>
                   <div className="modal-buttons">
                     <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
                     <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Create'}</button>
@@ -204,6 +219,12 @@ export function UsersPage() {
                   <label className="field-label">Role
                     <select className="field-input" value={formRole} onChange={e => setFormRole(e.target.value as UserRole)}>
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </label>
+                  <label className="field-label">Store
+                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
+                      <option value="">— None —</option>
+                      {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </label>
                   <label className="field-label checkbox-label">

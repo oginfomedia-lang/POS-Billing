@@ -1,77 +1,63 @@
-// Enter opening cash and open a shift.
-import { type FormEvent, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import { useShiftStore } from '../../store/shiftStore';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { getActiveShift, openShift } from '../../services/api/shiftApi';
-import { useCounterStore } from '../../store/counterStore';
-import { toPaise } from '../../utils/money';
 
 export function OpenShiftPage() {
+  const { user, logout } = useAuth();
+  const { open, busy } = useShiftStore();
   const navigate = useNavigate();
-  const counterCode = useCounterStore((s) => s.config?.counterCode ?? '');
 
-  const [openingCash, setOpeningCash] = useState('0');
-  const [checking, setChecking] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [openingFloat, setOpeningFloat] = useState('0');
   const [error, setError] = useState('');
 
-  // Already have a shift? Go straight to billing.
-  useEffect(() => {
-    getActiveShift()
-      .then((shift) => {
-        if (shift) navigate('/pos/billing', { replace: true });
-      })
-      .catch((err) => setError(getErrorMessage(err)))
-      .finally(() => setChecking(false));
-  }, [navigate]);
-
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!Number.isFinite(toPaise(openingCash))) {
-      setError('Enter a valid amount.');
+    setError('');
+    const storeId = user?.store_id;
+    if (!storeId) {
+      setError('Your account is not assigned to a store. Contact an admin.');
       return;
     }
-    setBusy(true);
-    setError('');
     try {
-      await openShift(counterCode, openingCash);
+      await open(storeId, parseFloat(openingFloat) || 0);
       navigate('/pos/billing', { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
-    } finally {
-      setBusy(false);
     }
   }
 
-  if (checking) return <p className="loading-text">Checking shift…</p>;
-
   return (
-    <section className="login-page">
-      <div className="login-card">
-        <h1 className="login-title">Open Shift</h1>
-        <p className="login-subtitle">Counter {counterCode}</p>
+    <div className="admin-page">
+      <div className="admin-header">
+        <h2>Open Shift — {user?.full_name ?? user?.username}</h2>
+        <div className="admin-actions">
+          <button className="btn-secondary" onClick={logout}>Logout</button>
+        </div>
+      </div>
 
-        {error && <div className="login-error">{error}</div>}
-
-        <form onSubmit={handleSubmit} className="login-form">
+      <div style={{ maxWidth: 400, margin: '40px auto' }}>
+        {error && <div className="page-error">{error}</div>}
+        <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">
-            Opening cash in drawer
+            Opening Float (₹)
             <input
               className="field-input"
-              inputMode="decimal"
-              value={openingCash}
-              onChange={(e) => setOpeningCash(e.target.value)}
-              onFocus={(e) => e.target.select()}
-              required
-              autoFocus
+              type="number"
+              min="0"
+              step="0.01"
+              value={openingFloat}
+              onChange={(e) => setOpeningFloat(e.target.value)}
             />
           </label>
-          <button className="btn-primary" type="submit" disabled={busy}>
-            {busy ? 'Opening…' : 'Open Shift'}
-          </button>
-          <button className="btn-secondary" type="button" onClick={() => navigate('/pos')}>Back</button>
+          <div className="modal-buttons">
+            <button type="submit" className="btn-primary" disabled={busy}>
+              {busy ? 'Opening…' : 'Open Shift'}
+            </button>
+          </div>
         </form>
       </div>
-    </section>
+    </div>
   );
 }

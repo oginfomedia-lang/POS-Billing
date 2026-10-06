@@ -1,25 +1,51 @@
-// Product and barcode API calls.
-import type { ProductOut } from '../../types/product';
+import type { CategoryOut, ProductBarcodeOut, ProductOut } from '../../types/product';
+import type { PagedResponse } from '../../types/api';
 import { httpClient } from './httpClient';
 
-// TEMPORARY: GET /products/barcode/<barcode> is being built by Dev 1.
-// Until it lands, every scan resolves to this product. Product id 1 must exist
-// in the database (with stock) for add-item and checkout to succeed.
-const USE_MOCK_BARCODE_LOOKUP = true;
+export async function getProductByBarcode(barcode: string): Promise<ProductBarcodeOut> {
+  const resp = await httpClient.get<ProductBarcodeOut>(`/products/barcode/${encodeURIComponent(barcode)}`);
+  return resp.data;
+}
 
-const MOCK_PRODUCT: ProductOut = {
-  id: 1,
-  name: 'Test Product',
-  barcode: '',
-  selling_price: '10.00',
-  gst_rate: '5.00',
-  is_active: true,
-};
+export async function listProducts(params?: {
+  page?: number;
+  per_page?: number;
+  active_only?: boolean;
+  category_id?: number;
+}): Promise<PagedResponse<ProductOut>> {
+  const resp = await httpClient.get<PagedResponse<ProductOut>>('/products', { params });
+  return resp.data;
+}
 
-export async function getProductByBarcode(barcode: string): Promise<ProductOut> {
-  if (USE_MOCK_BARCODE_LOOKUP) {
-    return { ...MOCK_PRODUCT, barcode };
-  }
-  const resp = await httpClient.get<ProductOut>(`/products/barcode/${encodeURIComponent(barcode)}`);
+export async function createProduct(data: {
+  name: string;
+  price: number;
+  tax_rate?: number;
+  category_id?: number | null;
+  description?: string | null;
+  store_id?: number | null;
+  barcodes?: string[];
+}): Promise<ProductOut> {
+  const resp = await httpClient.post<ProductOut>('/products', data);
+  return resp.data;
+}
+
+export async function updateProduct(
+  id: number,
+  data: Partial<{ name: string; price: number; tax_rate: number; is_active: boolean; category_id: number | null }>,
+): Promise<ProductOut> {
+  const resp = await httpClient.put<ProductOut>(`/products/${id}`, data);
+  return resp.data;
+}
+
+export async function listCategories(activeOnly = false): Promise<CategoryOut[]> {
+  const resp = await httpClient.get<CategoryOut[]>('/categories', {
+    params: { active_only: activeOnly },
+  });
+  return resp.data;
+}
+
+export async function createCategory(data: { name: string; parent_id?: number | null }): Promise<CategoryOut> {
+  const resp = await httpClient.post<CategoryOut>('/categories', data);
   return resp.data;
 }
