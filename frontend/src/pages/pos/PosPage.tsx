@@ -1,25 +1,26 @@
-// POS billing screen — Phase 2 placeholder.
+// POS landing: checks for an active shift, then redirects to billing or shift-open.
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
+import { useShiftStore } from '../../store/shiftStore';
 
 export function PosPage() {
-  const { user, logout } = useAuth();
+  const { loadActive } = useShiftStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let cancelled = false;
+    loadActive().then(() => {
+      if (!cancelled) {
+        const shift = useShiftStore.getState().shift;
+        navigate(shift ? '/pos/billing' : '/pos/shift/open', { replace: true });
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="admin-page">
-      <div className="admin-header">
-        <h2>POS — {user?.full_name ?? user?.username}</h2>
-        <div className="admin-actions">
-          {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button className="btn-secondary" onClick={() => navigate('/admin/users')}>
-              Admin
-            </button>
-          )}
-          <button className="btn-secondary" onClick={logout}>Logout</button>
-        </div>
-      </div>
-      <p className="loading-text">Billing screen coming in Phase 2.</p>
+      <p className="loading-text">Loading…</p>
     </div>
   );
 }
