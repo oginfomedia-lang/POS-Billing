@@ -29,7 +29,7 @@ export interface SaleOut {
   id: number;
   bill_number: string | null;
   store_id: number;
-  counter_id: number;
+  counter_id: number | null;
   shift_id: number;
   cashier_id: number;
   status: SaleStatus;
@@ -51,7 +51,7 @@ export interface ReceiptOut {
   store_address: string | null;
   store_phone: string | null;
   store_gstin: string | null;
-  counter_code: string;
+  counter_code: string | null;
   cashier_name: string;
   completed_at: string;
   items: SaleItemOut[];

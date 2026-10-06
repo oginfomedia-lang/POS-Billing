@@ -62,7 +62,7 @@ export function ReprintPage() {
           <div className="receipt-row"><span>Bill No</span><span>{receipt.bill_number}</span></div>
           <div className="receipt-row"><span>Date</span><span>{formatDateTime(receipt.completed_at)}</span></div>
           <div className="receipt-row">
-            <span>Counter {receipt.counter_code}</span><span>{receipt.cashier_name}</span>
+            <span>{receipt.counter_code ? `Counter ${receipt.counter_code}` : ''}</span><span>{receipt.cashier_name}</span>
           </div>
           <hr />
 

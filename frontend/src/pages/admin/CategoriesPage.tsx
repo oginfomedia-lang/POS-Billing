@@ -1,14 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
 import { createCategory, listCategories } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { CategoryOut } from '../../types/product';
+import { AdminNav } from '../../components/admin/AdminNav';
 
 export function CategoriesPage() {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -57,12 +53,11 @@ export function CategoriesPage() {
 
   return (
     <div className="admin-page">
+      <AdminNav />
       <div className="admin-header">
         <h2>Categories</h2>
         <div className="admin-actions">
           <button className="btn-primary" onClick={openCreate}>+ Add Category</button>
-          <button className="btn-secondary" onClick={() => navigate('/admin/products')}>Products</button>
-          <button className="btn-secondary" onClick={logout}>Logout</button>
         </div>
       </div>
 

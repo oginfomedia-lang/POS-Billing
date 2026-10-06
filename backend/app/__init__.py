@@ -4,6 +4,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 
+from app.cli import register_cli
 from app.config import get_config
 from app.errors.handlers import error_response, register_error_handlers
 from app.extensions import db, jwt, migrate
@@ -30,6 +31,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_blueprints(app)
     register_error_handlers(app)
+    register_cli(app)
 
     app.logger.info("POS backend started (%s)", config_class.ENV_NAME)
     return app

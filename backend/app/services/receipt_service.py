@@ -5,6 +5,7 @@ from app.errors.exceptions import ConflictError
 from app.models.enums import SaleStatus
 from app.schemas.payment_schemas import PaymentOut
 from app.schemas.sale_schemas import ReceiptOut, SaleItemOut
+from app.services import settings_service
 from app.services.billing_service import get_sale
 
 
@@ -12,6 +13,7 @@ def build_receipt(sale_id: int) -> ReceiptOut:
     sale = get_sale(sale_id)
     if sale.status is not SaleStatus.PAID:
         raise ConflictError("A receipt is only available for completed bills.")
+    settings = settings_service.get_settings()
 
     return ReceiptOut(
         sale_id=sale.id,
@@ -20,7 +22,7 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         store_address=sale.store.address,
         store_phone=sale.store.phone,
         store_gstin=sale.store.gstin,
-        counter_code=sale.counter.code,
+        counter_code=sale.counter.code if sale.counter else None,
         cashier_name=sale.cashier.full_name,
         completed_at=sale.completed_at,
         items=[SaleItemOut.model_validate(i) for i in sale.items],
@@ -29,4 +31,6 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         tax_amount=sale.tax_amount,
         total=sale.total,
         payments=[PaymentOut.model_validate(p) for p in sale.payments],
+        receipt_header=settings.receipt_header,
+        receipt_footer=settings.receipt_footer,
     )

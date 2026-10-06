@@ -1,13 +1,112 @@
 """deduct_for_sale(), add_stock(), adjust(), record_damage(). Every change writes a ledger row."""
 from __future__ import annotations
 
-from app.errors.exceptions import InsufficientStockError
+from decimal import Decimal
+
+from app.errors.exceptions import InsufficientStockError, NotFoundError
+from app.models.enums import InventoryTxnType
+from app.models.inventory import Inventory, InventoryTransaction
 from app.models.sale import SaleItem
+from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
+from app.repositories.product_repository import ProductRepository
+from app.repositories.store_repository import StoreRepository
+from app.schemas.inventory_schemas import AdjustStockRequest, StockInRequest, StockLevelOut, ThresholdRequest
+from app.services import audit_service, settings_service
+from app.utils.transactions import transaction
 
 
-def deduct_for_sale(store_id: int, items: list[SaleItem]) -> None:
-    """Locks the stock rows (SELECT ... FOR UPDATE) and decrements them.
+def stock_levels(store_id: int) -> list[StockLevelOut]:
+    _get_store_or_404(store_id)
+    default_threshold = settings_service.get_settings().low_stock_threshold
+    out = []
+    for product, inv in InventoryRepository().stock_levels(store_id):
+        qty = inv.qty_on_hand if inv else Decimal("0")
+        own = inv.low_stock_threshold if inv else None
+        threshold = own if own is not None else default_threshold
+        primary = next((b for b in product.barcodes if b.is_primary), None) or next(iter(product.barcodes), None)
+        out.append(StockLevelOut(
+            product_id=product.id,
+            product_name=product.name,
+            barcode=primary.barcode if primary else None,
+            qty_on_hand=qty,
+            low_stock_threshold=own,
+            effective_threshold=threshold,
+            is_low=qty <= threshold,
+        ))
+    return out
+
+
+def set_threshold(data: ThresholdRequest, actor: User) -> Inventory:
+    """Per-product low-stock level; None falls back to the store-wide default in Settings."""
+    _check_store_product(data.store_id, data.product_id)
+    with transaction():
+        row = InventoryRepository().lock_or_create(data.store_id, data.product_id)
+        old = row.low_stock_threshold
+        row.low_stock_threshold = data.threshold
+        audit_service.log(
+            actor, "inventory.threshold", "inventory", row.id,
+            {"low_stock_threshold": None if old is None else str(old)},
+            {"low_stock_threshold": None if data.threshold is None else str(data.threshold)},
+        )
+    return row
+
+
+def stock_in(data: StockInRequest, actor: User) -> Inventory:
+    """Goods received: adds to stock and writes a PURCHASE ledger row."""
+    _check_store_product(data.store_id, data.product_id)
+    repo = InventoryRepository()
+    with transaction():
+        row = repo.lock_or_create(data.store_id, data.product_id)
+        old = row.qty_on_hand
+        row.qty_on_hand = old + data.qty
+        repo.add_transaction(data.store_id, data.product_id, InventoryTxnType.PURCHASE, data.qty, notes=data.notes)
+        audit_service.log(
+            actor, "inventory.stock_in", "inventory", row.id,
+            {"qty_on_hand": str(old)}, {"qty_on_hand": str(row.qty_on_hand), "added": str(data.qty)},
+        )
+    return row
+
+
+def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
+    """Stock-take correction: sets the counted qty and writes an ADJUSTMENT row for the difference."""
+    _check_store_product(data.store_id, data.product_id)
+    repo = InventoryRepository()
+    with transaction():
+        row = repo.lock_or_create(data.store_id, data.product_id)
+        old = row.qty_on_hand
+        delta = data.new_qty - old
+        row.qty_on_hand = data.new_qty
+        if delta != 0:
+            repo.add_transaction(
+                data.store_id, data.product_id, InventoryTxnType.ADJUSTMENT, delta, notes=data.notes
+            )
+        audit_service.log(
+            actor, "inventory.adjust", "inventory", row.id,
+            {"qty_on_hand": str(old)}, {"qty_on_hand": str(data.new_qty), "reason": data.notes},
+        )
+    return row
+
+
+def ledger(store_id: int, product_id: int | None = None) -> list[InventoryTransaction]:
+    _get_store_or_404(store_id)
+    return InventoryRepository().list_transactions(store_id, product_id)
+
+
+def _get_store_or_404(store_id: int) -> None:
+    if StoreRepository().get_by_id(store_id) is None:
+        raise NotFoundError(f"Store {store_id} not found.")
+
+
+def _check_store_product(store_id: int, product_id: int) -> None:
+    _get_store_or_404(store_id)
+    product = ProductRepository().get_by_id(product_id)
+    if product is None or product.store_id not in (None, store_id):
+        raise NotFoundError(f"Product {product_id} not found in store {store_id}.")
+
+
+def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
+    """Locks the stock rows (SELECT ... FOR UPDATE), decrements them and writes SALE ledger rows.
 
     Must run inside the caller's transaction. Raises InsufficientStockError listing
     every short line, so nothing is deducted unless the whole bill can be fulfilled.
@@ -18,7 +117,8 @@ def deduct_for_sale(store_id: int, items: list[SaleItem]) -> None:
         wanted[item.product_id] = wanted.get(item.product_id, 0) + item.qty
         names[item.product_id] = item.product_name
 
-    rows = InventoryRepository().lock_rows(store_id, sorted(wanted))
+    repo = InventoryRepository()
+    rows = {row.product_id: row for row in repo.lock_rows(store_id, sorted(wanted))}
 
     shortages = []
     for product_id, qty in wanted.items():
@@ -28,10 +128,12 @@ def deduct_for_sale(store_id: int, items: list[SaleItem]) -> None:
                 "product_id": product_id,
                 "product_name": names[product_id],
                 "requested": qty,
-                "available": available,
+                "available": float(available),
             })
     if shortages:
         raise InsufficientStockError("Not enough stock for some items.", details=shortages)
 
     for product_id, qty in wanted.items():
         rows[product_id].qty_on_hand -= qty
+        # Ledger qty is signed: negative = stock out.
+        repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -qty, reference_id=sale_id)

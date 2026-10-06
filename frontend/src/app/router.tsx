@@ -4,6 +4,8 @@ import { createHashRouter, Navigate } from 'react-router-dom';
 import { PosLayout } from '../components/layout/PosLayout';
 import { AuditLogsPage } from '../pages/admin/AuditLogsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
+import { CountersPage } from '../pages/admin/CountersPage';
+import { InventoryPage } from '../pages/admin/InventoryPage';
 import { ProductsPage } from '../pages/admin/ProductsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { LoginPage } from '../pages/auth/LoginPage';
@@ -29,6 +31,8 @@ export const router = createHashRouter([
           { path: '/pos/billing', element: <BillingPage /> },
           { path: '/pos/shift/open', element: <OpenShiftPage /> },
           { path: '/pos/shift/close', element: <CloseShiftPage /> },
+          { path: '/pos/held', element: <HeldBillsPage /> },
+          { path: '/pos/reprint/:saleId', element: <ReprintPage /> },
         ],
       },
 
@@ -40,6 +44,8 @@ export const router = createHashRouter([
           { path: '/admin/audit-logs', element: <AuditLogsPage /> },
           { path: '/admin/products', element: <ProductsPage /> },
           { path: '/admin/categories', element: <CategoriesPage /> },
+          { path: '/admin/stores', element: <CountersPage /> },
+          { path: '/admin/inventory', element: <InventoryPage /> },
         ],
       },
 
