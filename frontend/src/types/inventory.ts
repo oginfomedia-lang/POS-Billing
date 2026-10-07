@@ -20,5 +20,16 @@ export interface InventoryTxnOut {
   qty: string;
   reference_id: number | null;
   notes: string | null;
+  expiry_date: string | null;
   created_at: string;
+}
+
+export interface ExpiringBatchOut {
+  product_id: number;
+  product_name: string;
+  barcode: string | null;
+  qty_on_hand: string;
+  uom: UOMType;
+  nearest_expiry: string; // 'YYYY-MM-DD'
+  days_to_expiry: number;
 }

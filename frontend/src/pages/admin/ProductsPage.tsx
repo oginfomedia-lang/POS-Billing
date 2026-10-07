@@ -249,51 +249,6 @@ export function ProductsPage() {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading products…</div>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>SKU</th>
-            <th>Name</th>
-            <th>Price</th>
-            <th>UOM</th>
-            <th>Tax %</th>
-            <th>Category</th>
-            <th>Type</th>
-            <th>Active</th>
-            <th>Barcodes</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => {
-            const cat = categories.find((c) => c.id === p.category_id);
-            return (
-              <tr key={p.id}>
-                <td><code>{p.sku}</code></td>
-                <td>{p.name}</td>
-                <td>₹{Number(p.price).toFixed(2)}</td>
-                <td><code>{p.uom || 'pcs'}</code></td>
-                <td>{Number(p.tax_rate).toFixed(1)}%</td>
-                <td>{cat?.name ?? '—'}</td>
-                <td>
-                  {p.is_variable_weight ? (
-                    <span className="barcode-badge badge-scale">Scale (Weight)</span>
-                  ) : (
-                    <span className="barcode-badge badge-manufacturer">Standard</span>
-                  )}
-                </td>
-                <td>{p.is_active ? '✓' : '—'}</td>
-                <td>
-                  <div className="barcode-chips-list">
-                    {p.barcodes && p.barcodes.length > 0 ? (
-                      p.barcodes.map((b) => (
-                        <span key={b.id || b.barcode} className="barcode-chip">
-                          {b.barcode}
-                          <span className={`barcode-badge ${getBadgeClass(b.barcode_type)}`}>
-                            {b.barcode_type || 'MFG'}
-                          </span>
-                        </span>
-                      ))
       <div className="table-card">
         <table className="data-table">
           <thead>
@@ -403,7 +358,6 @@ export function ProductsPage() {
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px' }}>
               <div className="form-row form-row-3">
                 <label className="field-label">
                   Price (₹)

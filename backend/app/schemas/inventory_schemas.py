@@ -1,7 +1,7 @@
 """Inventory and stock movement schemas."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ class StockInRequest(BaseModel):
     product_id: int
     qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
     notes: str | None = Field(None, max_length=500)
+    expiry_date: date | None = None
 
 
 class AdjustStockRequest(BaseModel):
@@ -50,6 +51,17 @@ class InventoryTxnOut(BaseModel):
     qty: Decimal
     reference_id: int | None
     notes: str | None
+    expiry_date: date | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExpiringBatchOut(BaseModel):
+    product_id: int
+    product_name: str
+    barcode: str | None
+    qty_on_hand: Decimal
+    uom: UOMType
+    nearest_expiry: date
+    days_to_expiry: int

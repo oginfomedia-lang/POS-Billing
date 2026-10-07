@@ -1,5 +1,6 @@
 // Create and update automatic bill, product, and category discounts.
 import { type FormEvent, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { listCategories, listProducts } from '../../services/api/productApi';
@@ -84,6 +85,7 @@ function toDiscount(form: DiscountForm): DiscountIn {
 }
 
 export function DiscountsPage() {
+  const location = useLocation();
   const [discounts, setDiscounts] = useState<DiscountOut[]>([]);
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [categories, setCategories] = useState<CategoryOut[]>([]);
@@ -114,6 +116,26 @@ export function DiscountsPage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  // Auto-open create modal when navigated from Expiry Alerts with ?product_id=...
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(location.search);
+    const pid = params.get('product_id');
+    if (!pid) return;
+    const endsAt = params.get('ends_at') ?? '';
+    const productName = params.get('product_name') ?? '';
+    setEditingId(null);
+    setForm({
+      ...EMPTY,
+      scope: 'product',
+      product_id: pid,
+      name: productName ? `Expiry offer – ${productName}` : '',
+      ends_at: endsAt ? `${endsAt}T23:59` : '',
+    });
+    setError('');
+    setModal(true);
+  }, [loading, location.search]);
 
   function openCreate() {
     setEditingId(null);
