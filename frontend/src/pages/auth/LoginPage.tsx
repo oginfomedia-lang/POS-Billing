@@ -1,6 +1,7 @@
 // Cashier / admin login screen.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { IconLogOut, IconShoppingCart } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 
@@ -39,17 +40,23 @@ export function LoginPage() {
   return (
     <section className="login-page">
       <div className="login-card">
-        <h1 className="login-title">POS Billing</h1>
-        <p className="login-subtitle">Sign in to continue</p>
+        <div className="login-brand-header">
+          <div className="login-brand-logo">
+            <IconShoppingCart size={28} color="#ffffff" />
+          </div>
+          <h1 className="login-title">SUPERMARKET POS</h1>
+          <p className="login-subtitle">Billing & Inventory Terminal Login</p>
+        </div>
 
         {error && <div className="login-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
           <label className="field-label">
-            Username
+            <span>Staff Username</span>
             <input
               className="field-input"
               type="text"
+              placeholder="e.g. admin or cashier1"
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -59,11 +66,12 @@ export function LoginPage() {
           </label>
 
           <label className="field-label">
-            PIN
+            <span>Passcode / PIN</span>
             <input
               className="field-input"
               type="password"
               inputMode="numeric"
+              placeholder="••••••••"
               autoComplete="current-password"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
@@ -73,11 +81,17 @@ export function LoginPage() {
             />
           </label>
 
-          <button className="btn-primary" type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+          <button className="btn-primary btn-login-submit" type="submit" disabled={busy}>
+            <IconLogOut size={18} />
+            <span>{busy ? 'Authenticating Terminal…' : 'Sign In to POS'}</span>
           </button>
         </form>
+
+        <div className="login-footer-hint">
+          <span>🔒 Secured Supermarket Counter Session</span>
+        </div>
       </div>
     </section>
   );
 }
+

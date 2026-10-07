@@ -122,39 +122,45 @@ export function ReportsPage() {
           <div className="dash-columns">
             <section>
               <h3 className="section-title">By payment method</h3>
-              <table className="data-table">
-                <thead><tr><th>Method</th><th className="num">Bills</th><th className="num">Amount</th></tr></thead>
-                <tbody>
-                  {sales.by_method.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
-                  {sales.by_method.map((m) => (
-                    <tr key={m.method}><td>{METHOD_LABEL[m.method] ?? m.method}</td><td className="num">{m.bills}</td><td className="num">{formatRupees(m.amount)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-card">
+                <table className="data-table">
+                  <thead><tr><th>Method</th><th className="num">Bills</th><th className="num">Amount</th></tr></thead>
+                  <tbody>
+                    {sales.by_method.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
+                    {sales.by_method.map((m) => (
+                      <tr key={m.method}><td>{METHOD_LABEL[m.method] ?? m.method}</td><td className="num">{m.bills}</td><td className="num">{formatRupees(m.amount)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
               <h3 className="section-title">Day by day</h3>
-              <table className="data-table">
-                <thead><tr><th>Date</th><th className="num">Bills</th><th className="num">Total</th></tr></thead>
-                <tbody>
-                  {sales.daily.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
-                  {sales.daily.map((d) => (
-                    <tr key={d.day}><td>{d.day}</td><td className="num">{d.bills}</td><td className="num">{formatRupees(d.total)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-card">
+                <table className="data-table">
+                  <thead><tr><th>Date</th><th className="num">Bills</th><th className="num">Total</th></tr></thead>
+                  <tbody>
+                    {sales.daily.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
+                    {sales.daily.map((d) => (
+                      <tr key={d.day}><td>{d.day}</td><td className="num">{d.bills}</td><td className="num">{formatRupees(d.total)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             <section>
               <h3 className="section-title">Top products</h3>
-              <table className="data-table">
-                <thead><tr><th>Product</th><th className="num">Qty</th><th className="num">Amount (excl. GST)</th></tr></thead>
-                <tbody>
-                  {sales.top_products.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
-                  {sales.top_products.map((p) => (
-                    <tr key={p.product_id}><td>{p.product_name}</td><td className="num">{p.qty}</td><td className="num">{formatRupees(p.amount)}</td></tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-card">
+                <table className="data-table">
+                  <thead><tr><th>Product</th><th className="num">Qty</th><th className="num">Amount (excl. GST)</th></tr></thead>
+                  <tbody>
+                    {sales.top_products.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
+                    {sales.top_products.map((p) => (
+                      <tr key={p.product_id}><td>{p.product_name}</td><td className="num">{p.qty}</td><td className="num">{formatRupees(p.amount)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
         </>
@@ -163,74 +169,78 @@ export function ReportsPage() {
       {sales && gstTotals && tab === 'gst' && (
         <>
           <p className="hint-text">Intra-state sales: GST is split equally into CGST and SGST. Taxable value is after discounts.</p>
-          <table className="data-table">
-            <thead>
-              <tr><th className="num">GST rate</th><th className="num">Taxable value</th><th className="num">CGST</th><th className="num">SGST</th><th className="num">Total GST</th></tr>
-            </thead>
-            <tbody>
-              {sales.gst.length === 0 && <tr><td colSpan={5} className="empty-row">No sales in this period.</td></tr>}
-              {sales.gst.map((g) => (
-                <tr key={g.tax_rate}>
-                  <td className="num">{Number(g.tax_rate)}%</td>
-                  <td className="num">{formatRupees(g.taxable)}</td>
-                  <td className="num">{formatRupees(g.cgst)}</td>
-                  <td className="num">{formatRupees(g.sgst)}</td>
-                  <td className="num">{formatRupees(g.tax)}</td>
-                </tr>
-              ))}
-            </tbody>
-            {sales.gst.length > 0 && (
-              <tfoot>
-                <tr className="total-row">
-                  <td className="num">Total</td>
-                  <td className="num">{formatRupees(gstTotals.taxable)}</td>
-                  <td className="num">{formatRupees(gstTotals.cgst)}</td>
-                  <td className="num">{formatRupees(gstTotals.sgst)}</td>
-                  <td className="num">{formatRupees(gstTotals.tax)}</td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr><th className="num">GST rate</th><th className="num">Taxable value</th><th className="num">CGST</th><th className="num">SGST</th><th className="num">Total GST</th></tr>
+              </thead>
+              <tbody>
+                {sales.gst.length === 0 && <tr><td colSpan={5} className="empty-row">No sales in this period.</td></tr>}
+                {sales.gst.map((g) => (
+                  <tr key={g.tax_rate}>
+                    <td className="num">{Number(g.tax_rate)}%</td>
+                    <td className="num">{formatRupees(g.taxable)}</td>
+                    <td className="num">{formatRupees(g.cgst)}</td>
+                    <td className="num">{formatRupees(g.sgst)}</td>
+                    <td className="num">{formatRupees(g.tax)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {sales.gst.length > 0 && (
+                <tfoot>
+                  <tr className="total-row">
+                    <td className="num">Total</td>
+                    <td className="num">{formatRupees(gstTotals.taxable)}</td>
+                    <td className="num">{formatRupees(gstTotals.cgst)}</td>
+                    <td className="num">{formatRupees(gstTotals.sgst)}</td>
+                    <td className="num">{formatRupees(gstTotals.tax)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </>
       )}
 
       {tab === 'shifts' && !loading && (
         <>
           <p className="hint-text">Expected cash = opening float + cash taken on the shift's bills. Difference = counted − expected (negative means cash short).</p>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Cashier</th><th>Counter</th><th>Opened</th><th>Closed</th><th className="num">Bills</th>
-                <th className="num">Float</th><th className="num">Cash sales</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Difference</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shifts.length === 0 && <tr><td colSpan={10} className="empty-row">No shifts opened in this period.</td></tr>}
-              {shifts.map((r) => {
-                const diff = r.difference === null ? null : Number(r.difference);
-                return (
-                  <tr key={r.id}>
-                    <td>{r.cashier_name}</td>
-                    <td>{r.counter_code ?? '—'}</td>
-                    <td className="ts-cell">{formatDateTime(r.opened_at)}</td>
-                    <td className="ts-cell">{r.closed_at ? formatDateTime(r.closed_at) : <span className="stock-badge stock-low">Open</span>}</td>
-                    <td className="num">{r.bills}</td>
-                    <td className="num">{formatRupees(r.opening_float)}</td>
-                    <td className="num">{formatRupees(r.cash_sales)}</td>
-                    <td className="num">{r.expected_cash === null ? '—' : formatRupees(r.expected_cash)}</td>
-                    <td className="num">{r.actual_cash === null ? '—' : formatRupees(r.actual_cash)}</td>
-                    <td className="num">
-                      {diff === null ? '—' : diff === 0 ? 'OK' : (
-                        <span className={`stock-badge ${diff < 0 ? 'stock-out' : 'stock-low'}`}>
-                          {diff < 0 ? 'Short ' : 'Over '}{formatRupees(Math.abs(diff))}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Cashier</th><th>Counter</th><th>Opened</th><th>Closed</th><th className="num">Bills</th>
+                  <th className="num">Float</th><th className="num">Cash sales</th><th className="num">Expected</th><th className="num">Counted</th><th className="num">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.length === 0 && <tr><td colSpan={10} className="empty-row">No shifts opened in this period.</td></tr>}
+                {shifts.map((r) => {
+                  const diff = r.difference === null ? null : Number(r.difference);
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.cashier_name}</td>
+                      <td>{r.counter_code ?? '—'}</td>
+                      <td className="ts-cell">{formatDateTime(r.opened_at)}</td>
+                      <td className="ts-cell">{r.closed_at ? formatDateTime(r.closed_at) : <span className="stock-badge stock-low">Open</span>}</td>
+                      <td className="num">{r.bills}</td>
+                      <td className="num">{formatRupees(r.opening_float)}</td>
+                      <td className="num">{formatRupees(r.cash_sales)}</td>
+                      <td className="num">{r.expected_cash === null ? '—' : formatRupees(r.expected_cash)}</td>
+                      <td className="num">{r.actual_cash === null ? '—' : formatRupees(r.actual_cash)}</td>
+                      <td className="num">
+                        {diff === null ? '—' : diff === 0 ? 'OK' : (
+                          <span className={`stock-badge ${diff < 0 ? 'stock-out' : 'stock-low'}`}>
+                            {diff < 0 ? 'Short ' : 'Over '}{formatRupees(Math.abs(diff))}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
     </div>

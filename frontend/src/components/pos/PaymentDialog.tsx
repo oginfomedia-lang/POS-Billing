@@ -1,14 +1,17 @@
 // Enter CASH/CARD/UPI amounts, show change.
-import { type FormEvent, useState } from 'react';
+import React, { type FormEvent, useState } from 'react';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import type { TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
+import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
 
-const METHODS: { value: TenderMethod; label: string }[] = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'card', label: 'Card' },
-  { value: 'upi', label: 'UPI' },
+const METHODS: { value: TenderMethod; label: string; icon: React.FC<{ size?: number }> }[] = [
+  { value: 'cash', label: 'Cash', icon: IconCash },
+  { value: 'card', label: 'Card', icon: IconCreditCard },
+  { value: 'upi', label: 'UPI QR', icon: IconQrCode },
 ];
+
+const QUICK_CASH_PRESETS = [100, 200, 500, 2000];
 
 interface Props {
   total: string;
@@ -36,33 +39,49 @@ export function PaymentDialog({ total, busy, error, onConfirm, onClose }: Props)
     else onConfirm(method, undefined, reference.trim() || undefined);
   }
 
+  function handleQuickCash(amount: number) {
+    setTendered(String(amount));
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <h3>Payment — {formatRupees(total)}</h3>
+      <div className="modal-box payment-dialog-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <span className="modal-subtitle">Complete Checkout</span>
+            <h3 className="modal-title">Payment — {formatRupees(total)}</h3>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose}>
+            <IconX size={18} />
+          </button>
+        </div>
 
         <div className="pay-tabs" role="tablist">
-          {METHODS.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              role="tab"
-              aria-selected={method === m.value}
-              className={`pay-tab${method === m.value ? ' active' : ''}`}
-              onClick={() => setMethod(m.value)}
-            >
-              {m.label}
-            </button>
-          ))}
+          {METHODS.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.value}
+                type="button"
+                role="tab"
+                aria-selected={method === m.value}
+                className={`pay-tab${method === m.value ? ' active' : ''}`}
+                onClick={() => setMethod(m.value)}
+              >
+                <Icon size={18} />
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {error && <div className="form-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="modal-form">
           {method === 'cash' ? (
-            <>
+            <div className="cash-payment-section">
               <label className="field-label">
-                Cash tendered
+                <span>Cash Tendered (₹)</span>
                 <input
                   className="field-input pay-amount"
                   inputMode="decimal"
@@ -72,30 +91,75 @@ export function PaymentDialog({ total, busy, error, onConfirm, onClose }: Props)
                   autoFocus
                 />
               </label>
-              <div className={`change-due${cashValid ? '' : ' short'}`}>
-                {cashValid
-                  ? <>Change: <strong>{formatRupees(paiseToString(tenderedPaise - totalPaise))}</strong></>
-                  : 'Tendered amount is less than the total.'}
+
+              <div className="quick-cash-presets">
+                <span className="presets-label">Quick Cash:</span>
+                <button
+                  type="button"
+                  className="preset-chip"
+                  onClick={() => setTendered(total)}
+                >
+                  Exact ({formatRupees(total)})
+                </button>
+                {QUICK_CASH_PRESETS.map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    className="preset-chip"
+                    onClick={() => handleQuickCash(amt)}
+                  >
+                    ₹{amt}
+                  </button>
+                ))}
               </div>
-            </>
+
+              <div className={`change-due-box ${cashValid ? 'valid' : 'invalid'}`}>
+                {cashValid ? (
+                  <>
+                    <span className="change-label">Balance Change to Return:</span>
+                    <strong className="change-amount">
+                      {formatRupees(paiseToString(tenderedPaise - totalPaise))}
+                    </strong>
+                  </>
+                ) : (
+                  <span className="change-warning">
+                    ⚠️ Tendered amount is less than total amount ({formatRupees(total)})
+                  </span>
+                )}
+              </div>
+            </div>
           ) : (
-            <label className="field-label">
-              {method === 'card' ? 'Card slip / approval no.' : 'UPI transaction ID'} (optional)
-              <input
-                key={method}
-                className="field-input"
-                value={reference}
-                maxLength={100}
-                onChange={(e) => setReference(e.target.value)}
-                autoFocus
-              />
-            </label>
+            <div className="digital-payment-section">
+              <label className="field-label">
+                <span>{method === 'card' ? 'Card Approval / Auth Code' : 'UPI Reference ID'} (optional)</span>
+                <input
+                  key={method}
+                  className="field-input"
+                  placeholder={method === 'card' ? 'e.g. 849201' : 'e.g. UPI/3094850293/PAY'}
+                  value={reference}
+                  maxLength={100}
+                  onChange={(e) => setReference(e.target.value)}
+                  autoFocus
+                />
+              </label>
+
+              <div className="digital-pay-info">
+                {method === 'card' ? (
+                  <p>💳 Swipe or dip customer card on POS EDC Machine and click Confirm below.</p>
+                ) : (
+                  <p>📱 Show Dynamic UPI QR Code to customer or verify payment in UPI App.</p>
+                )}
+              </div>
+            </div>
           )}
 
           <div className="modal-buttons">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={!canConfirm}>
-              {busy ? 'Processing…' : 'Confirm Payment'}
+            <button type="button" className="btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
+              <IconCheck size={18} />
+              <span>{busy ? 'Processing Transaction…' : 'Complete Sale'}</span>
             </button>
           </div>
         </form>
@@ -103,3 +167,4 @@ export function PaymentDialog({ total, busy, error, onConfirm, onClose }: Props)
     </div>
   );
 }
+

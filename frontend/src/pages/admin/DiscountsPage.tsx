@@ -167,32 +167,34 @@ export function DiscountsPage() {
       </div>
       {error && !modal && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading discounts…</div>}
-      <table className="data-table">
-        <thead>
-          <tr><th>Name</th><th>Applies to</th><th>Target / minimum</th><th>Store</th><th>Discount</th><th>Schedule</th><th>Status</th><th /></tr>
-        </thead>
-        <tbody>
-          {!loading && discounts.length === 0 && (
-            <tr><td colSpan={8} className="empty-row">No discounts configured.</td></tr>
-          )}
-          {discounts.map((d) => (
-            <tr key={d.id}>
-              <td>{d.name}</td>
-              <td>{d.scope}</td>
-              <td>{targetLabel(d)}</td>
-              <td>{stores.find((s) => s.id === d.store_id)?.name ?? 'All stores'}</td>
-              <td>{d.discount_type === 'percentage' ? `${d.value}%` : formatRupees(d.value)}</td>
-              <td className="ts-cell">
-                {d.starts_at ? formatDateTime(d.starts_at) : 'Now'}
-                {' – '}
-                {d.ends_at ? formatDateTime(d.ends_at) : 'No end'}
-              </td>
-              <td>{d.is_active ? 'Active' : 'Inactive'}</td>
-              <td><button className="btn-sm" onClick={() => openEdit(d)}>Edit</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr><th>Name</th><th>Applies to</th><th>Target / minimum</th><th>Store</th><th>Discount</th><th>Schedule</th><th>Status</th><th /></tr>
+          </thead>
+          <tbody>
+            {!loading && discounts.length === 0 && (
+              <tr><td colSpan={8} className="empty-row">No discounts configured.</td></tr>
+            )}
+            {discounts.map((d) => (
+              <tr key={d.id}>
+                <td>{d.name}</td>
+                <td>{d.scope}</td>
+                <td>{targetLabel(d)}</td>
+                <td>{stores.find((s) => s.id === d.store_id)?.name ?? 'All stores'}</td>
+                <td>{d.discount_type === 'percentage' ? `${d.value}%` : formatRupees(d.value)}</td>
+                <td className="ts-cell">
+                  {d.starts_at ? formatDateTime(d.starts_at) : 'Now'}
+                  {' – '}
+                  {d.ends_at ? formatDateTime(d.ends_at) : 'No end'}
+                </td>
+                <td>{d.is_active ? 'Active' : 'Inactive'}</td>
+                <td><button className="btn-sm" onClick={() => openEdit(d)}>Edit</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="hint-text">The best eligible discount is applied automatically when a bill is recalculated; discounts do not stack.</p>
 
       {modal && (
