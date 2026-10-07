@@ -1,6 +1,6 @@
 // Subtotal, discount, GST, round-off, grand total.
 import type { SaleOut } from '../../types/sale';
-import { formatRupees } from '../../utils/money';
+import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconCreditCard, IconSparkles } from '../common/Icons';
 
 interface Props {
@@ -11,7 +11,9 @@ interface Props {
 
 export function BillSummary({ sale, onPayClick, disabled }: Props) {
   const itemCount = sale?.items.reduce((n, i) => n + i.qty, 0) ?? 0;
-  const hasDiscount = sale !== null && Number(sale.discount_amount) > 0;
+  // Item offers + manual discounts = total discount minus the bill offer. Paise avoids float errors.
+  const itemSavingsPaise = sale ? toPaise(sale.discount_amount) - toPaise(sale.bill_offer_discount) : 0;
+  const hasBillOffer = sale !== null && sale.bill_offer_name !== null && Number(sale.bill_offer_discount) > 0;
   const hasItems = itemCount > 0;
 
   return (
@@ -28,12 +30,16 @@ export function BillSummary({ sale, onPayClick, disabled }: Props) {
           <span className="row-label">Subtotal</span>
           <span className="row-val">{formatRupees(sale?.subtotal ?? 0)}</span>
         </div>
-        {hasDiscount && (
+        {itemSavingsPaise > 0 && (
           <div className="summary-row summary-discount-row">
-            <span className="row-label">
-              <IconSparkles size={14} /> Total Savings
-            </span>
-            <span className="row-val discount-val">− {formatRupees(sale.discount_amount)}</span>
+            <span className="row-label"><IconSparkles size={14} /> Item offers</span>
+            <span className="row-val discount-val">− {formatRupees(paiseToString(itemSavingsPaise))}</span>
+          </div>
+        )}
+        {hasBillOffer && (
+          <div className="summary-row summary-discount-row">
+            <span className="row-label"><IconSparkles size={14} /> {sale.bill_offer_name}</span>
+            <span className="row-val discount-val">− {formatRupees(sale.bill_offer_discount)}</span>
           </div>
         )}
         <div className="summary-row">

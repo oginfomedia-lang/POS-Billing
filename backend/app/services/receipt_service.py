@@ -28,6 +28,8 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         items=[SaleItemOut.model_validate(i) for i in sale.items],
         subtotal=sale.subtotal,
         discount_amount=sale.discount_amount,
+        bill_offer_name=sale.bill_offer_name,
+        bill_offer_discount=sale.bill_offer_discount,
         tax_amount=sale.tax_amount,
         total=sale.total,
         payments=[PaymentOut.model_validate(p) for p in sale.payments],

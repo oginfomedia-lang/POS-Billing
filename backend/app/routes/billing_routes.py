@@ -1,7 +1,14 @@
 """Sales: create draft, add/update/remove items, hold, resume, void, complete."""
 from flask import Blueprint, jsonify, request
 
-from app.schemas.sale_schemas import AddItemRequest, CompleteSaleRequest, HoldSaleRequest, SaleOut, UpdateItemRequest
+from app.schemas.sale_schemas import (
+    AddItemRequest,
+    CompleteSaleRequest,
+    HoldSaleRequest,
+    ManualDiscountRequest,
+    SaleOut,
+    UpdateItemRequest,
+)
 from app.services import auth_service, billing_service
 from app.utils.permissions import require_permission
 
@@ -51,6 +58,15 @@ def update_item(sale_id: int, item_id: int):
 def remove_item(sale_id: int, item_id: int):
     actor = auth_service.current_user()
     sale = billing_service.remove_item(sale_id, item_id, actor)
+    return jsonify(_sale_json(sale)), 200
+
+
+@billing_bp.post("/sales/<int:sale_id>/items/<int:item_id>/manual-discount")
+@require_permission("sales.create")
+def set_manual_discount(sale_id: int, item_id: int):
+    data = ManualDiscountRequest.model_validate(request.get_json(force=True))
+    actor = auth_service.current_user()
+    sale = billing_service.set_manual_discount(sale_id, item_id, data, actor)
     return jsonify(_sale_json(sale)), 200
 
 

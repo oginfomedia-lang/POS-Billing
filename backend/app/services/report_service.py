@@ -11,6 +11,7 @@ from app.schemas.report_schemas import (
     DashboardOut,
     GstRow,
     MethodRow,
+    OfferRow,
     RecentSale,
     ReportQuery,
     SalesReportOut,
@@ -69,6 +70,10 @@ def sales_report(q: ReportQuery) -> SalesReportOut:
         top_products=[
             TopProductRow(product_id=pid, product_name=name, qty=qty, amount=amt)
             for pid, name, qty, amt in repo.top_products(q.store_id, start, end)
+        ],
+        offers=[
+            OfferRow(kind=k, name=n, bills=b, amount=a)
+            for k, n, b, a in repo.offer_usage(q.store_id, start, end)
         ],
     )
 

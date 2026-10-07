@@ -2,7 +2,15 @@
 from decimal import Decimal
 
 from app.models.enums import DiscountType
-from app.services.pricing_service import allocate, bill_discount, bill_totals, item_discount, line_amounts
+from app.services.pricing_service import (
+    allocate,
+    bill_discount,
+    bill_totals,
+    buy_x_get_y_discount,
+    item_discount,
+    line_amounts,
+    qty_price_discount,
+)
 
 D = Decimal
 
@@ -58,3 +66,22 @@ def test_bill_totals():
 
 def test_bill_totals_empty():
     assert bill_totals([])["total"] == D("0.00")
+
+
+def test_percentage_cap():
+    assert item_discount(DiscountType.PERCENTAGE, "10", D("5000.00"), 1, D("200")) == D("200.00")
+    assert bill_discount(DiscountType.PERCENTAGE, "10", D("5000.00"), D("200")) == D("200.00")
+
+
+def test_buy_x_get_y():
+    assert buy_x_get_y_discount(D("20.00"), D("3"), 2, 1, D("60.00")) == D("20.00")
+    assert buy_x_get_y_discount(D("20.00"), D("2"), 2, 1, D("40.00")) == D("0.00")
+    assert buy_x_get_y_discount(D("20.00"), D("7"), 2, 1, D("140.00")) == D("40.00")
+
+
+def test_qty_price_bundle_is_gst_inclusive():
+    # 3 x 40 = 120 ex-GST; bundle 99 incl. 0% GST -> saves 21 per bundle
+    assert qty_price_discount(D("40.00"), D("3"), D("0"), 3, D("99"), D("120.00")) == D("21.00")
+    assert qty_price_discount(D("40.00"), D("2"), D("0"), 3, D("99"), D("80.00")) == D("0.00")
+    # 18% GST: bundle 118 incl. GST = 100 ex-GST; 3 x 40 = 120 -> saves 20
+    assert qty_price_discount(D("40.00"), D("3"), D("18"), 3, D("118"), D("120.00")) == D("20.00")

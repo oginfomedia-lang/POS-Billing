@@ -1,4 +1,5 @@
-"""create_draft(), add_item(), update_item(), remove_item(), hold(), resume(), void(), complete().
+"""create_draft(), add_item(), update_item(), remove_item(), set_manual_discount(), hold(), resume(),
+void(), complete().
 
 Every mutation locks the sale row (SELECT ... FOR UPDATE) and recalculates totals
 before committing, so the sale returned to the client always has correct totals.
@@ -7,12 +8,19 @@ from __future__ import annotations
 
 from app.errors.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError
 from app.extensions import db
-from app.models.enums import SaleStatus
+from app.models.enums import SaleStatus, UserRole
 from app.models.sale import Sale, SaleItem
 from app.models.user import User
 from app.repositories.product_repository import ProductRepository
 from app.repositories.sale_repository import SaleRepository
-from app.schemas.sale_schemas import AddItemRequest, CompleteSaleRequest, HoldSaleRequest, UpdateItemRequest
+from app.repositories.user_repository import UserRepository
+from app.schemas.sale_schemas import (
+    AddItemRequest,
+    CompleteSaleRequest,
+    HoldSaleRequest,
+    ManualDiscountRequest,
+    UpdateItemRequest,
+)
 from app.services import (
     audit_service,
     bill_number_service,
@@ -23,7 +31,8 @@ from app.services import (
 )
 from app.services.shift_service import require_active_shift
 from app.utils.dates import now_ist
-from app.utils.money import money_mul
+from app.utils.money import money_mul, round_money
+from app.utils.security import verify_pin
 from app.utils.transactions import transaction
 
 
@@ -84,6 +93,50 @@ def remove_item(sale_id: int, item_id: int, actor: User) -> Sale:
         sale.items.remove(item)
         _recalculate(sale)
     return sale
+
+
+def set_manual_discount(sale_id: int, item_id: int, data: ManualDiscountRequest, actor: User) -> Sale:
+    """Counter discount on one line, approved with a manager/admin PIN. amount 0 removes it."""
+    approver = _verify_approver(data.approver_username, data.approver_pin)
+    with transaction():
+        sale = _lock_owned_sale(sale_id, actor)
+        _require_status(sale, SaleStatus.OPEN)
+        item = _get_item_or_404(sale, item_id)
+        line_total = money_mul(item.unit_price, item.qty)
+        if data.amount > line_total:
+            raise AppError(f"The discount can't be more than the line total (₹{line_total}).")
+
+        old = {"item_id": item.id, "amount": str(item.manual_discount), "reason": item.manual_discount_reason}
+        if data.amount > 0:
+            item.manual_discount = data.amount
+            item.manual_discount_reason = data.reason.strip()
+            item.manual_discount_by_id = approver.id
+        else:
+            item.manual_discount = 0
+            item.manual_discount_reason = None
+            item.manual_discount_by_id = None
+        _recalculate(sale)
+        audit_service.log(
+            actor, "sale.manual_discount", "sale", sale.id, old,
+            {
+                "item_id": item.id,
+                "product": item.product_name,
+                "amount": str(item.manual_discount),
+                "reason": item.manual_discount_reason,
+                "approved_by": approver.username,
+            },
+        )
+    return sale
+
+
+def _verify_approver(username: str, pin: str) -> User:
+    """Manual discounts need a manager or admin to approve with their own PIN."""
+    user = UserRepository().get_by_username(username.strip())
+    if user is None or not user.is_active or not verify_pin(pin, user.pin_hash):
+        raise PermissionDeniedError("Approval failed: wrong manager username or PIN.")
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+        raise PermissionDeniedError("Only a manager or admin can approve a discount.")
+    return user
 
 
 def hold(sale_id: int, data: HoldSaleRequest, actor: User) -> Sale:
@@ -186,16 +239,36 @@ def _get_item_or_404(sale: Sale, item_id: int) -> SaleItem:
 
 
 def _recalculate(sale: Sale) -> None:
-    """Re-prices every line with the discounts active now: line discounts first, then the bill discount."""
+    """Re-prices every line with the offers active now.
+
+    Order: best item offer per line -> manual (counter) discount -> best bill offer on what's left.
+    The bill offer's minimum is checked against the amount with GST (what the customer sees).
+    """
     items = list(sale.items)
     for item in items:
         item.line_total = money_mul(item.unit_price, item.qty)
 
     discounts = discount_service.active_for_store(sale.store_id)
-    line_off = discount_service.line_discounts(discounts, items)
+    offers = discount_service.line_discounts(discounts, items)
+
+    line_off = []
+    for item, offer in zip(items, offers):
+        item.offer_id, item.offer_name, item.offer_discount = offer.discount_id, offer.name, offer.amount
+        # A manual discount can't take the line below zero (e.g. qty was reduced after it was given).
+        item.manual_discount = min(round_money(item.manual_discount or 0), item.line_total - offer.amount)
+        line_off.append(offer.amount + item.manual_discount)
+
     net = [item.line_total - off for item, off in zip(items, line_off)]
-    bill_off = discount_service.best_bill_discount(discounts, sum(net, pricing_service.ZERO))
-    bill_share = pricing_service.allocate(bill_off, net)
+    net_with_gst = sum(
+        (n + pricing_service.line_amounts(item.unit_price, item.qty, item.tax_rate, off)[1]
+         for item, n, off in zip(items, net, line_off)),
+        pricing_service.ZERO,
+    )
+    bill_offer = discount_service.best_bill_discount(discounts, sum(net, pricing_service.ZERO), net_with_gst)
+    sale.bill_offer_id = bill_offer.discount_id
+    sale.bill_offer_name = bill_offer.name
+    sale.bill_offer_discount = bill_offer.amount
+    bill_share = pricing_service.allocate(bill_offer.amount, net)
 
     lines = []
     for item, off, share in zip(items, line_off, bill_share):

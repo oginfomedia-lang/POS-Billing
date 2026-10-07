@@ -1146,6 +1146,10 @@ select.field-input {
 .stock-in { background: var(--ok-bg); color: var(--ok-text); }
 .stock-low { background: var(--warn-bg); color: var(--warn-text); }
 .stock-out { background: var(--danger-bg); color: var(--danger-text); }
+.offer-status-running { background: var(--ok-bg); color: var(--ok-text); }
+.offer-status-scheduled { background: var(--info-bg); color: var(--info-text); }
+.offer-status-expired { background: var(--surface-3); color: var(--muted); }
+.offer-status-paused { background: var(--warn-bg); color: var(--warn-text); }
 
 .role-badge {
   padding: 1px 8px;
@@ -1672,6 +1676,19 @@ select.field-input {
   color: var(--ok-text);
   background: var(--ok-bg);
   border-radius: 999px;
+  max-width: 170px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.line-discount-manual {
+  display: block;
+  width: fit-content;
+  margin-left: auto;
+  color: var(--warn-text);
+  background: var(--warn-bg);
 }
 
 .btn-remove-line {
@@ -1692,6 +1709,34 @@ select.field-input {
 .btn-remove-line:hover:not(:disabled) {
   background: var(--danger-bg);
   color: var(--danger);
+}
+
+.actions-cell {
+  white-space: nowrap;
+}
+
+.actions-cell > button {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.btn-line-discount {
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  color: var(--muted-light);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-line-discount:hover:not(:disabled) {
+  background: var(--brand-50);
+  color: var(--brand);
 }
 
 /* Empty cart */

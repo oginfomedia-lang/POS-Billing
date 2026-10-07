@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -65,6 +66,13 @@ class TopProductRow(BaseModel):
     amount: Decimal
 
 
+class OfferRow(BaseModel):
+    kind: Literal["item", "bill", "manual"]
+    name: str
+    bills: int  # bills the offer was used on
+    amount: Decimal  # rupees given away (before GST)
+
+
 class SalesReportOut(BaseModel):
     store_id: int | None
     date_from: date
@@ -74,6 +82,7 @@ class SalesReportOut(BaseModel):
     daily: list[DailyRow]
     gst: list[GstRow]
     top_products: list[TopProductRow]
+    offers: list[OfferRow]
 
 
 class ShiftRow(BaseModel):

@@ -13,6 +13,7 @@ interface BillState {
   addItem: (productId: number, qty?: number) => Promise<void>;
   updateItem: (itemId: number, qty: number) => Promise<void>;
   removeItem: (itemId: number) => Promise<void>;
+  setManualDiscount: (itemId: number, data: billingApi.ManualDiscountInput) => Promise<void>;
   hold: (note?: string) => Promise<void>;
   resume: (saleId: number) => Promise<void>;
   /** Returns the paid sale; the store is cleared so the next bill can start. */
@@ -55,6 +56,9 @@ export const useBillStore = create<BillState>((set, get) => {
 
     removeItem: (itemId) =>
       run(async () => set({ sale: await billingApi.removeItem(currentSale().id, itemId) })),
+
+    setManualDiscount: (itemId, data) =>
+      run(async () => set({ sale: await billingApi.setManualDiscount(currentSale().id, itemId, data) })),
 
     hold: (note) =>
       run(async () => {

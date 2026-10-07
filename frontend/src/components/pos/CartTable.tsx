@@ -8,9 +8,10 @@ interface Props {
   disabled: boolean;
   onQtyChange: (itemId: number, qty: number) => void;
   onRemove: (itemId: number) => void;
+  onManualDiscount: (item: SaleItemOut) => void;
 }
 
-export function CartTable({ items, disabled, onQtyChange, onRemove }: Props) {
+export function CartTable({ items, disabled, onQtyChange, onRemove, onManualDiscount }: Props) {
   return (
     <table className="data-table cart-table">
       <thead>
@@ -20,7 +21,7 @@ export function CartTable({ items, disabled, onQtyChange, onRemove }: Props) {
           <th className="num" style={{ width: '100px' }}>Price</th>
           <th className="num" style={{ width: '130px' }}>Quantity</th>
           <th className="num" style={{ width: '110px' }}>Total</th>
-          <th style={{ width: '50px' }} />
+          <th style={{ width: '84px' }} />
         </tr>
       </thead>
       <tbody>
@@ -43,6 +44,7 @@ export function CartTable({ items, disabled, onQtyChange, onRemove }: Props) {
             disabled={disabled}
             onQtyChange={onQtyChange}
             onRemove={onRemove}
+            onManualDiscount={onManualDiscount}
           />
         ))}
       </tbody>
