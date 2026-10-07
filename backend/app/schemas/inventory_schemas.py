@@ -18,6 +18,9 @@ class StockLevelOut(BaseModel):
     low_stock_threshold: Decimal | None  # this product's own level; None = use the Settings default
     effective_threshold: Decimal
     is_low: bool
+    base_price: Decimal  # head-office price (products.price)
+    store_price: Decimal | None  # this store's own price; None = sells at base_price
+    price: Decimal  # what this store actually charges (before GST)
 
 
 
@@ -25,6 +28,14 @@ class ThresholdRequest(BaseModel):
     store_id: int
     product_id: int
     threshold: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=3)
+
+
+class StorePriceRequest(BaseModel):
+    """This store's own selling price (before GST). None = go back to the head-office price."""
+
+    store_id: int
+    product_id: int
+    price: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
 
 
 class StockInRequest(BaseModel):

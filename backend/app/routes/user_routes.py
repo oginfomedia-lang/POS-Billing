@@ -6,6 +6,7 @@ from app.schemas.common import PagedResponse, PaginationQuery
 from app.schemas.user_schemas import PinReset, UserCreate, UserUpdate
 from app.services import auth_service, user_service
 from app.utils.permissions import require_permission
+from app.utils.store_scope import scoped_store_id
 
 user_bp = Blueprint("users", __name__)
 
@@ -14,7 +15,8 @@ user_bp = Blueprint("users", __name__)
 @require_permission("users.read")
 def list_users():
     q = PaginationQuery.model_validate(request.args)
-    items, total = user_service.list_users(q.page, q.per_page)
+    store_id = scoped_store_id(auth_service.current_user(), request.args.get("store_id", type=int))
+    items, total = user_service.list_users(q.page, q.per_page, q.is_active, store_id)
     resp = PagedResponse.build(
         [UserOut.model_validate(u).model_dump(mode="json") for u in items],
         total, q.page, q.per_page,

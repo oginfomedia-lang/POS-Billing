@@ -18,6 +18,17 @@ class InventoryRepository(BaseRepository):
             .where(Inventory.product_id == product_id)
         )
 
+    def price_overrides(self, store_id: int, product_ids: list[int]) -> dict:
+        """{product_id: price} for this store's own prices among product_ids."""
+        if not product_ids:
+            return {}
+        q = db.select(Inventory.product_id, Inventory.price).where(
+            Inventory.store_id == store_id,
+            Inventory.product_id.in_(product_ids),
+            Inventory.price.is_not(None),
+        )
+        return dict(db.session.execute(q).all())
+
     def lock_rows(self, store_id: int, product_ids: list[int]) -> list[Inventory]:
         """Return locked Inventory rows for the given products (SELECT FOR UPDATE)."""
         rows = db.session.scalars(
