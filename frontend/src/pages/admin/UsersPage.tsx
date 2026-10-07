@@ -137,27 +137,29 @@ export function UsersPage() {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading…</div>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Username</th><th>Full Name</th><th>Role</th><th>Active</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.username}</td>
-              <td>{u.full_name}</td>
-              <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-              <td>{u.is_active ? '✓' : '—'}</td>
-              <td className="table-actions">
-                <button className="btn-sm" onClick={() => openEdit(u)}>Edit</button>
-                <button className="btn-sm" onClick={() => openPin(u)}>Reset PIN</button>
-              </td>
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Username</th><th>Full Name</th><th>Role</th><th>Active</th><th>Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.username}</td>
+                <td>{u.full_name}</td>
+                <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
+                <td>{u.is_active ? '✓' : '—'}</td>
+                <td className="table-actions">
+                  <button className="btn-sm" onClick={() => openEdit(u)}>Edit</button>
+                  <button className="btn-sm" onClick={() => openPin(u)}>Reset PIN</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="pagination">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { SaleItemOut } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
+import { IconMinus, IconPlus, IconTrash } from '../common/Icons';
 
 interface Props {
   item: SaleItemOut;
@@ -17,44 +18,87 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
   useEffect(() => setQty(String(item.qty)), [item.qty]);
 
-  function commit() {
-    const n = Number(qty);
-    if (!Number.isInteger(n) || n < 1 || n > 9999) {
+  function commit(newQty?: number) {
+    const target = newQty ?? Number(qty);
+    if (!Number.isInteger(target) || target < 1 || target > 9999) {
       setQty(String(item.qty));
       return;
     }
-    if (n !== item.qty) onQtyChange(item.id, n);
+    if (target !== item.qty) {
+      setQty(String(target));
+      onQtyChange(item.id, target);
+    }
+  }
+
+  function handleDecrement() {
+    if (item.qty > 1) {
+      commit(item.qty - 1);
+    } else {
+      onRemove(item.id);
+    }
+  }
+
+  function handleIncrement() {
+    commit(item.qty + 1);
   }
 
   return (
-    <tr>
-      <td>{index + 1}</td>
-      <td>{item.product_name}</td>
-      <td className="num">{formatRupees(item.unit_price)}</td>
-      <td className="num">
-        <input
-          className="qty-input"
-          type="number"
-          min={1}
-          max={9999}
-          value={qty}
-          disabled={disabled}
-          onChange={(e) => setQty(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-        />
+    <tr className="cart-item-row">
+      <td className="row-index">{index + 1}</td>
+      <td className="item-name-cell">
+        <span className="product-title">{item.product_name}</span>
       </td>
-      <td className="num">
-        {formatRupees(item.line_total)}
+      <td className="num unit-price-cell">{formatRupees(item.unit_price)}</td>
+      <td className="num qty-cell">
+        <div className="qty-stepper">
+          <button
+            type="button"
+            className="stepper-btn stepper-btn-minus"
+            disabled={disabled}
+            onClick={handleDecrement}
+            title="Decrease quantity"
+          >
+            <IconMinus size={14} />
+          </button>
+          <input
+            className="qty-input"
+            type="number"
+            min={1}
+            max={9999}
+            value={qty}
+            disabled={disabled}
+            onChange={(e) => setQty(e.target.value)}
+            onBlur={() => commit()}
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          />
+          <button
+            type="button"
+            className="stepper-btn stepper-btn-plus"
+            disabled={disabled}
+            onClick={handleIncrement}
+            title="Increase quantity"
+          >
+            <IconPlus size={14} />
+          </button>
+        </div>
+      </td>
+      <td className="num line-total-cell">
+        <div className="line-total-val">{formatRupees(item.line_total)}</div>
         {Number(item.discount_amount) > 0 && (
-          <div className="line-discount">− {formatRupees(item.discount_amount)}</div>
+          <div className="line-discount-badge">− {formatRupees(item.discount_amount)}</div>
         )}
       </td>
-      <td>
-        <button className="btn-sm" disabled={disabled} onClick={() => onRemove(item.id)} title="Remove line">
-          ✕
+      <td className="actions-cell">
+        <button
+          className="btn-remove-line"
+          disabled={disabled}
+          onClick={() => onRemove(item.id)}
+          title="Void / remove line"
+        >
+          <IconTrash size={16} />
         </button>
       </td>
     </tr>
   );
 }
+

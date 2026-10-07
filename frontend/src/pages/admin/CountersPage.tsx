@@ -128,34 +128,36 @@ export function CountersPage() {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading…</div>}
 
-      <table className="data-table">
-        <thead>
-          <tr><th>Store</th><th>Address</th><th>Phone</th><th>GSTIN</th><th>Active</th><th /></tr>
-        </thead>
-        <tbody>
-          {!loading && stores.length === 0 && (
-            <tr><td colSpan={6} className="empty-row">No stores yet. Add one to get started.</td></tr>
-          )}
-          {stores.map((s) => (
-            <tr
-              key={s.id}
-              className={`clickable-row${selected?.id === s.id ? ' selected-row' : ''}`}
-              onClick={() => setSelected(s)}
-            >
-              <td>{s.name}</td>
-              <td>{s.address ?? '—'}</td>
-              <td>{s.phone ?? '—'}</td>
-              <td>{s.gstin ?? '—'}</td>
-              <td>{s.is_active ? '✓' : '—'}</td>
-              <td className="table-actions">
-                {isAdmin && (
-                  <button className="btn-sm" onClick={(e) => { e.stopPropagation(); openStore(s); }}>Edit</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr><th>Store</th><th>Address</th><th>Phone</th><th>GSTIN</th><th>Active</th><th /></tr>
+          </thead>
+          <tbody>
+            {!loading && stores.length === 0 && (
+              <tr><td colSpan={6} className="empty-row">No stores yet. Add one to get started.</td></tr>
+            )}
+            {stores.map((s) => (
+              <tr
+                key={s.id}
+                className={`clickable-row${selected?.id === s.id ? ' selected-row' : ''}`}
+                onClick={() => setSelected(s)}
+              >
+                <td>{s.name}</td>
+                <td>{s.address ?? '—'}</td>
+                <td>{s.phone ?? '—'}</td>
+                <td>{s.gstin ?? '—'}</td>
+                <td>{s.is_active ? '✓' : '—'}</td>
+                <td className="table-actions">
+                  {isAdmin && (
+                    <button className="btn-sm" onClick={(e) => { e.stopPropagation(); openStore(s); }}>Edit</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {selected && (
         <section className="sub-section">
@@ -171,26 +173,28 @@ export function CountersPage() {
             Each till PC's <code>counter.json</code> must have <code>"counterCode"</code> set to one of these codes,
             or cashiers on that PC can't open a shift.
           </p>
-          <table className="data-table">
-            <thead>
-              <tr><th>Code</th><th>Label</th><th>Active</th><th /></tr>
-            </thead>
-            <tbody>
-              {counters.length === 0 && (
-                <tr><td colSpan={4} className="empty-row">No counters in this store.</td></tr>
-              )}
-              {counters.map((c) => (
-                <tr key={c.id}>
-                  <td><strong>{c.code}</strong></td>
-                  <td>{c.label}</td>
-                  <td>{c.is_active ? '✓' : '—'}</td>
-                  <td className="table-actions">
-                    {isAdmin && <button className="btn-sm" onClick={() => openCounter(c)}>Edit</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr><th>Code</th><th>Label</th><th>Active</th><th /></tr>
+              </thead>
+              <tbody>
+                {counters.length === 0 && (
+                  <tr><td colSpan={4} className="empty-row">No counters in this store.</td></tr>
+                )}
+                {counters.map((c) => (
+                  <tr key={c.id}>
+                    <td><strong>{c.code}</strong></td>
+                    <td>{c.label}</td>
+                    <td>{c.is_active ? '✓' : '—'}</td>
+                    <td className="table-actions">
+                      {isAdmin && <button className="btn-sm" onClick={() => openCounter(c)}>Edit</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 

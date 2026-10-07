@@ -64,25 +64,27 @@ export function CategoriesPage() {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading…</div>}
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Name</th><th>Parent</th><th>Active</th>
-          </tr>
-        </thead>
-        <tbody>
-          {categories.map((c) => {
-            const parent = categories.find((p) => p.id === c.parent_id);
-            return (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{parent?.name ?? '—'}</td>
-                <td>{c.is_active ? '✓' : '—'}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Parent</th><th>Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((c) => {
+              const parent = categories.find((p) => p.id === c.parent_id);
+              return (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td>{parent?.name ?? '—'}</td>
+                  <td>{c.is_active ? '✓' : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(false)}>

@@ -8,12 +8,22 @@ import { CartTable } from '../../components/pos/CartTable';
 import { HoldBillDialog } from '../../components/pos/HoldBillDialog';
 import { PaymentDialog } from '../../components/pos/PaymentDialog';
 import { ShortcutBar } from '../../components/pos/ShortcutBar';
+import {
+  IconCreditCard,
+  IconDashboard,
+  IconFileText,
+  IconLogOut,
+  IconPauseCircle,
+  IconShoppingCart,
+  IconTrash,
+} from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getProductByBarcode } from '../../services/api/productApi';
 import { useBillStore } from '../../store/billStore';
 import type { TenderMethod } from '../../types/sale';
+import { formatRupees } from '../../utils/money';
 
 type Dialog = 'pay' | 'hold' | null;
 
@@ -104,21 +114,35 @@ export function BillingPage() {
   return (
     <div className="billing-page">
       <header className="billing-topbar">
+        <div className="pos-brand-tag">
+          <IconShoppingCart size={22} color="#4f46e5" />
+          <span className="pos-counter-title">POS Counter</span>
+        </div>
         <BarcodeInput onScan={handleScan} active={dialog === null} />
         <div className="billing-meta">
-          <span>{user?.full_name}</span>
-          <span className="status-muted">{sale ? `Bill #${sale.id}` : 'Starting bill…'}</span>
+          <div className="cashier-chip">
+            <span className="cashier-name">{user?.full_name || user?.username}</span>
+            <span className="bill-id-badge">{sale ? `#${sale.id}` : 'Starting…'}</span>
+          </div>
           {(user?.role === 'admin' || user?.role === 'manager') && (
-            <button className="btn-secondary" onClick={() => navigate('/admin')}>Admin</button>
+            <button className="btn-secondary btn-icon" onClick={() => navigate('/admin')}>
+              <IconDashboard size={15} />
+              <span>Admin</span>
+            </button>
           )}
-          <button className="btn-secondary" onClick={() => navigate('/pos/shift/close')}>Close Shift</button>
-          <button className="btn-secondary" onClick={logout}>Logout</button>
+          <button className="btn-secondary btn-icon" onClick={() => navigate('/pos/shift/close')}>
+            <IconFileText size={15} />
+            <span>Shift</span>
+          </button>
+          <button className="btn-logout-icon" onClick={logout} title="Logout">
+            <IconLogOut size={16} />
+          </button>
         </div>
       </header>
 
       {error && (
         <div className="page-error">
-          {error}
+          <span>{error}</span>
           {draftFailed && (
             <button className="btn-sm error-retry" onClick={() => { setError(''); setDraftFailed(false); }}>
               Retry
@@ -136,17 +160,37 @@ export function BillingPage() {
             onRemove={(itemId) => act(() => removeItem(itemId))}
           />
         </section>
-        <BillSummary sale={sale} />
+        <BillSummary
+          sale={sale}
+          disabled={busy}
+          onPayClick={() => openDialog('pay')}
+        />
       </div>
 
       <ShortcutBar
         shortcuts={[
-          { key: 'F2', label: 'Hold', onClick: shortcuts.F2, disabled: !hasItems },
-          { key: 'F3', label: 'Held Bills', onClick: shortcuts.F3 },
-          { key: 'F12', label: 'Pay', onClick: shortcuts.F12, disabled: !hasItems },
-          { key: 'Esc', label: 'Void', onClick: shortcuts.Escape, disabled: !hasItems },
+          { key: 'F2', label: 'Hold Bill', icon: IconPauseCircle, variant: 'warning', onClick: shortcuts.F2, disabled: !hasItems },
+          { key: 'F3', label: 'Held Bills', icon: IconFileText, variant: 'default', onClick: shortcuts.F3 },
+          { key: 'F12', label: 'Pay Now', icon: IconCreditCard, variant: 'primary', onClick: shortcuts.F12, disabled: !hasItems },
+          { key: 'Esc', label: 'Void Bill', icon: IconTrash, variant: 'danger', onClick: shortcuts.Escape, disabled: !hasItems },
         ]}
       />
+
+      {/* Mobile Sticky Payment Bar */}
+      <div className="mobile-checkout-bar">
+        <div className="mobile-total-info">
+          <span className="mobile-total-label">Total Amount</span>
+          <span className="mobile-total-val">{formatRupees(sale?.total ?? 0)}</span>
+        </div>
+        <button
+          className="mobile-pay-btn"
+          disabled={!hasItems || busy}
+          onClick={() => openDialog('pay')}
+        >
+          <IconCreditCard size={18} />
+          <span>PAY NOW (F12)</span>
+        </button>
+      </div>
 
       {dialog === 'pay' && sale && (
         <PaymentDialog
@@ -168,3 +212,4 @@ export function BillingPage() {
     </div>
   );
 }
+
