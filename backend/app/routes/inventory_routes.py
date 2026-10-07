@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request
 
 from app.errors.exceptions import ValidationError
-from app.schemas.inventory_schemas import AdjustStockRequest, InventoryTxnOut, StockInRequest, ThresholdRequest
+from app.schemas.inventory_schemas import AdjustStockRequest, ExpiringBatchOut, InventoryTxnOut, StockInRequest, ThresholdRequest
 from app.services import auth_service, inventory_service
 from app.utils.permissions import require_permission
 
@@ -46,6 +46,14 @@ def set_threshold():
     row = inventory_service.set_threshold(data, auth_service.current_user())
     threshold = None if row.low_stock_threshold is None else str(row.low_stock_threshold)
     return jsonify({"product_id": row.product_id, "low_stock_threshold": threshold}), 200
+
+
+@inventory_bp.get("/inventory/expiring")
+@require_permission("inventory.read")
+def expiring():
+    days = request.args.get("days", 30, type=int)
+    results = inventory_service.expiring_soon(_store_id_arg(), days)
+    return jsonify([r.model_dump(mode="json") for r in results]), 200
 
 
 @inventory_bp.get("/inventory/ledger")
