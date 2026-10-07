@@ -23,6 +23,19 @@ export async function removeItem(saleId: number, itemId: number): Promise<SaleOu
   return resp.data;
 }
 
+export interface ManualDiscountInput {
+  amount: string;
+  reason: string;
+  approver_username: string;
+  approver_pin: string;
+}
+
+/** Counter discount on one line; a manager/admin approves with their PIN. amount "0" removes it. */
+export async function setManualDiscount(saleId: number, itemId: number, data: ManualDiscountInput): Promise<SaleOut> {
+  const resp = await httpClient.post<SaleOut>(`/sales/${saleId}/items/${itemId}/manual-discount`, data);
+  return resp.data;
+}
+
 export async function holdSale(saleId: number, note?: string): Promise<SaleOut> {
   const resp = await httpClient.post<SaleOut>(`/sales/${saleId}/hold`, { note: note || null });
   return resp.data;

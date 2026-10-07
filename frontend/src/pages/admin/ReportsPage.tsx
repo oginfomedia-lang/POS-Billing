@@ -11,6 +11,7 @@ import { formatRupees } from '../../utils/money';
 
 type Tab = 'sales' | 'gst' | 'shifts';
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', card: 'Card', upi: 'UPI', split: 'Split' };
+const OFFER_KIND_LABEL: Record<string, string> = { item: 'Item offer', bill: 'Bill offer', manual: 'Manual' };
 
 const QUICK_RANGES: { label: string; from: () => string; to: () => string }[] = [
   { label: 'Today', from: () => isoDateIst(), to: () => isoDateIst() },
@@ -157,6 +158,26 @@ export function ReportsPage() {
                     {sales.top_products.length === 0 && <tr><td colSpan={3} className="empty-row">No sales in this period.</td></tr>}
                     {sales.top_products.map((p) => (
                       <tr key={p.product_id}><td>{p.product_name}</td><td className="num">{p.qty}</td><td className="num">{formatRupees(p.amount)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 className="section-title">Offers used</h3>
+              <div className="table-card">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>Offer</th><th>Type</th><th className="num">Bills</th><th className="num">Discount given</th></tr>
+                  </thead>
+                  <tbody>
+                    {sales.offers.length === 0 && <tr><td colSpan={4} className="empty-row">No offers used in this period.</td></tr>}
+                    {sales.offers.map((o, i) => (
+                      <tr key={`${o.kind}-${i}`}>
+                        <td>{o.name}</td>
+                        <td>{OFFER_KIND_LABEL[o.kind]}</td>
+                        <td className="num">{o.bills}</td>
+                        <td className="num">{formatRupees(o.amount)}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

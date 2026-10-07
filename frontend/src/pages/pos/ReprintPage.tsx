@@ -6,7 +6,7 @@ import { getReceipt } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { ReceiptOut } from '../../types/sale';
 import { formatDateTime } from '../../utils/format';
-import { formatRupees } from '../../utils/money';
+import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 
 const METHOD_LABEL: Record<string, string> = { cash: 'Cash', card: 'Card', upi: 'UPI', split: 'Split' };
 
@@ -38,6 +38,9 @@ export function ReprintPage() {
     const t = window.setTimeout(() => window.print(), 100);
     return () => window.clearTimeout(t);
   }, [receipt]);
+
+  // Item offers + manual discounts (everything except the bill offer).
+  const itemSavingsPaise = receipt ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) : 0;
 
   return (
     <div className="reprint-page">
@@ -83,10 +86,16 @@ export function ReprintPage() {
                     <td className="num">{i.unit_price}</td>
                     <td className="num">{i.line_total}</td>
                   </tr>
-                  {Number(i.discount_amount) > 0 && (
+                  {Number(i.offer_discount) > 0 && (
                     <tr>
-                      <td colSpan={3}>&nbsp;&nbsp;Discount</td>
-                      <td className="num">-{i.discount_amount}</td>
+                      <td colSpan={3}>&nbsp;&nbsp;{i.offer_name ?? 'Offer'}</td>
+                      <td className="num">-{i.offer_discount}</td>
+                    </tr>
+                  )}
+                  {Number(i.manual_discount) > 0 && (
+                    <tr>
+                      <td colSpan={3}>&nbsp;&nbsp;Discount{i.manual_discount_reason ? ` (${i.manual_discount_reason})` : ''}</td>
+                      <td className="num">-{i.manual_discount}</td>
                     </tr>
                   )}
                 </Fragment>
@@ -96,11 +105,17 @@ export function ReprintPage() {
           <hr />
 
           <div className="receipt-row"><span>Subtotal</span><span>{formatRupees(receipt.subtotal)}</span></div>
-          {Number(receipt.discount_amount) > 0 && (
-            <div className="receipt-row"><span>Discount</span><span>− {formatRupees(receipt.discount_amount)}</span></div>
+          {itemSavingsPaise > 0 && (
+            <div className="receipt-row"><span>Item savings</span><span>− {formatRupees(paiseToString(itemSavingsPaise))}</span></div>
+          )}
+          {Number(receipt.bill_offer_discount) > 0 && (
+            <div className="receipt-row"><span>{receipt.bill_offer_name ?? 'Bill offer'}</span><span>− {formatRupees(receipt.bill_offer_discount)}</span></div>
           )}
           <div className="receipt-row"><span>GST</span><span>{formatRupees(receipt.tax_amount)}</span></div>
           <div className="receipt-row receipt-total"><span>TOTAL</span><span>{formatRupees(receipt.total)}</span></div>
+          {Number(receipt.discount_amount) > 0 && (
+            <div className="receipt-row"><span>You saved</span><span>{formatRupees(receipt.discount_amount)}</span></div>
+          )}
           <hr />
 
           {receipt.payments.map((p) => (

@@ -3,7 +3,7 @@ import pytest
 
 from app.extensions import db
 from app.models.category import Category
-from tests.factories import make_counter, make_product, make_shift
+from tests.factories import make_counter, make_product, make_shift, make_user
 
 pytestmark = pytest.mark.integration
 
@@ -105,3 +105,129 @@ def test_update_and_list_discount(client, admin_headers, cashier_headers):
     listed = client.get("/api/v1/discounts", headers=admin_headers).get_json()
     assert listed[0]["value"] == "15.00" and listed[0]["is_active"] is False
     assert client.get("/api/v1/discounts", headers=cashier_headers).status_code == 403
+
+
+def test_category_offer_covers_subcategory(client, admin_headers, cashier_headers, shift, store):
+    snacks = Category(name="Snacks")
+    db.session.add(snacks)
+    db.session.flush()
+    chips = Category(name="Chips", parent_id=snacks.id)
+    db.session.add(chips)
+    db.session.commit()
+    lays = make_product(store, name="Lays", price="20.00", tax_rate="0")
+    lays.category_id = chips.id
+    db.session.commit()
+    _discount(client, admin_headers, scope="category", category_id=snacks.id, value="10")
+    sale = _bill(client, cashier_headers, (lays, 1))
+    assert sale["discount_amount"] == "2.00"
+
+
+def test_bill_minimum_uses_gst_inclusive_total(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="450.00", tax_rate="18")  # 531 with GST
+    _discount(client, admin_headers, discount_type="fixed", value="50", min_bill_amount="500")
+    sale = _bill(client, cashier_headers, (p, 1))
+    assert sale["bill_offer_discount"] == "50.00"
+
+
+def test_offer_names_saved_on_sale(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="100.00", tax_rate="0")
+    _discount(client, admin_headers, name="Butter Deal", scope="product", product_id=p.id, value="10")
+    _discount(client, admin_headers, name="Weekend Sale", discount_type="fixed", value="5")
+    sale = _bill(client, cashier_headers, (p, 1))
+    # Only one offer per bill: Butter Deal (10) beats Weekend Sale (5).
+    assert sale["items"][0]["offer_name"] == "Butter Deal"
+    assert sale["items"][0]["offer_discount"] == "10.00"
+    assert sale["bill_offer_name"] is None
+    assert sale["bill_offer_discount"] == "0.00"
+    assert sale["discount_amount"] == "10.00"
+
+
+def test_only_one_best_offer_per_bill(client, admin_headers, cashier_headers, shift, store):
+    a = make_product(store, name="A", price="100.00", tax_rate="0")
+    b = make_product(store, name="B", price="100.00", tax_rate="0")
+    _discount(client, admin_headers, name="A deal", scope="product", product_id=a.id, value="10")  # saves 10
+    _discount(client, admin_headers, name="B deal", scope="product", product_id=b.id, value="20")  # saves 20
+    _discount(client, admin_headers, name="Bill 15", discount_type="fixed", value="15")  # saves 15
+    sale = _bill(client, cashier_headers, (a, 1), (b, 1))
+    assert sale["discount_amount"] == "20.00"
+    names = {i["product_name"]: (i["offer_name"], i["offer_discount"]) for i in sale["items"]}
+    assert names == {"A": (None, "0.00"), "B": ("B deal", "20.00")}
+    assert sale["bill_offer_name"] is None
+
+
+def test_bill_offer_wins_when_bigger(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="100.00", tax_rate="0")
+    _discount(client, admin_headers, name="Small", scope="product", product_id=p.id, value="5")
+    _discount(client, admin_headers, name="Big bill", discount_type="fixed", value="30")
+    sale = _bill(client, cashier_headers, (p, 2))
+    assert sale["bill_offer_name"] == "Big bill"
+    assert sale["discount_amount"] == "30.00"
+    assert sale["items"][0]["offer_name"] is None
+
+
+def test_percentage_cap_on_bill_offer(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="5000.00", tax_rate="0")
+    _discount(client, admin_headers, value="10", max_discount_amount="200")
+    assert _bill(client, cashier_headers, (p, 1))["discount_amount"] == "200.00"
+
+
+def test_buy_x_get_y_offer(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="20.00", tax_rate="0")
+    _discount(client, admin_headers, scope="product", product_id=p.id, discount_type="buy_x_get_y", buy_qty=2, get_qty=1)
+    assert _bill(client, cashier_headers, (p, 3))["discount_amount"] == "20.00"
+
+
+def test_buy_1_get_1_single_unit_is_half_price(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="50.00", tax_rate="0")
+    _discount(client, admin_headers, scope="product", product_id=p.id, discount_type="buy_x_get_y", buy_qty=1, get_qty=1)
+    assert _bill(client, cashier_headers, (p, 1))["total"] == "25.00"
+
+
+def test_stock_shortage_names_the_product(client, cashier_headers, shift, store):
+    p = make_product(store, name="Amul Butter", price="50.00", stock=1)
+    sid = _bill(client, cashier_headers, (p, 3))["id"]
+    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    assert resp.status_code == 400
+    assert "Amul Butter (need 3, only 1 in stock)" in resp.get_json()["error"]["message"]
+
+
+def test_manual_discount_needs_manager_pin(client, cashier_headers, shift, store):
+    make_user(role="manager", username="mgr", pin="4321", store=store)
+    p = make_product(store, price="100.00", tax_rate="0")
+    sale = _bill(client, cashier_headers, (p, 1))
+    url = f"/api/v1/sales/{sale['id']}/items/{sale['items'][0]['id']}/manual-discount"
+    body = {"amount": "10", "reason": "damaged pack"}
+
+    wrong_pin = client.post(url, json={**body, "approver_username": "mgr", "approver_pin": "0000"}, headers=cashier_headers)
+    assert wrong_pin.status_code == 403
+    own_pin = client.post(url, json={**body, "approver_username": "cashier1", "approver_pin": "5678"}, headers=cashier_headers)
+    assert own_pin.status_code == 403
+
+    ok = client.post(url, json={**body, "approver_username": "mgr", "approver_pin": "4321"}, headers=cashier_headers)
+    assert ok.status_code == 200
+    data = ok.get_json()
+    assert data["items"][0]["manual_discount"] == "10.00"
+    assert data["items"][0]["manual_discount_reason"] == "damaged pack"
+    assert data["total"] == "90.00"
+
+
+def test_offers_report(client, admin_headers, cashier_headers, shift, store):
+    p = make_product(store, price="100.00", tax_rate="0")
+    _discount(client, admin_headers, name="Weekend Sale", value="10")
+    sid = _bill(client, cashier_headers, (p, 1))["id"]
+    client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    report = client.get("/api/v1/reports/sales", headers=admin_headers).get_json()
+    assert report["offers"][0]["name"] == "Weekend Sale"
+    assert report["offers"][0]["amount"] == "10.00"
+
+
+def test_new_offer_type_validation(client, admin_headers, store):
+    p = make_product(store)
+    bad = [
+        {"discount_type": "buy_x_get_y", "scope": "bill", "buy_qty": 2, "get_qty": 1},
+        {"discount_type": "buy_x_get_y", "scope": "product", "product_id": p.id, "buy_qty": 2},
+        {"discount_type": "qty_price", "scope": "product", "product_id": p.id, "buy_qty": 1, "value": "99"},
+    ]
+    for body in bad:
+        resp = client.post("/api/v1/discounts", json={"name": "x", **body}, headers=admin_headers)
+        assert resp.status_code == 422, body

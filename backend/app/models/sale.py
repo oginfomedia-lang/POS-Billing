@@ -18,6 +18,9 @@ class Sale(TimestampMixin, db.Model):
     )
     subtotal = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    bill_offer_id = db.Column(db.Integer, db.ForeignKey("discounts.id"), nullable=True)
+    bill_offer_name = db.Column(db.String(100), nullable=True)  # snapshot for receipt/reports
+    bill_offer_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     note = db.Column(db.String(255), nullable=True)  # hold note
@@ -50,6 +53,13 @@ class SaleItem(TimestampMixin, db.Model):
     qty = db.Column(db.Numeric(12, 3), nullable=False)
     line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before discount and tax
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    # discount_amount = offer_discount + manual_discount + this line's share of the bill offer.
+    offer_id = db.Column(db.Integer, db.ForeignKey("discounts.id"), nullable=True)
+    offer_name = db.Column(db.String(100), nullable=True)  # snapshot for cart/receipt/reports
+    offer_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    manual_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    manual_discount_reason = db.Column(db.String(100), nullable=True)
+    manual_discount_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)  # on (line_total - discount_amount)
 
     sale = db.relationship("Sale", back_populates="items")

@@ -10,6 +10,10 @@ import {
   updateProduct,
 } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
+import { stockIn } from '../../services/api/inventoryApi';
+import { listStores } from '../../services/api/storeApi';
+import { useAuth } from '../../hooks/useAuth';
+import type { StoreOut } from '../../types/api';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
 
@@ -50,7 +54,41 @@ export function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // Receive stock straight from the product form (no trip to the Inventory page).
+  const { user } = useAuth();
+  const [stores, setStores] = useState<StoreOut[]>([]);
+  const [stockStoreId, setStockStoreId] = useState('');
+  const [stockQty, setStockQty] = useState('');
+  const [stockNote, setStockNote] = useState('');
+  // After goods are received, offer to print that many stickers (same as the Inventory page).
+  const [received, setReceived] = useState<{ productId: number; name: string; qty: string; hasBarcode: boolean } | null>(null);
+
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    listStores()
+      .then((list) => {
+        setStores(list);
+        const mine = list.find((s) => s.id === user?.store_id) ?? list[0];
+        if (mine) setStockStoreId(String(mine.id));
+      })
+      .catch((err) => setError(getErrorMessage(err)));
+  }, []);
+
+  const stockQtyValid = stockQty.trim() === '' || Number(stockQty) > 0;
+
+  /** Adds the received qty for a just-saved product. Returns false (with the error shown) if it fails. */
+  async function receiveStock(product: ProductOut): Promise<boolean> {
+    if (stockQty.trim() === '') return true;
+    try {
+      await stockIn(Number(stockStoreId), product.id, stockQty.trim(), stockNote.trim());
+      setReceived({ productId: product.id, name: product.name, qty: stockQty.trim(), hasBarcode: product.barcodes.length > 0 });
+      return true;
+    } catch (err) {
+      setError(`"${product.name}" was saved, but the stock was not received: ${getErrorMessage(err)}`);
+      return false;
+    }
+  }
 
   async function fetchAll(p = page) {
     setLoading(true);
@@ -94,6 +132,8 @@ export function ProductsPage() {
     setBarcodeInput('');
     setFormActive(true);
     setFormError('');
+    setStockQty('');
+    setStockNote('');
   }
 
   function openEdit(p: ProductOut) {
@@ -117,6 +157,8 @@ export function ProductsPage() {
     );
     setBarcodeInput('');
     setFormError('');
+    setStockQty('');
+    setStockNote('');
   }
 
   function handleAddBarcodeFromInput(e?: React.KeyboardEvent | React.MouseEvent) {
@@ -175,10 +217,15 @@ export function ProductsPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
+    if (!stockQtyValid) {
+      setFormError('Stock to receive must be more than 0 (or leave it empty).');
+      return;
+    }
     setSaving(true);
     setFormError('');
+    setReceived(null);
     try {
-      await createProduct({
+      const created = await createProduct({
         sku: formSku || undefined,
         name: formName,
         price: parseFloat(formPrice),
@@ -189,6 +236,7 @@ export function ProductsPage() {
         barcodes: barcodesList,
       });
       setModal(null);
+      await receiveStock(created);
       fetchAll();
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -200,10 +248,15 @@ export function ProductsPage() {
   async function handleEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!target) return;
+    if (!stockQtyValid) {
+      setFormError('Stock to receive must be more than 0 (or leave it empty).');
+      return;
+    }
     setSaving(true);
     setFormError('');
+    setReceived(null);
     try {
-      await updateProduct(target.id, {
+      const updated = await updateProduct(target.id, {
         sku: formSku,
         name: formName,
         price: parseFloat(formPrice),
@@ -215,6 +268,7 @@ export function ProductsPage() {
         barcodes: barcodesList,
       });
       setModal(null);
+      await receiveStock(updated);
       fetchAll();
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -247,6 +301,23 @@ export function ProductsPage() {
       </div>
 
       {error && <div className="page-error">{error}</div>}
+      {received && (
+        <div className="notice-bar">
+          Received {received.qty} × {received.name}.
+          {received.hasBarcode && Number.isInteger(Number(received.qty)) && (
+            <button
+              className="btn-primary btn-compact"
+              onClick={() => navigate(
+                `/admin/labels?product=${received.productId}&qty=${received.qty}`,
+                { state: { from: '/admin/products' } },
+              )}
+            >
+              Print {received.qty} labels
+            </button>
+          )}
+          <button className="btn-sm" onClick={() => setReceived(null)}>Dismiss</button>
+        </div>
+      )}
       {loading && <div className="loading-text">Loading products…</div>}
 
       <table className="data-table">
@@ -524,6 +595,43 @@ export function ProductsPage() {
                   )}
                 </div>
               </div>
+
+              <fieldset className="form-section">
+                <legend>Receive stock (optional)</legend>
+                <div className={stores.length > 1 ? 'form-row form-row-3' : 'form-row'}>
+                  <label className="field-label">
+                    {modal === 'create' ? 'Opening stock (qty)' : 'Add stock received (qty)'}
+                    <input
+                      className="field-input"
+                      type="number"
+                      min="0.001"
+                      step="any"
+                      value={stockQty}
+                      onChange={(e) => setStockQty(e.target.value)}
+                      placeholder="e.g. 24"
+                    />
+                  </label>
+                  {stores.length > 1 && (
+                    <label className="field-label">
+                      Store
+                      <select className="field-input" value={stockStoreId} onChange={(e) => setStockStoreId(e.target.value)}>
+                        {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <label className="field-label">
+                    Note
+                    <input
+                      className="field-input"
+                      maxLength={500}
+                      value={stockNote}
+                      onChange={(e) => setStockNote(e.target.value)}
+                      placeholder="e.g. supplier invoice no."
+                    />
+                  </label>
+                </div>
+                <span className="hint-text">Leave empty if no goods arrived. This adds to stock; it never replaces it.</span>
+              </fieldset>
 
               {modal === 'edit' && (
                 <label className="field-label checkbox-label">
