@@ -99,8 +99,12 @@ export function InventoryPage() {
         await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim());
         const received = Number(qty);
         setPrintOffer(
-          Number.isInteger(received) && modal.row.barcode
-            ? { productId: modal.row.product_id, name: modal.row.product_name, qty: received }
+          modal.row.barcode
+            ? {
+                productId: modal.row.product_id,
+                name: `${received} ${modal.row.uom || 'pcs'} × ${modal.row.product_name}`,
+                qty: Math.max(1, Math.round(received)),
+              }
             : null,
         );
       } else if (modal.kind === 'threshold') {
@@ -184,9 +188,9 @@ export function InventoryPage() {
             <tr key={r.product_id}>
               <td>{r.product_name}</td>
               <td>{r.barcode ?? '—'}</td>
-              <td className="num">{qtyText(r.qty_on_hand)}</td>
+              <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
               <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
-                {qtyText(r.effective_threshold)}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
+                {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
               </td>
               <td>
                 {Number(r.qty_on_hand) <= 0
@@ -225,7 +229,7 @@ export function InventoryPage() {
                       <tr key={t.id}>
                         <td className="ts-cell">{formatDateTime(t.created_at)}</td>
                         <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
-                        <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)}</td>
+                        <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)} {modal.row.uom || 'pcs'}</td>
                         <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
                       </tr>
                     ))}
@@ -239,15 +243,15 @@ export function InventoryPage() {
               <form onSubmit={handleSubmit} className="modal-form">
                 <p className="hint-text">
                   The product shows as "Low" when stock is at or below this level. Leave empty to use the store-wide
-                  default from Settings (currently {qtyText(modal.row.effective_threshold)}).
+                  default from Settings (currently {qtyText(modal.row.effective_threshold)} {modal.row.uom || 'pcs'}).
                 </p>
                 <label className="field-label">
-                  Low-stock level
+                  Low-stock level ({modal.row.uom || 'pcs'})
                   <input
                     className="field-input"
                     type="number"
                     min="0"
-                    step="any"
+                    step={modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001'}
                     value={qty}
                     placeholder="Use default"
                     onChange={(e) => setQty(e.target.value)}
@@ -261,14 +265,14 @@ export function InventoryPage() {
               </form>
             ) : (
               <form onSubmit={handleSubmit} className="modal-form">
-                <p className="hint-text">Currently in stock: <strong>{qtyText(modal.row.qty_on_hand)}</strong></p>
+                <p className="hint-text">Currently in stock: <strong>{qtyText(modal.row.qty_on_hand)} {modal.row.uom || 'pcs'}</strong></p>
                 <label className="field-label">
-                  {modal.kind === 'in' ? 'Quantity received' : 'Counted quantity (new stock level)'}
+                  {modal.kind === 'in' ? `Quantity received (${modal.row.uom || 'pcs'})` : `Counted quantity (${modal.row.uom || 'pcs'})`}
                   <input
                     className="field-input"
                     type="number"
-                    min={modal.kind === 'in' ? '0.001' : '0'}
-                    step="any"
+                    min={modal.kind === 'in' ? (modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001') : '0'}
+                    step={modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001'}
                     value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     onFocus={(e) => e.target.select()}

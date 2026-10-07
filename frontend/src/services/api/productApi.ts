@@ -1,4 +1,4 @@
-import type { BarcodeOut, BarcodeType, CategoryOut, ProductBarcodeOut, ProductOut } from '../../types/product';
+import type { BarcodeOut, BarcodeType, CategoryOut, ProductBarcodeOut, ProductOut, UOMType } from '../../types/product';
 import type { PagedResponse } from '../../types/api';
 import { httpClient } from './httpClient';
 
@@ -29,6 +29,7 @@ export async function createProduct(data: {
   sku?: string;
   price: number;
   tax_rate?: number;
+  uom?: UOMType;
   category_id?: number | null;
   description?: string | null;
   is_variable_weight?: boolean;
@@ -46,6 +47,7 @@ export async function updateProduct(
     sku: string;
     price: number;
     tax_rate: number;
+    uom: UOMType;
     is_variable_weight: boolean;
     is_active: boolean;
     category_id: number | null;
@@ -55,6 +57,7 @@ export async function updateProduct(
   const resp = await httpClient.put<ProductOut>(`/products/${id}`, data);
   return resp.data;
 }
+
 
 export async function addBarcode(
   id: number,

@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, field_validator, ValidationInfo
 
-from app.models.enums import BarcodeType
+from app.models.enums import BarcodeType, UOMType
 
 
 class CategoryOut(BaseModel):
@@ -55,6 +55,7 @@ class ProductOut(BaseModel):
     category_id: int | None
     price: Decimal
     tax_rate: Decimal
+    uom: UOMType = UOMType.PCS
     is_variable_weight: bool
     is_active: bool
     store_id: int | None
@@ -68,6 +69,7 @@ class ProductCreate(BaseModel):
     category_id: int | None = None
     price: Decimal
     tax_rate: Decimal = Decimal("0")
+    uom: UOMType = UOMType.PCS
     is_variable_weight: bool = False
     store_id: int | None = None
     barcodes: list[str | BarcodeCreatePayload] = []
@@ -87,10 +89,12 @@ class ProductUpdate(BaseModel):
     category_id: int | None = None
     price: Decimal | None = None
     tax_rate: Decimal | None = None
+    uom: UOMType | None = None
     is_variable_weight: bool | None = None
     is_active: bool | None = None
     store_id: int | None = None
     barcodes: list[str | BarcodeCreatePayload] | None = None
+
 
     @field_validator("price", "tax_rate", mode="before")
     @classmethod

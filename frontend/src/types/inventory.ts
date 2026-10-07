@@ -1,10 +1,11 @@
-// Inventory types (match backend/app/schemas/inventory_schemas.py). Quantities are decimal strings.
+import type { UOMType } from './product';
 
 export interface StockLevelOut {
   product_id: number;
   product_name: string;
   barcode: string | null;
   qty_on_hand: string;
+  uom: UOMType;
   low_stock_threshold: string | null; // this product's own level; null = Settings default
   effective_threshold: string;
   is_low: boolean;

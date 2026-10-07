@@ -10,7 +10,7 @@ import {
   updateProduct,
 } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
-import type { BarcodeType, CategoryOut, ProductOut } from '../../types/product';
+import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
 
 interface BarcodeItem {
@@ -41,6 +41,7 @@ export function ProductsPage() {
   const [formPrice, setFormPrice] = useState('');
   const [formTax, setFormTax] = useState('0');
   const [formCategory, setFormCategory] = useState('');
+  const [formUom, setFormUom] = useState<UOMType>('pcs');
   const [formVariableWeight, setFormVariableWeight] = useState(false);
   const [formActive, setFormActive] = useState(true);
   const [barcodesList, setBarcodesList] = useState<BarcodeItem[]>([]);
@@ -87,6 +88,7 @@ export function ProductsPage() {
     setFormPrice('');
     setFormTax('0');
     setFormCategory('');
+    setFormUom('pcs');
     setFormVariableWeight(false);
     setBarcodesList([]);
     setBarcodeInput('');
@@ -102,6 +104,7 @@ export function ProductsPage() {
     setFormPrice(String(p.price));
     setFormTax(String(p.tax_rate));
     setFormCategory(p.category_id ? String(p.category_id) : '');
+    setFormUom(p.uom || 'pcs');
     setFormVariableWeight(p.is_variable_weight || false);
     setFormActive(p.is_active);
     setBarcodesList(
@@ -181,6 +184,7 @@ export function ProductsPage() {
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
+        uom: formUom,
         is_variable_weight: formVariableWeight,
         barcodes: barcodesList,
       });
@@ -205,6 +209,7 @@ export function ProductsPage() {
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
+        uom: formUom,
         is_variable_weight: formVariableWeight,
         is_active: formActive,
         barcodes: barcodesList,
@@ -250,6 +255,7 @@ export function ProductsPage() {
             <th>SKU</th>
             <th>Name</th>
             <th>Price</th>
+            <th>UOM</th>
             <th>Tax %</th>
             <th>Category</th>
             <th>Type</th>
@@ -266,6 +272,7 @@ export function ProductsPage() {
                 <td><code>{p.sku}</code></td>
                 <td>{p.name}</td>
                 <td>₹{Number(p.price).toFixed(2)}</td>
+                <td><code>{p.uom || 'pcs'}</code></td>
                 <td>{Number(p.tax_rate).toFixed(1)}%</td>
                 <td>{cat?.name ?? '—'}</td>
                 <td>
@@ -351,7 +358,7 @@ export function ProductsPage() {
                 </label>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px' }}>
                 <label className="field-label">
                   Price (₹)
                   <input
@@ -363,6 +370,21 @@ export function ProductsPage() {
                     onChange={(e) => setFormPrice(e.target.value)}
                     required
                   />
+                </label>
+                <label className="field-label">
+                  Unit (UOM)
+                  <select
+                    className="field-input"
+                    value={formUom}
+                    onChange={(e) => setFormUom(e.target.value as any)}
+                  >
+                    <option value="pcs">pcs (Pieces)</option>
+                    <option value="kg">kg (Kilograms)</option>
+                    <option value="g">g (Grams)</option>
+                    <option value="ltr">ltr (Liters)</option>
+                    <option value="ml">ml (Milliliters)</option>
+                    <option value="pack">pack (Packets)</option>
+                  </select>
                 </label>
                 <label className="field-label">
                   Tax Rate (%)
