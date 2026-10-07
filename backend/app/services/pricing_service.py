@@ -45,12 +45,11 @@ def bill_discount(discount_type: DiscountType, value, amount, cap=None) -> Decim
     return round_money(min(off, to_decimal(amount)))
 
 
-def buy_x_get_y_discount(unit_price, qty, buy_qty: int, get_qty: int, line_total) -> Decimal:
-    """'Buy 2 get 1 free' on the same product: in every full group of (buy + get) units,
-    `get` units are free. Weighed (decimal) quantities only count whole units."""
-    groups = int(to_decimal(qty) // (buy_qty + get_qty))
-    free_units = groups * get_qty
-    return round_money(min(to_decimal(unit_price) * free_units, to_decimal(line_total)))
+def buy_x_get_y_discount(buy_qty: int, get_qty: int, line_total) -> Decimal:
+    """'Buy X get Y free' on the same product, shared proportionally across every unit:
+    each unit is get / (buy + get) off. So Buy 1 Get 1 with just 1 unit = half price, and a
+    full group still works out exactly (Buy 2 Get 1 on 3 units = 1 unit free)."""
+    return round_money(to_decimal(line_total) * get_qty / (buy_qty + get_qty))
 
 
 def qty_price_discount(unit_price, qty, tax_rate, bundle_qty: int, bundle_price, line_total) -> Decimal:

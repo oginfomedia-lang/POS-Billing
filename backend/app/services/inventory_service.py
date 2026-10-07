@@ -131,9 +131,19 @@ def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
                 "available": float(available),
             })
     if shortages:
-        raise InsufficientStockError("Not enough stock for some items.", details=shortages)
+        lines = ", ".join(
+            f"{s['product_name']} (need {_qty_text(s['requested'])}, only {_qty_text(s['available'])} in stock)"
+            for s in shortages
+        )
+        raise InsufficientStockError(f"Not enough stock: {lines}.", details=shortages)
 
     for product_id, qty in wanted.items():
         rows[product_id].qty_on_hand -= qty
         # Ledger qty is signed: negative = stock out.
         repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -qty, reference_id=sale_id)
+
+
+def _qty_text(qty) -> str:
+    """3.000 -> "3", 1.250 -> "1.25" (weighed items)."""
+    d = Decimal(str(qty)).normalize()
+    return f"{d:f}"

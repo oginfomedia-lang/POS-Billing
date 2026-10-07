@@ -804,6 +804,31 @@ select.field-input {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.form-section legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-600);
+}
+
+.form-section .hint-text {
+  margin: 0;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

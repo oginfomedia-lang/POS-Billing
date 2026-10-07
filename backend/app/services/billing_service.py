@@ -241,38 +241,38 @@ def _get_item_or_404(sale: Sale, item_id: int) -> SaleItem:
 def _recalculate(sale: Sale) -> None:
     """Re-prices every line with the offers active now.
 
-    Order: best item offer per line -> manual (counter) discount -> best bill offer on what's left.
-    The bill offer's minimum is checked against the amount with GST (what the customer sees).
+    Manual (manager-approved) discounts come first; then only ONE automatic offer is applied to
+    the whole bill — the item or bill offer that saves the customer the most. A bill offer's
+    minimum is checked against the amount with GST (what the customer sees).
     """
     items = list(sale.items)
+    room = []
     for item in items:
         item.line_total = money_mul(item.unit_price, item.qty)
-
-    discounts = discount_service.active_for_store(sale.store_id)
-    offers = discount_service.line_discounts(discounts, items)
-
-    line_off = []
-    for item, offer in zip(items, offers):
-        item.offer_id, item.offer_name, item.offer_discount = offer.discount_id, offer.name, offer.amount
         # A manual discount can't take the line below zero (e.g. qty was reduced after it was given).
-        item.manual_discount = min(round_money(item.manual_discount or 0), item.line_total - offer.amount)
-        line_off.append(offer.amount + item.manual_discount)
+        item.manual_discount = min(round_money(item.manual_discount or 0), item.line_total)
+        room.append(item.line_total - item.manual_discount)
 
-    net = [item.line_total - off for item, off in zip(items, line_off)]
-    net_with_gst = sum(
-        (n + pricing_service.line_amounts(item.unit_price, item.qty, item.tax_rate, off)[1]
-         for item, n, off in zip(items, net, line_off)),
+    with_gst = sum(
+        (r + pricing_service.line_amounts(item.unit_price, item.qty, item.tax_rate, item.manual_discount)[1]
+         for item, r in zip(items, room)),
         pricing_service.ZERO,
     )
-    bill_offer = discount_service.best_bill_discount(discounts, sum(net, pricing_service.ZERO), net_with_gst)
-    sale.bill_offer_id = bill_offer.discount_id
-    sale.bill_offer_name = bill_offer.name
-    sale.bill_offer_discount = bill_offer.amount
-    bill_share = pricing_service.allocate(bill_offer.amount, net)
+    discounts = discount_service.active_for_store(sale.store_id)
+    chosen = discount_service.choose_best_offer(discounts, items, room, with_gst)
+    offer = chosen.offer
+
+    sale.bill_offer_id = offer.discount_id if chosen.is_bill_offer else None
+    sale.bill_offer_name = offer.name if chosen.is_bill_offer else None
+    sale.bill_offer_discount = offer.amount if chosen.is_bill_offer else pricing_service.ZERO
 
     lines = []
-    for item, off, share in zip(items, line_off, bill_share):
-        item.discount_amount = off + share
+    for item, off in zip(items, chosen.line_amounts):
+        on_line = not chosen.is_bill_offer and off > 0
+        item.offer_id = offer.discount_id if on_line else None
+        item.offer_name = offer.name if on_line else None
+        item.offer_discount = off if on_line else pricing_service.ZERO
+        item.discount_amount = item.manual_discount + off
         item.line_total, item.tax_amount = pricing_service.line_amounts(
             item.unit_price, item.qty, item.tax_rate, item.discount_amount
         )

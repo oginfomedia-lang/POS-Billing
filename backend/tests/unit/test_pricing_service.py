@@ -73,10 +73,11 @@ def test_percentage_cap():
     assert bill_discount(DiscountType.PERCENTAGE, "10", D("5000.00"), D("200")) == D("200.00")
 
 
-def test_buy_x_get_y():
-    assert buy_x_get_y_discount(D("20.00"), D("3"), 2, 1, D("60.00")) == D("20.00")
-    assert buy_x_get_y_discount(D("20.00"), D("2"), 2, 1, D("40.00")) == D("0.00")
-    assert buy_x_get_y_discount(D("20.00"), D("7"), 2, 1, D("140.00")) == D("40.00")
+def test_buy_x_get_y_is_proportional():
+    assert buy_x_get_y_discount(1, 1, D("20.00")) == D("10.00")  # B1G1, 1 unit -> half price
+    assert buy_x_get_y_discount(1, 1, D("40.00")) == D("20.00")  # B1G1, 2 units -> 1 free
+    assert buy_x_get_y_discount(2, 1, D("60.00")) == D("20.00")  # B2G1, 3 units -> 1 free
+    assert buy_x_get_y_discount(2, 1, D("20.00")) == D("6.67")  # B2G1, 1 unit -> a third off
 
 
 def test_qty_price_bundle_is_gst_inclusive():

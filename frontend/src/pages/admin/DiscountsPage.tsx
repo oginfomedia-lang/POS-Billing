@@ -274,8 +274,8 @@ export function DiscountsPage() {
         </table>
       </div>
       <p className="hint-text">
-        Offers apply automatically. Each item gets its single best item offer, and the whole bill can get one bill
-        offer on top of that. A bill offer's minimum is checked against the bill total including GST.
+        Offers apply automatically, but only one offer per bill: whichever saves the customer the most. A bill
+        offer's minimum is checked against the bill total including GST. Manager-approved manual discounts are extra.
       </p>
 
       {modal && (
@@ -363,7 +363,10 @@ export function DiscountsPage() {
               </div>
               {form.discount_type === 'buy_x_get_y' && form.buy_qty && form.get_qty && (
                 <p className="hint-text">
-                  The customer must have {Number(form.buy_qty) + Number(form.get_qty)} in the cart to get {form.get_qty} free.
+                  Every unit is{' '}
+                  {Math.round((Number(form.get_qty) / (Number(form.buy_qty) + Number(form.get_qty))) * 100)}% off, so{' '}
+                  {Number(form.buy_qty) + Number(form.get_qty)} units cost the same as {form.buy_qty}, and a
+                  smaller quantity gets the same share off.
                 </p>
               )}
 
