@@ -84,6 +84,7 @@ def create_product(data: ProductCreate) -> Product:
         category_id=data.category_id,
         price=data.price,
         tax_rate=data.tax_rate,
+        uom=data.uom,
         is_variable_weight=data.is_variable_weight,
         store_id=data.store_id,
     )
@@ -144,6 +145,9 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
         product.price = data.price
     if data.tax_rate is not None:
         product.tax_rate = data.tax_rate
+    if data.uom is not None:
+        product.uom = data.uom
+
     if data.is_variable_weight is not None:
         product.is_variable_weight = data.is_variable_weight
     if data.is_active is not None:

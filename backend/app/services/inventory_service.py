@@ -30,11 +30,13 @@ def stock_levels(store_id: int) -> list[StockLevelOut]:
             product_name=product.name,
             barcode=primary.barcode if primary else None,
             qty_on_hand=qty,
+            uom=product.uom,
             low_stock_threshold=own,
             effective_threshold=threshold,
             is_low=qty <= threshold,
         ))
     return out
+
 
 
 def set_threshold(data: ThresholdRequest, actor: User) -> Inventory:

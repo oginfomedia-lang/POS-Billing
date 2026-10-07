@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import InventoryTxnType
+from app.models.enums import InventoryTxnType, UOMType
 
 
 class StockLevelOut(BaseModel):
@@ -14,9 +14,11 @@ class StockLevelOut(BaseModel):
     product_name: str
     barcode: str | None
     qty_on_hand: Decimal
+    uom: UOMType = UOMType.PCS
     low_stock_threshold: Decimal | None  # this product's own level; None = use the Settings default
     effective_threshold: Decimal
     is_low: bool
+
 
 
 class ThresholdRequest(BaseModel):
