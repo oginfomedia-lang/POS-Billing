@@ -1,4 +1,5 @@
 // One printable price/barcode sticker.
+import { useTranslation } from 'react-i18next';
 import type { BarPattern } from '../../utils/barcode';
 import { formatRupees } from '../../utils/money';
 
@@ -30,10 +31,11 @@ export function BarcodeSvg({ pattern }: { pattern: BarPattern }) {
 }
 
 export function BarcodeLabel({ name, price, code, pattern }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="barcode-label">
       <div className="label-name">{name}</div>
-      {price !== null && <div className="label-price">{formatRupees(price)} <span>incl. GST</span></div>}
+      {price !== null && <div className="label-price">{formatRupees(price)} <span>{t('labels.inclGst')}</span></div>}
       <BarcodeSvg pattern={pattern} />
       <div className="label-digits">{code}</div>
     </div>

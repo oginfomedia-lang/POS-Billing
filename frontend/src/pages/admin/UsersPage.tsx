@@ -1,16 +1,24 @@
 // User management: list, create, edit, reset PIN.
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
 import type { PagedResponse, StoreOut, UserOut, UserRole } from '../../types/api';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
+import { useStoreContext } from '../../store/storeContext';
 
 const ROLES: UserRole[] = ['admin', 'manager', 'cashier'];
 
 export function UsersPage() {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<UserOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  // Active and deactivated users are listed separately.
+  const [view, setView] = useState<StatusView>('active');
+  // Branch picked in the sidebar (null = all branches, head office).
+  const branchId = useStoreContext((s) => s.selectedId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,7 +39,7 @@ export function UsersPage() {
     setError('');
     try {
       const [usersResp, storesResp] = await Promise.all([
-        httpClient.get<PagedResponse<UserOut>>('/users', { params: { page: p, per_page: 25 } }),
+        httpClient.get<PagedResponse<UserOut>>('/users', { params: { page: p, per_page: 25, status: view, store_id: branchId ?? undefined } }),
         httpClient.get<PagedResponse<StoreOut>>('/stores', { params: { per_page: 100 } }),
       ]);
       setUsers(usersResp.data.items);
@@ -44,13 +52,13 @@ export function UsersPage() {
     }
   }
 
-  useEffect(() => { fetchUsers(); }, [page]);
+  useEffect(() => { fetchUsers(); }, [page, view, branchId]);
 
   function openCreate() {
     setModal('create');
     setTarget(null);
     setFormUsername(''); setFormFullName(''); setFormPin('');
-    setFormRole('cashier'); setFormStoreId(''); setFormActive(true); setFormError('');
+    setFormRole('cashier'); setFormStoreId(branchId === null ? '' : String(branchId)); setFormActive(true); setFormError('');
   }
 
   function openEdit(u: UserOut) {
@@ -128,32 +136,35 @@ export function UsersPage() {
     <div className="admin-page">
       <AdminNav />
       <div className="admin-header">
-        <h2>Users</h2>
+        <h2>{t('users.title')}</h2>
         <div className="admin-actions">
-          <button className="btn-primary" onClick={openCreate}>+ Add User</button>
+          <button className="btn-primary" onClick={openCreate}>{t('users.add')}</button>
         </div>
       </div>
 
       {error && <div className="page-error">{error}</div>}
-      {loading && <div className="loading-text">Loading…</div>}
+      <StatusTabs value={view} onChange={(v) => { setView(v); setPage(1); }} />
+      {loading && <div className="loading-text">{t('common.loading')}</div>}
 
       <div className="table-card">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Username</th><th>Full Name</th><th>Role</th><th>Active</th><th>Actions</th>
+              <th>{t('users.colUsername')}</th><th>{t('users.colFullName')}</th><th>{t('users.colRole')}</th><th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
+            {!loading && users.length === 0 && (
+              <tr><td colSpan={4} className="empty-row">{view === 'active' ? t('users.emptyActive') : t('users.emptyInactive')}</td></tr>
+            )}
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td>
                 <td>{u.full_name}</td>
-                <td><span className={`role-badge role-${u.role}`}>{u.role}</span></td>
-                <td>{u.is_active ? '✓' : '—'}</td>
+                <td><span className={`role-badge role-${u.role}`}>{t(`roles.${u.role}`)}</span></td>
                 <td className="table-actions">
-                  <button className="btn-sm" onClick={() => openEdit(u)}>Edit</button>
-                  <button className="btn-sm" onClick={() => openPin(u)}>Reset PIN</button>
+                  <button className="btn-sm" onClick={() => openEdit(u)}>{t('common.edit')}</button>
+                  <button className="btn-sm" onClick={() => openPin(u)}>{t('users.resetPin')}</button>
                 </td>
               </tr>
             ))}
@@ -162,9 +173,9 @@ export function UsersPage() {
       </div>
 
       <div className="pagination">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>
-        <span>Page {page} · {total} users</span>
-        <button disabled={users.length < 25} onClick={() => setPage(page + 1)}>Next →</button>
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>{t('common.prev')}</button>
+        <span>{t('common.pageInfo', { page, total })}</span>
+        <button disabled={users.length < 25} onClick={() => setPage(page + 1)}>{t('common.next')}</button>
       </div>
 
       {modal && (
@@ -172,32 +183,32 @@ export function UsersPage() {
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             {modal === 'create' && (
               <>
-                <h3>Add User</h3>
+                <h3>{t('users.addTitle')}</h3>
                 {formError && <div className="form-error">{formError}</div>}
                 <form onSubmit={handleCreate} className="modal-form">
-                  <label className="field-label">Username
+                  <label className="field-label">{t('users.username')}
                     <input className="field-input" value={formUsername} onChange={e => setFormUsername(e.target.value)} required pattern="[a-z0-9_]+" minLength={3} maxLength={50} />
                   </label>
-                  <label className="field-label">Full Name
+                  <label className="field-label">{t('users.fullName')}
                     <input className="field-input" value={formFullName} onChange={e => setFormFullName(e.target.value)} required />
                   </label>
-                  <label className="field-label">PIN (4–8 digits)
+                  <label className="field-label">{t('users.pin')}
                     <input className="field-input" type="password" inputMode="numeric" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={8} />
                   </label>
-                  <label className="field-label">Role
+                  <label className="field-label">{t('users.role')}
                     <select className="field-input" value={formRole} onChange={e => setFormRole(e.target.value as UserRole)}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {ROLES.map(r => <option key={r} value={r}>{t(`roles.${r}`)}</option>)}
                     </select>
                   </label>
-                  <label className="field-label">Store
+                  <label className="field-label">{t('common.store')}
                     <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
-                      <option value="">— None —</option>
+                      <option value="">{t('common.none')}</option>
                       {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </label>
                   <div className="modal-buttons">
-                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Create'}</button>
+                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
+                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.create')}</button>
                   </div>
                 </form>
               </>
@@ -205,30 +216,30 @@ export function UsersPage() {
 
             {modal === 'edit' && target && (
               <>
-                <h3>Edit {target.username}</h3>
+                <h3>{t('users.editTitle', { name: target.username })}</h3>
                 {formError && <div className="form-error">{formError}</div>}
                 <form onSubmit={handleEdit} className="modal-form">
-                  <label className="field-label">Full Name
+                  <label className="field-label">{t('users.fullName')}
                     <input className="field-input" value={formFullName} onChange={e => setFormFullName(e.target.value)} required />
                   </label>
-                  <label className="field-label">Role
+                  <label className="field-label">{t('users.role')}
                     <select className="field-input" value={formRole} onChange={e => setFormRole(e.target.value as UserRole)}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                      {ROLES.map(r => <option key={r} value={r}>{t(`roles.${r}`)}</option>)}
                     </select>
                   </label>
-                  <label className="field-label">Store
+                  <label className="field-label">{t('common.store')}
                     <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
-                      <option value="">— None —</option>
+                      <option value="">{t('common.none')}</option>
                       {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </label>
                   <label className="field-label checkbox-label">
                     <input type="checkbox" checked={formActive} onChange={e => setFormActive(e.target.checked)} />
-                    Active
+                    {t('common.active')}
                   </label>
                   <div className="modal-buttons">
-                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
+                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
                   </div>
                 </form>
               </>
@@ -236,15 +247,15 @@ export function UsersPage() {
 
             {modal === 'pin' && target && (
               <>
-                <h3>Reset PIN — {target.username}</h3>
+                <h3>{t('users.resetTitle', { name: target.username })}</h3>
                 {formError && <div className="form-error">{formError}</div>}
                 <form onSubmit={handlePin} className="modal-form">
-                  <label className="field-label">New PIN (4–8 digits)
+                  <label className="field-label">{t('users.newPin')}
                     <input className="field-input" type="password" inputMode="numeric" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={8} />
                   </label>
                   <div className="modal-buttons">
-                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Reset PIN'}</button>
+                    <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
+                    <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('users.resetPin')}</button>
                   </div>
                 </form>
               </>

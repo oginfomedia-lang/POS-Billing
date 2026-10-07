@@ -1,13 +1,18 @@
 // Date and text formatting helpers.
+import { intlLocale } from '../i18n';
 
-const DATE_TIME = new Intl.DateTimeFormat('en-IN', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'Asia/Kolkata',
-});
-
+/** Date + time in the current UI language (Marathi month names, 0–9 digits). */
 export function formatDateTime(iso: string): string {
-  return DATE_TIME.format(new Date(iso));
+  return new Intl.DateTimeFormat(intlLocale(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Kolkata',
+  }).format(new Date(iso));
+}
+
+/** Date only, in the current UI language. */
+export function formatDate(iso: string): string {
+  return new Intl.DateTimeFormat(intlLocale(), { dateStyle: 'medium', timeZone: 'Asia/Kolkata' }).format(new Date(iso));
 }
 
 const ISO_DATE_IST = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' });

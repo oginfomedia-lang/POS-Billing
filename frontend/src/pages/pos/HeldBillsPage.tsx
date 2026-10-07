@@ -1,5 +1,6 @@
 // List and resume held bills.
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { listHeld } from '../../services/api/billingApi';
@@ -10,6 +11,7 @@ import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 
 export function HeldBillsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { resume, busy } = useBillStore();
 
@@ -39,27 +41,27 @@ export function HeldBillsPage() {
   return (
     <div className="admin-page">
       <div className="admin-header">
-        <h2>Held Bills</h2>
+        <h2>{t('held.title')}</h2>
         <div className="admin-actions">
           <button className="btn-secondary" onClick={() => navigate('/pos/billing')}>
-            ← Back to Billing (Esc)
+            {t('held.back')}
           </button>
         </div>
       </div>
 
       {error && <div className="page-error">{error}</div>}
-      {loading && <div className="loading-text">Loading…</div>}
+      {loading && <div className="loading-text">{t('common.loading')}</div>}
 
       <div className="table-card">
         <table className="data-table">
           <thead>
             <tr>
-              <th>Bill #</th><th>Started</th><th>Items</th><th>Total</th><th>Note</th><th />
+              <th>{t('held.colBill')}</th><th>{t('held.colStarted')}</th><th>{t('held.colItems')}</th><th>{t('held.colTotal')}</th><th>{t('held.colNote')}</th><th />
             </tr>
           </thead>
           <tbody>
             {!loading && sales.length === 0 && (
-              <tr><td colSpan={6} className="empty-row">No held bills in this shift.</td></tr>
+              <tr><td colSpan={6} className="empty-row">{t('held.empty')}</td></tr>
             )}
             {sales.map((s) => (
               <tr key={s.id}>
@@ -70,7 +72,7 @@ export function HeldBillsPage() {
                 <td>{s.note ?? '—'}</td>
                 <td>
                   <button className="btn-primary btn-compact" disabled={busy} onClick={() => handleResume(s.id)}>
-                    Resume
+                    {t('held.resume')}
                   </button>
                 </td>
               </tr>

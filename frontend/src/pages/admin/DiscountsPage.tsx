@@ -1,6 +1,9 @@
 // Create and update automatic offers: % / ₹ off, buy-X-get-Y and quantity price, for a bill, product or category.
+import type { TFunction } from 'i18next';
 import { type FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { listCategories, listProducts } from '../../services/api/productApi';
 import { listStores } from '../../services/api/storeApi';
@@ -10,6 +13,7 @@ import type { CategoryOut, ProductOut } from '../../types/product';
 import type { DiscountIn, DiscountOut, DiscountScope, DiscountType } from '../../types/report';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
+import { useCanSwitchStore, useStoreContext } from '../../store/storeContext';
 
 interface DiscountForm {
   name: string;
@@ -52,9 +56,6 @@ const EMPTY: DiscountForm = {
 const ITEM_ONLY_TYPES: DiscountType[] = ['buy_x_get_y', 'qty_price'];
 
 type OfferStatus = 'running' | 'scheduled' | 'expired' | 'paused';
-const STATUS_LABEL: Record<OfferStatus, string> = {
-  running: 'Running', scheduled: 'Scheduled', expired: 'Expired', paused: 'Paused',
-};
 
 /** Same rules the server uses when picking offers (discount_repository.active_for_store). */
 function offerStatus(d: DiscountOut, now = Date.now()): OfferStatus {
@@ -65,16 +66,18 @@ function offerStatus(d: DiscountOut, now = Date.now()): OfferStatus {
 }
 
 /** Short human description of what the offer gives, for the table. */
-function offerValueLabel(d: DiscountOut): string {
+function offerValueLabel(d: DiscountOut, t: TFunction): string {
   switch (d.discount_type) {
     case 'percentage':
-      return `${Number(d.value)}% off${d.max_discount_amount ? ` (max ${formatRupees(d.max_discount_amount)})` : ''}`;
+      return d.max_discount_amount
+        ? t('discounts.valuePctMax', { value: Number(d.value), max: formatRupees(d.max_discount_amount) })
+        : t('discounts.valuePct', { value: Number(d.value) });
     case 'fixed':
-      return d.scope === 'bill' ? `${formatRupees(d.value)} off` : `${formatRupees(d.value)} off each`;
+      return t(d.scope === 'bill' ? 'discounts.valueFixed' : 'discounts.valueFixedEach', { amount: formatRupees(d.value) });
     case 'buy_x_get_y':
-      return `Buy ${d.buy_qty} get ${d.get_qty} free`;
+      return t('discounts.valueBxgy', { buy: d.buy_qty, get: d.get_qty });
     case 'qty_price':
-      return `${d.buy_qty} for ${formatRupees(d.value)}`;
+      return t('discounts.valueQtyPrice', { qty: d.buy_qty, amount: formatRupees(d.value) });
   }
 }
 
@@ -130,6 +133,7 @@ function toDiscount(form: DiscountForm): DiscountIn {
 }
 
 export function DiscountsPage() {
+  const { t } = useTranslation();
   const [discounts, setDiscounts] = useState<DiscountOut[]>([]);
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
@@ -141,14 +145,21 @@ export function DiscountsPage() {
   const [saving, setSaving] = useState(false);
   const [productSearch, setProductSearch] = useState('');
   const [productResults, setProductResults] = useState<ProductOut[]>([]);
+  // Running/scheduled offers on one tab; paused and expired ones on the other.
+  const [view, setView] = useState<StatusView>('active');
+
+  // Branch picked in the sidebar: its own offers plus the all-branch ones. Head office only can make all-branch offers.
+  const branchId = useStoreContext((s) => s.selectedId);
+  const isHeadOffice = useCanSwitchStore();
 
   async function reloadDiscounts() {
-    setDiscounts(await listDiscounts());
+    setDiscounts(await listDiscounts(branchId));
   }
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([listDiscounts(), listCategories(), listStores()])
+    setLoading(true);
+    Promise.all([listDiscounts(branchId), listCategories(), listStores()])
       .then(([ds, cs, ss]) => {
         if (!cancelled) {
           setDiscounts(ds);
@@ -159,7 +170,7 @@ export function DiscountsPage() {
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [branchId]);
 
   // Search products as you type (debounced), instead of loading only the first 100.
   useEffect(() => {
@@ -175,7 +186,7 @@ export function DiscountsPage() {
 
   function openCreate() {
     setEditingId(null);
-    setForm(EMPTY);
+    setForm({ ...EMPTY, store_id: branchId === null ? '' : String(branchId) });
     setProductSearch('');
     setError('');
     setModal(true);
@@ -211,7 +222,7 @@ export function DiscountsPage() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (form.scope === 'product' && !form.product_id) {
-      setError('Search for and choose a product.');
+      setError(t('discounts.chooseProduct'));
       return;
     }
     setSaving(true);
@@ -227,93 +238,110 @@ export function DiscountsPage() {
     }
   }
 
+  const isLive = (d: DiscountOut) => ['running', 'scheduled'].includes(offerStatus(d));
+  const visibleDiscounts = discounts.filter((d) => isLive(d) === (view === 'active'));
+  const offerCounts = { active: discounts.filter(isLive).length, inactive: discounts.filter((d) => !isLive(d)).length };
+
   function targetLabel(discount: DiscountOut): string {
-    if (discount.scope === 'product') return discount.product_name ?? `Product #${discount.product_id}`;
-    if (discount.scope === 'category') return discount.category_name ?? `Category #${discount.category_id}`;
-    return discount.min_bill_amount ? `Bills ≥ ${formatRupees(discount.min_bill_amount)} (incl. GST)` : 'Any bill';
+    if (discount.scope === 'product') return discount.product_name ?? t('discounts.productN', { id: discount.product_id });
+    if (discount.scope === 'category') return discount.category_name ?? t('discounts.categoryN', { id: discount.category_id });
+    return discount.min_bill_amount
+      ? t('discounts.billsMin', { amount: formatRupees(discount.min_bill_amount) })
+      : t('discounts.anyBill');
   }
 
   return (
     <div className="admin-page discounts-page">
       <AdminNav />
       <div className="admin-header">
-        <h2>Discounts</h2>
-        <button className="btn-primary" onClick={openCreate}>+ Add Discount</button>
+        <h2>{t('discounts.title')}</h2>
+        <button className="btn-primary" onClick={openCreate}>{t('discounts.add')}</button>
       </div>
       {error && !modal && <div className="page-error">{error}</div>}
-      {loading && <div className="loading-text">Loading discounts…</div>}
+      <StatusTabs value={view} onChange={setView} counts={offerCounts} inactiveLabel={t('discounts.pausedExpired')} />
+      {loading && <div className="loading-text">{t('discounts.loading')}</div>}
       <div className="table-card">
         <table className="data-table">
           <thead>
-            <tr><th>Name</th><th>Applies to</th><th>Target / minimum</th><th>Store</th><th>Discount</th><th>Schedule</th><th>Status</th><th /></tr>
+            <tr><th>{t('common.name')}</th><th>{t('discounts.colAppliesTo')}</th><th>{t('discounts.colTarget')}</th><th>{t('common.store')}</th><th>{t('discounts.colDiscount')}</th><th>{t('discounts.colSchedule')}</th><th>{t('discounts.colStatus')}</th><th /></tr>
           </thead>
           <tbody>
-            {!loading && discounts.length === 0 && (
-              <tr><td colSpan={8} className="empty-row">No discounts configured.</td></tr>
+            {!loading && visibleDiscounts.length === 0 && (
+              <tr>
+                <td colSpan={8} className="empty-row">
+                  {view === 'active' ? t('discounts.emptyActive') : t('discounts.emptyInactive')}
+                </td>
+              </tr>
             )}
-            {discounts.map((d) => {
+            {visibleDiscounts.map((d) => {
               const status = offerStatus(d);
               return (
                 <tr key={d.id}>
                   <td>{d.name}</td>
-                  <td>{d.scope}</td>
+                  <td>{t(`discounts.scopes.${d.scope}`)}</td>
                   <td>{targetLabel(d)}</td>
-                  <td>{stores.find((s) => s.id === d.store_id)?.name ?? 'All stores'}</td>
-                  <td>{offerValueLabel(d)}</td>
+                  <td>{stores.find((s) => s.id === d.store_id)?.name ?? t('common.allStores')}</td>
+                  <td>{offerValueLabel(d, t)}</td>
                   <td className="ts-cell">
-                    {d.starts_at ? formatDateTime(d.starts_at) : 'Now'}
+                    {d.starts_at ? formatDateTime(d.starts_at) : t('discounts.now')}
                     {' – '}
-                    {d.ends_at ? formatDateTime(d.ends_at) : 'No end'}
+                    {d.ends_at ? formatDateTime(d.ends_at) : t('discounts.noEnd')}
                   </td>
-                  <td><span className={`stock-badge offer-status-${status}`}>{STATUS_LABEL[status]}</span></td>
-                  <td><button className="btn-sm" onClick={() => openEdit(d)}>Edit</button></td>
+                  <td><span className={`stock-badge offer-status-${status}`}>{t(`discounts.statuses.${status}`)}</span></td>
+                  <td>
+                    <button
+                      className="btn-sm"
+                      onClick={() => openEdit(d)}
+                      disabled={!isHeadOffice && d.store_id === null}
+                      title={!isHeadOffice && d.store_id === null ? t('discounts.hqOnly') : undefined}
+                    >
+                      {t('common.edit')}
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      <p className="hint-text">
-        Offers apply automatically, but only one offer per bill: whichever saves the customer the most. A bill
-        offer's minimum is checked against the bill total including GST. Manager-approved manual discounts are extra.
-      </p>
+      <p className="hint-text">{t('discounts.hint')}</p>
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(false)}>
           <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
-            <h3>{editingId === null ? 'Add Discount' : 'Edit Discount'}</h3>
+            <h3>{editingId === null ? t('discounts.addTitle') : t('discounts.editTitle')}</h3>
             {error && <div className="form-error">{error}</div>}
             <form onSubmit={submit} className="modal-form">
               <label className="field-label">
-                Name
+                {t('common.name')}
                 <input className="field-input" maxLength={100} value={form.name} onChange={(e) => update('name', e.target.value)} required />
               </label>
 
               <div className="form-row">
                 <label className="field-label">
-                  Applies to
+                  {t('discounts.appliesTo')}
                   <select className="field-input" value={form.scope} onChange={(e) => changeScope(e.target.value as DiscountScope)}>
-                    <option value="bill">Whole bill</option>
-                    <option value="product">Specific product</option>
-                    <option value="category">Category</option>
+                    <option value="bill">{t('discounts.scopes.bill')}</option>
+                    <option value="product">{t('discounts.scopes.product')}</option>
+                    <option value="category">{t('discounts.scopes.category')}</option>
                   </select>
                 </label>
                 <label className="field-label">
-                  Store
+                  {t('common.store')}
                   <select className="field-input" value={form.store_id} onChange={(e) => update('store_id', e.target.value)}>
-                    <option value="">All stores</option>
+                    {isHeadOffice && <option value="">{t('common.allStores')}</option>}
                     {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
                   </select>
                 </label>
               </div>
 
               <label className="field-label">
-                Offer type
+                {t('discounts.offerType')}
                 <select className="field-input" value={form.discount_type} onChange={(e) => update('discount_type', e.target.value as DiscountType)}>
-                  <option value="percentage">Percentage off</option>
-                  <option value="fixed">Fixed amount off</option>
-                  {form.scope !== 'bill' && <option value="buy_x_get_y">Buy X, get Y free (same product)</option>}
-                  {form.scope !== 'bill' && <option value="qty_price">Quantity price (e.g. 3 for ₹99)</option>}
+                  <option value="percentage">{t('discounts.types.percentage')}</option>
+                  <option value="fixed">{t('discounts.types.fixed')}</option>
+                  {form.scope !== 'bill' && <option value="buy_x_get_y">{t('discounts.types.buy_x_get_y')}</option>}
+                  {form.scope !== 'bill' && <option value="qty_price">{t('discounts.types.qty_price')}</option>}
                 </select>
               </label>
 
@@ -321,29 +349,29 @@ export function DiscountsPage() {
                 {form.discount_type === 'percentage' && (
                   <>
                     <label className="field-label">
-                      Percentage (%)
+                      {t('discounts.percentage')}
                       <input className="field-input" type="number" min="0.01" max="100" step="0.01" value={form.value} onChange={(e) => update('value', e.target.value)} required />
                     </label>
                     <label className="field-label">
-                      Maximum discount (₹, optional)
-                      <input className="field-input" type="number" min="0.01" step="0.01" placeholder="No limit" value={form.max_discount_amount} onChange={(e) => update('max_discount_amount', e.target.value)} />
+                      {t('discounts.maxDiscount')}
+                      <input className="field-input" type="number" min="0.01" step="0.01" placeholder={t('discounts.noLimit')} value={form.max_discount_amount} onChange={(e) => update('max_discount_amount', e.target.value)} />
                     </label>
                   </>
                 )}
                 {form.discount_type === 'fixed' && (
                   <label className="field-label">
-                    {form.scope === 'bill' ? 'Amount off the bill (₹)' : 'Amount off each unit (₹)'}
+                    {form.scope === 'bill' ? t('discounts.amountBill') : t('discounts.amountUnit')}
                     <input className="field-input" type="number" min="0.01" step="0.01" value={form.value} onChange={(e) => update('value', e.target.value)} required />
                   </label>
                 )}
                 {form.discount_type === 'buy_x_get_y' && (
                   <>
                     <label className="field-label">
-                      Customer buys (units)
+                      {t('discounts.buys')}
                       <input className="field-input" type="number" min="1" step="1" value={form.buy_qty} onChange={(e) => update('buy_qty', e.target.value)} required />
                     </label>
                     <label className="field-label">
-                      Gets free (units)
+                      {t('discounts.getsFree')}
                       <input className="field-input" type="number" min="1" step="1" value={form.get_qty} onChange={(e) => update('get_qty', e.target.value)} required />
                     </label>
                   </>
@@ -351,11 +379,11 @@ export function DiscountsPage() {
                 {form.discount_type === 'qty_price' && (
                   <>
                     <label className="field-label">
-                      Bundle size (units)
+                      {t('discounts.bundleSize')}
                       <input className="field-input" type="number" min="2" step="1" value={form.buy_qty} onChange={(e) => update('buy_qty', e.target.value)} required />
                     </label>
                     <label className="field-label">
-                      Bundle price incl. GST (₹)
+                      {t('discounts.bundlePrice')}
                       <input className="field-input" type="number" min="0.01" step="0.01" value={form.value} onChange={(e) => update('value', e.target.value)} required />
                     </label>
                   </>
@@ -363,20 +391,21 @@ export function DiscountsPage() {
               </div>
               {form.discount_type === 'buy_x_get_y' && form.buy_qty && form.get_qty && (
                 <p className="hint-text">
-                  Every unit is{' '}
-                  {Math.round((Number(form.get_qty) / (Number(form.buy_qty) + Number(form.get_qty))) * 100)}% off, so{' '}
-                  {Number(form.buy_qty) + Number(form.get_qty)} units cost the same as {form.buy_qty}, and a
-                  smaller quantity gets the same share off.
+                  {t('discounts.bxgyHint', {
+                    pct: Math.round((Number(form.get_qty) / (Number(form.buy_qty) + Number(form.get_qty))) * 100),
+                    total: Number(form.buy_qty) + Number(form.get_qty),
+                    buy: form.buy_qty,
+                  })}
                 </p>
               )}
 
               {form.scope === 'product' && (
                 <label className="field-label">
-                  Product
+                  {t('discounts.product')}
                   <div className="product-picker">
                     <input
                       className="field-input"
-                      placeholder={form.product_name || 'Search name, SKU or scan barcode'}
+                      placeholder={form.product_name || t('discounts.productSearch')}
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
                     />
@@ -392,44 +421,44 @@ export function DiscountsPage() {
                       </ul>
                     )}
                   </div>
-                  {form.product_name && <span className="hint-text">Selected: <strong>{form.product_name}</strong></span>}
+                  {form.product_name && <span className="hint-text">{t('discounts.selected')} <strong>{form.product_name}</strong></span>}
                 </label>
               )}
               {form.scope === 'category' && (
                 <label className="field-label">
-                  Category
+                  {t('discounts.category')}
                   <select className="field-input" value={form.category_id} onChange={(e) => update('category_id', e.target.value)} required>
-                    <option value="">Choose a category</option>
+                    <option value="">{t('discounts.chooseCategory')}</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  <span className="hint-text">Also applies to its sub-categories.</span>
+                  <span className="hint-text">{t('discounts.subcategories')}</span>
                 </label>
               )}
               {form.scope === 'bill' && (
                 <label className="field-label">
-                  Minimum bill total incl. GST (optional)
+                  {t('discounts.minBill')}
                   <input className="field-input" type="number" min="0" step="0.01" value={form.min_bill_amount} onChange={(e) => update('min_bill_amount', e.target.value)} />
                 </label>
               )}
 
               <div className="form-row">
                 <label className="field-label">
-                  Starts at (optional)
+                  {t('discounts.startsAt')}
                   <input className="field-input" type="datetime-local" value={form.starts_at} onChange={(e) => update('starts_at', e.target.value)} />
                 </label>
                 <label className="field-label">
-                  Ends at (optional)
+                  {t('discounts.endsAt')}
                   <input className="field-input" type="datetime-local" value={form.ends_at} onChange={(e) => update('ends_at', e.target.value)} />
                 </label>
               </div>
               <label className="field-label checkbox-label">
                 <input type="checkbox" checked={form.is_active} onChange={(e) => update('is_active', e.target.checked)} />
-                Active
+                {t('common.active')}
               </label>
               <div className="modal-buttons">
-                <button type="button" className="btn-secondary" onClick={() => setModal(false)}>Cancel</button>
+                <button type="button" className="btn-secondary" onClick={() => setModal(false)}>{t('common.cancel')}</button>
                 <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : 'Save discount'}
+                  {saving ? t('common.saving') : t('discounts.saveBtn')}
                 </button>
               </div>
             </form>
