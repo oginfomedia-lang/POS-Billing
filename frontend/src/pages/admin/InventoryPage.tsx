@@ -99,8 +99,12 @@ export function InventoryPage() {
         await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim());
         const received = Number(qty);
         setPrintOffer(
-          Number.isInteger(received) && modal.row.barcode
-            ? { productId: modal.row.product_id, name: modal.row.product_name, qty: received }
+          modal.row.barcode
+            ? {
+                productId: modal.row.product_id,
+                name: `${received} ${modal.row.uom || 'pcs'} × ${modal.row.product_name}`,
+                qty: Math.max(1, Math.round(received)),
+              }
             : null,
         );
       } else if (modal.kind === 'threshold') {
@@ -172,6 +176,37 @@ export function InventoryPage() {
 
       {loading && <div className="loading-text">Loading…</div>}
 
+      <table className="data-table">
+        <thead>
+          <tr><th>Product</th><th>Barcode</th><th className="num">In stock</th><th className="num">Low at</th><th>Status</th><th /></tr>
+        </thead>
+        <tbody>
+          {!loading && visible.length === 0 && (
+            <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
+          )}
+          {visible.map((r) => (
+            <tr key={r.product_id}>
+              <td>{r.product_name}</td>
+              <td>{r.barcode ?? '—'}</td>
+              <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
+              <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
+                {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
+              </td>
+              <td>
+                {Number(r.qty_on_hand) <= 0
+                  ? <span className="stock-badge stock-out">Out of stock</span>
+                  : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
+              </td>
+              <td className="table-actions">
+                <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
+                <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
+                <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
+                <button className="btn-sm" onClick={() => open('history', r)}>History</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className="table-card">
         <table className="data-table">
           <thead>
@@ -217,6 +252,22 @@ export function InventoryPage() {
 
             {modal.kind === 'history' ? (
               <>
+                <table className="data-table">
+                  <thead>
+                    <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Ref / Note</th></tr>
+                  </thead>
+                  <tbody>
+                    {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">No movements yet.</td></tr>}
+                    {ledger.map((t) => (
+                      <tr key={t.id}>
+                        <td className="ts-cell">{formatDateTime(t.created_at)}</td>
+                        <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
+                        <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)} {modal.row.uom || 'pcs'}</td>
+                        <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
                 <div className="table-card">
                   <table className="data-table">
                     <thead>
@@ -243,15 +294,15 @@ export function InventoryPage() {
               <form onSubmit={handleSubmit} className="modal-form">
                 <p className="hint-text">
                   The product shows as "Low" when stock is at or below this level. Leave empty to use the store-wide
-                  default from Settings (currently {qtyText(modal.row.effective_threshold)}).
+                  default from Settings (currently {qtyText(modal.row.effective_threshold)} {modal.row.uom || 'pcs'}).
                 </p>
                 <label className="field-label">
-                  Low-stock level
+                  Low-stock level ({modal.row.uom || 'pcs'})
                   <input
                     className="field-input"
                     type="number"
                     min="0"
-                    step="any"
+                    step={modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001'}
                     value={qty}
                     placeholder="Use default"
                     onChange={(e) => setQty(e.target.value)}
@@ -265,14 +316,14 @@ export function InventoryPage() {
               </form>
             ) : (
               <form onSubmit={handleSubmit} className="modal-form">
-                <p className="hint-text">Currently in stock: <strong>{qtyText(modal.row.qty_on_hand)}</strong></p>
+                <p className="hint-text">Currently in stock: <strong>{qtyText(modal.row.qty_on_hand)} {modal.row.uom || 'pcs'}</strong></p>
                 <label className="field-label">
-                  {modal.kind === 'in' ? 'Quantity received' : 'Counted quantity (new stock level)'}
+                  {modal.kind === 'in' ? `Quantity received (${modal.row.uom || 'pcs'})` : `Counted quantity (${modal.row.uom || 'pcs'})`}
                   <input
                     className="field-input"
                     type="number"
-                    min={modal.kind === 'in' ? '0.001' : '0'}
-                    step="any"
+                    min={modal.kind === 'in' ? (modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001') : '0'}
+                    step={modal.row.uom === 'pcs' || modal.row.uom === 'pack' ? '1' : '0.001'}
                     value={qty}
                     onChange={(e) => setQty(e.target.value)}
                     onFocus={(e) => e.target.select()}

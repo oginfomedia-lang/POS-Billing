@@ -1,4 +1,5 @@
 export type BarcodeType = 'MANUFACTURER' | 'IN_HOUSE' | 'PRICE_EMBEDDED';
+export type UOMType = 'pcs' | 'kg' | 'g' | 'ltr' | 'ml' | 'pack';
 
 export interface CategoryOut {
   id: number;
@@ -23,6 +24,7 @@ export interface ProductOut {
   category_id: number | null;
   price: string;
   tax_rate: string;
+  uom: UOMType;
   is_variable_weight: boolean;
   is_active: boolean;
   store_id: number | null;

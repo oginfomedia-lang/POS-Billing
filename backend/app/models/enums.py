@@ -50,3 +50,13 @@ class BarcodeType(str, enum.Enum):
     IN_HOUSE = "IN_HOUSE"
     PRICE_EMBEDDED = "PRICE_EMBEDDED"
 
+
+class UOMType(str, enum.Enum):
+    PCS = "pcs"
+    KG = "kg"
+    G = "g"
+    LTR = "ltr"
+    ML = "ml"
+    PACK = "pack"
+
+

@@ -2,7 +2,7 @@ import uuid
 
 from app.extensions import db
 from app.models.base import TimestampMixin, _now
-from app.models.enums import BarcodeType
+from app.models.enums import BarcodeType, UOMType
 
 
 # Numbers for in-house barcodes (290 + 9 digits + check digit). A sequence never hands out
@@ -25,9 +25,11 @@ class Product(TimestampMixin, db.Model):
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
+    uom = db.Column(db.Enum(UOMType, values_callable=lambda x: [e.value for e in x]), nullable=False, default=UOMType.PCS)
     is_variable_weight = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
+
 
     category = db.relationship("Category", back_populates="products")
     store = db.relationship("Store")
