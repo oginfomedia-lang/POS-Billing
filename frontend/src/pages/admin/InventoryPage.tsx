@@ -172,37 +172,39 @@ export function InventoryPage() {
 
       {loading && <div className="loading-text">Loading…</div>}
 
-      <table className="data-table">
-        <thead>
-          <tr><th>Product</th><th>Barcode</th><th className="num">In stock</th><th className="num">Low at</th><th>Status</th><th /></tr>
-        </thead>
-        <tbody>
-          {!loading && visible.length === 0 && (
-            <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
-          )}
-          {visible.map((r) => (
-            <tr key={r.product_id}>
-              <td>{r.product_name}</td>
-              <td>{r.barcode ?? '—'}</td>
-              <td className="num">{qtyText(r.qty_on_hand)}</td>
-              <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
-                {qtyText(r.effective_threshold)}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
-              </td>
-              <td>
-                {Number(r.qty_on_hand) <= 0
-                  ? <span className="stock-badge stock-out">Out of stock</span>
-                  : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
-              </td>
-              <td className="table-actions">
-                <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
-                <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
-                <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
-                <button className="btn-sm" onClick={() => open('history', r)}>History</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="table-card">
+        <table className="data-table">
+          <thead>
+            <tr><th>Product</th><th>Barcode</th><th className="num">In stock</th><th className="num">Low at</th><th>Status</th><th /></tr>
+          </thead>
+          <tbody>
+            {!loading && visible.length === 0 && (
+              <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
+            )}
+            {visible.map((r) => (
+              <tr key={r.product_id}>
+                <td>{r.product_name}</td>
+                <td>{r.barcode ?? '—'}</td>
+                <td className="num">{qtyText(r.qty_on_hand)}</td>
+                <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
+                  {qtyText(r.effective_threshold)}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
+                </td>
+                <td>
+                  {Number(r.qty_on_hand) <= 0
+                    ? <span className="stock-badge stock-out">Out of stock</span>
+                    : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
+                </td>
+                <td className="table-actions">
+                  <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
+                  <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
+                  <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
+                  <button className="btn-sm" onClick={() => open('history', r)}>History</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
@@ -215,22 +217,24 @@ export function InventoryPage() {
 
             {modal.kind === 'history' ? (
               <>
-                <table className="data-table">
-                  <thead>
-                    <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Ref / Note</th></tr>
-                  </thead>
-                  <tbody>
-                    {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">No movements yet.</td></tr>}
-                    {ledger.map((t) => (
-                      <tr key={t.id}>
-                        <td className="ts-cell">{formatDateTime(t.created_at)}</td>
-                        <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
-                        <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)}</td>
-                        <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="table-card">
+                  <table className="data-table">
+                    <thead>
+                      <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Ref / Note</th></tr>
+                    </thead>
+                    <tbody>
+                      {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">No movements yet.</td></tr>}
+                      {ledger.map((t) => (
+                        <tr key={t.id}>
+                          <td className="ts-cell">{formatDateTime(t.created_at)}</td>
+                          <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
+                          <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)}</td>
+                          <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 <div className="modal-buttons">
                   <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Close</button>
                 </div>

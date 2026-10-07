@@ -1,5 +1,6 @@
 // Bill lines table.
 import type { SaleItemOut } from '../../types/sale';
+import { IconScan } from '../common/Icons';
 import { CartRow } from './CartRow';
 
 interface Props {
@@ -14,18 +15,24 @@ export function CartTable({ items, disabled, onQtyChange, onRemove }: Props) {
     <table className="data-table cart-table">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Item</th>
-          <th className="num">Price</th>
-          <th className="num">Qty</th>
-          <th className="num">Amount</th>
-          <th />
+          <th style={{ width: '40px' }}>#</th>
+          <th>Item Details</th>
+          <th className="num" style={{ width: '100px' }}>Price</th>
+          <th className="num" style={{ width: '130px' }}>Quantity</th>
+          <th className="num" style={{ width: '110px' }}>Total</th>
+          <th style={{ width: '50px' }} />
         </tr>
       </thead>
       <tbody>
         {items.length === 0 && (
           <tr>
-            <td colSpan={6} className="empty-row">Scan an item to start the bill.</td>
+            <td colSpan={6} className="empty-row cart-empty-state">
+              <div className="empty-cart-icon">
+                <IconScan size={42} />
+              </div>
+              <div className="empty-cart-title">Cart is empty</div>
+              <p className="empty-cart-hint">Scan product barcode or enter item code to start billing</p>
+            </td>
           </tr>
         )}
         {items.map((item, i) => (
@@ -42,3 +49,4 @@ export function CartTable({ items, disabled, onQtyChange, onRemove }: Props) {
     </table>
   );
 }
+

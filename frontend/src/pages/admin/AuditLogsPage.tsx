@@ -73,28 +73,30 @@ export function AuditLogsPage() {
       {error && <div className="page-error">{error}</div>}
       {loading && <div className="loading-text">Loading…</div>}
 
-      <table className="data-table audit-table">
-        <thead>
-          <tr>
-            <th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>IP</th>
-          </tr>
-        </thead>
-        <tbody>
-          {logs.map((l) => (
-            <tr key={l.id}>
-              <td className="ts-cell">{fmt(l.created_at)}</td>
-              <td>{l.username ?? '—'}</td>
-              <td><code>{l.action}</code></td>
-              <td>{l.entity_type}</td>
-              <td>{l.entity_id ?? '—'}</td>
-              <td>{l.ip_address ?? '—'}</td>
+      <div className="table-card">
+        <table className="data-table audit-table">
+          <thead>
+            <tr>
+              <th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>IP</th>
             </tr>
-          ))}
-          {logs.length === 0 && !loading && (
-            <tr><td colSpan={6} className="empty-row">No log entries found.</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {logs.map((l) => (
+              <tr key={l.id}>
+                <td className="ts-cell">{fmt(l.created_at)}</td>
+                <td>{l.username ?? '—'}</td>
+                <td><code>{l.action}</code></td>
+                <td>{l.entity_type}</td>
+                <td>{l.entity_id ?? '—'}</td>
+                <td>{l.ip_address ?? '—'}</td>
+              </tr>
+            ))}
+            {logs.length === 0 && !loading && (
+              <tr><td colSpan={6} className="empty-row">No log entries found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div className="pagination">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>

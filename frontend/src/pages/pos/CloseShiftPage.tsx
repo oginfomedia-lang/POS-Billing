@@ -33,8 +33,8 @@ export function CloseShiftPage() {
             <button className="btn-secondary" onClick={logout}>Logout</button>
           </div>
         </div>
-        <div style={{ maxWidth: 400, margin: '40px auto', textAlign: 'center' }}>
-          <p className="loading-text">Shift has been closed successfully.</p>
+        <div className="shift-panel shift-panel-center">
+          <p className="shift-done-text">Shift has been closed successfully.</p>
           <button className="btn-primary" onClick={() => navigate('/', { replace: true })}>
             Back to Login
           </button>
@@ -53,15 +53,15 @@ export function CloseShiftPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 400, margin: '40px auto' }}>
+      <div className="shift-panel">
         {shift && (
-          <div className="modal-form" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+          <div className="shift-summary">
+            <div className="shift-summary-row">
               <span>Opening Float</span>
               <strong>₹{Number(shift.opening_float).toFixed(2)}</strong>
             </div>
             {shift.expected_cash !== null && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div className="shift-summary-row">
                 <span>Expected Cash</span>
                 <strong>₹{Number(shift.expected_cash).toFixed(2)}</strong>
               </div>

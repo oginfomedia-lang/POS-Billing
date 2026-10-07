@@ -46,7 +46,7 @@ export function OpenShiftPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 400, margin: '40px auto' }}>
+      <div className="shift-panel">
         {error && <div className="page-error">{error}</div>}
         <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">

@@ -1,6 +1,7 @@
 // Confirm holding the current bill.
 import { type FormEvent, useState } from 'react';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { IconPauseCircle, IconX } from '../common/Icons';
 
 interface Props {
   busy: boolean;
@@ -21,24 +22,37 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <h3>Hold Bill</h3>
+        <div className="modal-header">
+          <div className="title-with-icon">
+            <IconPauseCircle size={22} color="#d97706" />
+            <h3 className="modal-title">Hold Current Bill</h3>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose}>
+            <IconX size={18} />
+          </button>
+        </div>
+
         {error && <div className="form-error">{error}</div>}
+
         <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">
-            Note (optional)
+            <span>Customer / Order Reference Note (optional)</span>
             <input
               className="field-input"
               value={note}
               maxLength={255}
-              placeholder="e.g. customer went to get wallet"
+              placeholder="e.g. Customer went to pick up additional items from Aisle 4"
               onChange={(e) => setNote(e.target.value)}
               autoFocus
             />
           </label>
+
           <div className="modal-buttons">
-            <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? 'Holding…' : 'Hold Bill'}
+            <button type="button" className="btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary btn-warning-bg" disabled={busy}>
+              {busy ? 'Holding Bill…' : 'Park & Hold Bill'}
             </button>
           </div>
         </form>
@@ -46,3 +60,4 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
     </div>
   );
 }
+
