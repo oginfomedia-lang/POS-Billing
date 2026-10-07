@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { SaleItemOut } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
-import { IconMinus, IconPlus, IconTrash } from '../common/Icons';
+import { IconMinus, IconPercent, IconPlus, IconTrash } from '../common/Icons';
 
 interface Props {
   item: SaleItemOut;
@@ -10,9 +10,10 @@ interface Props {
   disabled: boolean;
   onQtyChange: (itemId: number, qty: number) => void;
   onRemove: (itemId: number) => void;
+  onManualDiscount: (item: SaleItemOut) => void;
 }
 
-export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props) {
+export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManualDiscount }: Props) {
   const [qty, setQty] = useState(String(item.qty));
 
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
@@ -84,11 +85,26 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
       </td>
       <td className="num line-total-cell">
         <div className="line-total-val">{formatRupees(item.line_total)}</div>
-        {Number(item.discount_amount) > 0 && (
-          <div className="line-discount-badge">− {formatRupees(item.discount_amount)}</div>
+        {Number(item.offer_discount) > 0 && (
+          <div className="line-discount-badge" title={item.offer_name ?? undefined}>
+            {item.offer_name} − {formatRupees(item.offer_discount)}
+          </div>
+        )}
+        {Number(item.manual_discount) > 0 && (
+          <div className="line-discount-badge line-discount-manual" title={item.manual_discount_reason ?? undefined}>
+            Manual − {formatRupees(item.manual_discount)}
+          </div>
         )}
       </td>
       <td className="actions-cell">
+        <button
+          className="btn-line-discount"
+          disabled={disabled}
+          onClick={() => onManualDiscount(item)}
+          title="Manual discount (manager approval)"
+        >
+          <IconPercent size={16} />
+        </button>
         <button
           className="btn-remove-line"
           disabled={disabled}

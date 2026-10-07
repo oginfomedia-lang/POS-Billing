@@ -22,7 +22,11 @@ export interface SaleItemOut {
   tax_rate: string;
   qty: number;
   line_total: string; // unit_price × qty, before discount
-  discount_amount: string;
+  discount_amount: string; // offer + manual + this line's share of the bill offer
+  offer_name: string | null;
+  offer_discount: string; // item offer only
+  manual_discount: string; // counter discount, manager-approved
+  manual_discount_reason: string | null;
   tax_amount: string;
 }
 
@@ -36,6 +40,8 @@ export interface SaleOut {
   status: SaleStatus;
   subtotal: string;
   discount_amount: string;
+  bill_offer_name: string | null;
+  bill_offer_discount: string;
   tax_amount: string;
   total: string;
   note: string | null;
@@ -58,6 +64,8 @@ export interface ReceiptOut {
   items: SaleItemOut[];
   subtotal: string;
   discount_amount: string;
+  bill_offer_name: string | null;
+  bill_offer_discount: string;
   tax_amount: string;
   total: string;
   payments: PaymentOut[];

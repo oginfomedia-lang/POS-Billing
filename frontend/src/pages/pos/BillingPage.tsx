@@ -6,6 +6,7 @@ import { BarcodeInput } from '../../components/pos/BarcodeInput';
 import { BillSummary } from '../../components/pos/BillSummary';
 import { CartTable } from '../../components/pos/CartTable';
 import { HoldBillDialog } from '../../components/pos/HoldBillDialog';
+import { ManualDiscountDialog } from '../../components/pos/ManualDiscountDialog';
 import { PaymentDialog } from '../../components/pos/PaymentDialog';
 import { ShortcutBar } from '../../components/pos/ShortcutBar';
 import {
@@ -21,8 +22,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getProductByBarcode } from '../../services/api/productApi';
+import type { ManualDiscountInput } from '../../services/api/billingApi';
 import { useBillStore } from '../../store/billStore';
-import type { TenderMethod } from '../../types/sale';
+import type { SaleItemOut, TenderMethod } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
 
 type Dialog = 'pay' | 'hold' | null;
@@ -30,13 +32,16 @@ type Dialog = 'pay' | 'hold' | null;
 export function BillingPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { sale, busy, createDraft, addItem, updateItem, removeItem, hold, complete, void: voidBill } =
-    useBillStore();
+  const {
+    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, void: voidBill,
+  } = useBillStore();
 
   const [error, setError] = useState('');
   const [draftFailed, setDraftFailed] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [dialogError, setDialogError] = useState('');
+  // Cart line whose manual-discount dialog is open (null = closed).
+  const [discountItem, setDiscountItem] = useState<SaleItemOut | null>(null);
 
   const hasItems = (sale?.items.length ?? 0) > 0;
 
@@ -103,13 +108,24 @@ export function BillingPage() {
     }
   }
 
+  async function handleManualDiscount(data: ManualDiscountInput) {
+    if (!discountItem) return;
+    setDialogError('');
+    try {
+      await setManualDiscount(discountItem.id, data);
+      setDiscountItem(null);
+    } catch (err) {
+      setDialogError(getErrorMessage(err));
+    }
+  }
+
   const shortcuts = {
     F2: () => openDialog('hold'),
     F3: () => navigate('/pos/held'),
     F12: () => openDialog('pay'),
     Escape: handleVoid,
   };
-  useKeyboardShortcuts(shortcuts, dialog === null);
+  useKeyboardShortcuts(shortcuts, dialog === null && discountItem === null);
 
   return (
     <div className="billing-page">
@@ -118,7 +134,7 @@ export function BillingPage() {
           <IconShoppingCart size={22} color="#4f46e5" />
           <span className="pos-counter-title">POS Counter</span>
         </div>
-        <BarcodeInput onScan={handleScan} active={dialog === null} />
+        <BarcodeInput onScan={handleScan} active={dialog === null && discountItem === null} />
         <div className="billing-meta">
           <div className="cashier-chip">
             <span className="cashier-name">{user?.full_name || user?.username}</span>
@@ -158,6 +174,7 @@ export function BillingPage() {
             disabled={busy}
             onQtyChange={(itemId, qty) => act(() => updateItem(itemId, qty))}
             onRemove={(itemId) => act(() => removeItem(itemId))}
+            onManualDiscount={(item) => { setDialogError(''); setDiscountItem(item); }}
           />
         </section>
         <BillSummary
@@ -207,6 +224,15 @@ export function BillingPage() {
           error={dialogError}
           onConfirm={handleHold}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {discountItem && (
+        <ManualDiscountDialog
+          item={discountItem}
+          busy={busy}
+          error={dialogError}
+          onConfirm={handleManualDiscount}
+          onClose={() => setDiscountItem(null)}
         />
       )}
     </div>

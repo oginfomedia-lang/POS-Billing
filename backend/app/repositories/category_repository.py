@@ -24,3 +24,7 @@ class CategoryRepository(BaseRepository):
 
     def get_by_name(self, name: str) -> Category | None:
         return db.session.scalar(db.select(Category).where(Category.name == name))
+
+    def parent_map(self) -> dict[int, int | None]:
+        """{category_id: parent_id} for every category, in one query (used to find sub-categories)."""
+        return dict(db.session.execute(db.select(Category.id, Category.parent_id)).all())

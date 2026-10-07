@@ -37,6 +37,8 @@ class ShiftStatus(str, enum.Enum):
 class DiscountType(str, enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
+    BUY_X_GET_Y = "buy_x_get_y"  # buy `buy_qty` units, get `get_qty` more of the same product free
+    QTY_PRICE = "qty_price"  # `buy_qty` units for `value` rupees incl. GST (e.g. 3 for ₹99)
 
 
 class DiscountScope(str, enum.Enum):
