@@ -15,6 +15,7 @@ import { formatRupees } from '../../utils/money';
 type Tab = 'stock' | 'expiry';
 type Kind = 'in' | 'adjust' | 'threshold' | 'price' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
+type Tab = 'stock' | 'expiry';
 
 const TXN_LABEL: Record<string, string> = {
   purchase: 'Stock in',
@@ -47,8 +48,10 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [tab, setTab] = useState<Tab>('stock');
   const [expiringRows, setExpiringRows] = useState<ExpiringBatchOut[]>([]);
   const [expiryLoading, setExpiryLoading] = useState(false);
+  const [expiryDate, setExpiryDate] = useState('');
 
   const [modal, setModal] = useState<Modal>(null);
   const [qty, setQty] = useState('');
@@ -396,6 +399,17 @@ export function InventoryPage() {
                     autoFocus
                   />
                 </label>
+                {modal.kind === 'in' && (
+                  <label className="field-label">
+                    Expiry date (optional)
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                    />
+                  </label>
+                )}
                 <label className="field-label">
                   {modal.kind === 'in' ? t('inventory.noteIn') : t('inventory.reasonAdjust')}
                   <input
