@@ -135,6 +135,16 @@ export const en = {
     upiInfo: '📱 Show Dynamic UPI QR Code to customer or verify payment in UPI App.',
     processing: 'Processing Transaction…',
     complete: 'Complete Sale',
+    creatingQr: 'Creating UPI QR…',
+    sendingToCard: 'Sending amount to card machine…',
+    qrAlt: 'UPI QR code',
+    qrHint: 'Ask the customer to scan with any UPI app. The bill closes by itself once paid.',
+    cardHint: 'Amount sent to the card machine. Ask the customer to tap, insert or swipe the card and enter the PIN.',
+    waiting: 'Waiting for payment…',
+    received: 'Payment received. Printing bill…',
+    notCompleted: 'Payment was not completed.',
+    tryAgain: 'Try again',
+
   },
   manualDiscount: {
     subtitle: 'Manager approval needed',
@@ -470,6 +480,10 @@ export const en = {
     codeTitle: "Letters and digits only. Can't be changed later.",
     label: 'Label',
     labelPlaceholder: 'e.g. Counter 2 (near entrance)',
+    colCardMachine: 'Card machine',
+    cardMachine: 'Card machine ID (Razorpay POS)',
+    cardMachinePlaceholder: 'e.g. 1490123456|ezetap_android — leave empty if no card machine',
+
   },
   users: {
     title: 'Users',

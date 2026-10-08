@@ -1,5 +1,4 @@
 // Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself.
-// Enter CASH/CARD/UPI amounts, show change.
 import type { ParseKeys } from 'i18next';
 import React, { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,6 +28,7 @@ interface Props {
 }
 
 export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigitalPaid, onClose }: Props) {
+  const { t } = useTranslation();
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
   useKeyboardShortcuts({ Escape: onClose });
@@ -99,20 +99,11 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
 
               <div className="quick-cash-presets">
                 <span className="presets-label">{t('pay.quickCash')}</span>
-                <button
-                  type="button"
-                  className="preset-chip"
-                  onClick={() => setTendered(total)}
-                >
+                <button type="button" className="preset-chip" onClick={() => setTendered(total)}>
                   {t('pay.exact', { amount: formatRupees(total) })}
                 </button>
                 {QUICK_CASH_PRESETS.map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    className="preset-chip"
-                    onClick={() => handleQuickCash(amt)}
-                  >
+                  <button key={amt} type="button" className="preset-chip" onClick={() => handleQuickCash(amt)}>
                     ₹{amt}
                   </button>
                 ))}
@@ -148,7 +139,7 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
             {method === 'cash' && (
               <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
                 <IconCheck size={18} />
-                <span>{busy ? 'Processing Transaction…' : 'Complete Sale'}</span>
+                <span>{busy ? t('pay.processing') : t('pay.complete')}</span>
               </button>
             )}
           </div>
@@ -157,4 +148,3 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
     </div>
   );
 }
-

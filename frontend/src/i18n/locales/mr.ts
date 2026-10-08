@@ -135,6 +135,16 @@ export const mr: Messages = {
     upiInfo: '📱 ग्राहकाला UPI QR कोड दाखवा किंवा UPI ॲपमध्ये पेमेंट तपासा.',
     processing: 'व्यवहार होत आहे…',
     complete: 'विक्री पूर्ण करा',
+    creatingQr: 'UPI QR तयार होत आहे…',
+    sendingToCard: 'रक्कम कार्ड मशीनला पाठवत आहे…',
+    qrAlt: 'UPI QR कोड',
+    qrHint: 'ग्राहकाला कोणत्याही UPI ॲपने स्कॅन करायला सांगा. पेमेंट झाल्यावर बिल आपोआप पूर्ण होईल.',
+    cardHint: 'रक्कम कार्ड मशीनला पाठवली आहे. ग्राहकाला कार्ड टॅप / इन्सर्ट / स्वाइप करून PIN टाकायला सांगा.',
+    waiting: 'पेमेंटची वाट पाहत आहे…',
+    received: 'पेमेंट मिळाले. बिल प्रिंट होत आहे…',
+    notCompleted: 'पेमेंट पूर्ण झाले नाही.',
+    tryAgain: 'पुन्हा प्रयत्न करा',
+
   },
   manualDiscount: {
     subtitle: 'व्यवस्थापकाची मंजुरी आवश्यक',
@@ -470,6 +480,10 @@ export const mr: Messages = {
     codeTitle: 'फक्त अक्षरे व अंक. नंतर बदलता येणार नाही.',
     label: 'लेबल',
     labelPlaceholder: 'उदा. काउंटर 2 (प्रवेशद्वाराजवळ)',
+    colCardMachine: 'कार्ड मशीन',
+    cardMachine: 'कार्ड मशीन ID (Razorpay POS)',
+    cardMachinePlaceholder: 'उदा. 1490123456|ezetap_android — कार्ड मशीन नसल्यास रिकामे ठेवा',
+
   },
   users: {
     title: 'वापरकर्ते',

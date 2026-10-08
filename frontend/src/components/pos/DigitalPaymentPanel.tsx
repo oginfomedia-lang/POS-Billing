@@ -5,6 +5,7 @@ import { cancelPayment, checkPayment, startPayment } from '../../services/api/bi
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { DigitalMethod, PaymentIntentOut, SaleOut } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
+import { useTranslation } from 'react-i18next';
 
 const POLL_MS = 2000;
 
@@ -17,6 +18,9 @@ interface Props {
 }
 
 export function DigitalPaymentPanel({ saleId, method, total, onPaid }: Props) {
+
+  const { t } = useTranslation();
+
   const [intent, setIntent] = useState<PaymentIntentOut | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0); // bumped by "Try again"
@@ -76,42 +80,39 @@ export function DigitalPaymentPanel({ saleId, method, total, onPaid }: Props) {
   const ended = intent?.status === 'failed' || intent?.status === 'cancelled';
   const startFailed = !intent && !!error;
 
-  return (
+
+    return (
     <div className="digital-payment-section">
       {error && <div className="form-error">{error}</div>}
 
       {!intent && !error && (
-        <p className="digital-wait">{method === 'upi' ? 'Creating UPI QR…' : 'Sending amount to card machine…'}</p>
+        <p className="digital-wait">{method === 'upi' ? t('pay.creatingQr') : t('pay.sendingToCard')}</p>
       )}
 
       {pending && method === 'upi' && intent?.qr_image_url && (
         <div className="digital-pay-box">
-          <img src={intent.qr_image_url} alt="UPI QR code" className="upi-qr-img" />
+          <img src={intent.qr_image_url} alt={t('pay.qrAlt')} className="upi-qr-img" />
           <strong className="digital-pay-amount">{formatRupees(total)}</strong>
-          <span className="digital-wait">
-            Ask the customer to scan with any UPI app. The bill closes by itself once paid.
-          </span>
+          <span className="digital-wait">{t('pay.qrHint')}</span>
         </div>
       )}
 
       {pending && method === 'card' && (
         <div className="digital-pay-box">
           <strong className="digital-pay-amount">{formatRupees(total)}</strong>
-          <span className="digital-wait">
-            Amount sent to the card machine. Ask the customer to tap, insert or swipe the card and enter the PIN.
-          </span>
+          <span className="digital-wait">{t('pay.cardHint')}</span>
         </div>
       )}
 
-      {pending && <p className="digital-wait digital-pulse">Waiting for payment…</p>}
+      {pending && <p className="digital-wait digital-pulse">{t('pay.waiting')}</p>}
 
-      {intent?.status === 'paid' && <p className="digital-ok">Payment received. Printing bill…</p>}
+      {intent?.status === 'paid' && <p className="digital-ok">{t('pay.received')}</p>}
 
       {(ended || startFailed) && (
         <div className="digital-retry">
-          {ended && <p className="form-error">{intent?.failure_reason || 'Payment was not completed.'}</p>}
+          {ended && <p className="form-error">{intent?.failure_reason || t('pay.notCompleted')}</p>}
           <button type="button" className="btn-primary" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
+            {t('pay.tryAgain')}
           </button>
         </div>
       )}
