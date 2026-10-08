@@ -10,6 +10,11 @@ export interface SalesSummary {
   tax: string;
   total: string;
   average_bill: string;
+  /** Credit notes (returns) in the period, and the cash given back for them. */
+  returns: number;
+  refunded: string;
+  /** total − refunded */
+  net_total: string;
 }
 
 export interface MethodRow {
@@ -25,6 +30,15 @@ export interface DailyRow {
 }
 
 export interface GstRow {
+  tax_rate: string;
+  taxable: string;
+  tax: string;
+  cgst: string;
+  sgst: string;
+}
+
+export interface GstHsnRow {
+  hsn_code: string | null; // null = products without an HSN code
   tax_rate: string;
   taxable: string;
   tax: string;
@@ -54,6 +68,7 @@ export interface SalesReportOut {
   by_method: MethodRow[];
   daily: DailyRow[];
   gst: GstRow[];
+  gst_hsn: GstHsnRow[];
   top_products: TopProductRow[];
   offers: OfferRow[];
 }
@@ -68,6 +83,7 @@ export interface ShiftRow {
   opening_float: string;
   bills: number;
   cash_sales: string;
+  cash_refunds: string;
   expected_cash: string | null;
   actual_cash: string | null;
   difference: string | null;
@@ -121,4 +137,6 @@ export interface SettingsData {
   receipt_header: string;
   receipt_footer: string;
   low_stock_threshold: string;
+  /** Bills older than this many days can't be returned. */
+  return_window_days: number;
 }

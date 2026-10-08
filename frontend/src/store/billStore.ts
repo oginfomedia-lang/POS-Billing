@@ -20,6 +20,8 @@ interface BillState {
   complete: (method: TenderMethod, cashTendered?: string, reference?: string) => Promise<SaleOut>;
   /** Card/UPI: Razorpay confirmed and the backend already completed the bill — just clear it. */
   markPaid: () => void;
+  /** Saves the optional customer mobile on the open bill. Throws on failure (e.g. invalid number). */
+  setCustomerMobile: (mobile: string | null) => Promise<void>;
   void: () => Promise<void>;
   reset: () => void;
 }
@@ -78,6 +80,11 @@ export const useBillStore = create<BillState>((set, get) => {
       }),
 
     markPaid: () => set({ sale: null }),
+
+    // Not wrapped in run(): it mustn't flip `busy` and disable the payment screen while a QR is showing.
+    setCustomerMobile: async (mobile) => {
+      set({ sale: await billingApi.setCustomerMobile(currentSale().id, mobile) });
+    },
 
     void: () =>
       run(async () => {

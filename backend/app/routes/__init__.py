@@ -10,6 +10,7 @@ from app.routes.inventory_routes import inventory_bp
 from app.routes.product_routes import product_bp
 from app.routes.receipt_routes import receipt_bp
 from app.routes.report_routes import report_bp
+from app.routes.return_routes import return_bp
 from app.routes.settings_routes import settings_bp
 from app.routes.shift_routes import shift_bp
 from app.routes.store_routes import store_bp
@@ -28,6 +29,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(inventory_bp, url_prefix=prefix)
     app.register_blueprint(billing_bp, url_prefix=prefix)
     app.register_blueprint(receipt_bp, url_prefix=prefix)
+    app.register_blueprint(return_bp, url_prefix=prefix)
     app.register_blueprint(discount_bp, url_prefix=prefix)
     app.register_blueprint(report_bp, url_prefix=prefix)
     app.register_blueprint(settings_bp, url_prefix=prefix)

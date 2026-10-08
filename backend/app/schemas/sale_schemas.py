@@ -18,6 +18,8 @@ class SaleItemOut(BaseModel):
     product_name: str
     unit_price: Decimal
     tax_rate: Decimal
+    mrp: Decimal | None = None  # incl. GST, per unit
+    hsn_code: str | None = None
     qty: int | float
     line_total: Decimal
     discount_amount: Decimal
@@ -26,6 +28,7 @@ class SaleItemOut(BaseModel):
     manual_discount: Decimal = Decimal("0")
     manual_discount_reason: str | None = None
     tax_amount: Decimal
+    saving: Decimal = Decimal("0")  # MRP × qty − paid (or the discount when there is no MRP)
 
     model_config = {"from_attributes": True}
 
@@ -55,7 +58,9 @@ class SaleOut(BaseModel):
     bill_offer_discount: Decimal = Decimal("0")
     tax_amount: Decimal
     total: Decimal
+    total_saving: Decimal = Decimal("0")
     note: str | None
+    customer_mobile: str | None = None
     items: list[SaleItemOut]
     payments: list[PaymentOut]
     created_at: datetime
@@ -94,11 +99,25 @@ class HoldSaleRequest(BaseModel):
     note: str | None = Field(None, max_length=255)
 
 
+class CustomerMobileRequest(BaseModel):
+    mobile: str | None = Field(None, max_length=20)  # null / "" clears it
+
+
 class CompleteSaleRequest(BaseModel):
     method: Literal["cash", "card", "upi"]
     cash_tendered: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
     reference: str | None = Field(None, max_length=100)
     payment_intent_id: int | None = None   # required for card/upi: proof Razorpay confirmed the money
+
+
+class GstSummaryRow(BaseModel):
+    """One line of the rate-wise GST table on a receipt / credit note."""
+
+    tax_rate: Decimal
+    taxable: Decimal
+    cgst: Decimal
+    sgst: Decimal
+    tax: Decimal
 
 
 class ReceiptOut(BaseModel):
@@ -110,6 +129,7 @@ class ReceiptOut(BaseModel):
     store_gstin: str | None
     counter_code: str | None
     cashier_name: str
+    customer_mobile: str | None = None  # masked, e.g. 98XXXXX210
     completed_at: datetime
     items: list[SaleItemOut]
     subtotal: Decimal
@@ -118,6 +138,8 @@ class ReceiptOut(BaseModel):
     bill_offer_discount: Decimal = Decimal("0")
     tax_amount: Decimal
     total: Decimal
+    total_saving: Decimal = Decimal("0")
+    gst_summary: list[GstSummaryRow] = []
     payments: list[PaymentOut]
     receipt_header: str
     receipt_footer: str

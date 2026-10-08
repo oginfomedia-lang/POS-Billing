@@ -5,9 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { adjustStock, getExpiringProducts, getLedger, getStockLevels, setStorePrice, setThreshold, stockIn } from '../../services/api/inventoryApi';
-import { listStores } from '../../services/api/storeApi';
 import { useStoreContext, useStores } from '../../store/storeContext';
-import type { StoreOut } from '../../types/api';
 import type { ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
@@ -40,7 +38,8 @@ export function InventoryPage() {
   const [tab, setTab] = useState<Tab>('stock');
   const stores = useStores().filter((s) => s.is_active);
   const selectStore = useStoreContext((s) => s.select);
-  const [storeId, setStoreId] = useState<number | null>(null);
+  // The branch picked in the sidebar switcher (null = head office, must pick one).
+  const storeId = useStoreContext((s) => s.selectedId);
   const [rows, setRows] = useState<StockLevelOut[]>([]);
   const [filter, setFilter] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
@@ -398,7 +397,7 @@ export function InventoryPage() {
                 </label>
                 {modal.kind === 'in' && (
                   <label className="field-label">
-                    Expiry date (optional)
+                    {t('inventory.expiryOptional')}
                     <input
                       className="field-input"
                       type="date"

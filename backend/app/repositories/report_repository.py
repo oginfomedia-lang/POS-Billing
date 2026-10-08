@@ -1,12 +1,14 @@
 """Aggregate SQL for reports (sales, GST, shifts, low stock).
 
-All sales figures count PAID bills only, by completed_at in [start, end). store_id=None means all stores.
+All sales figures count PAID bills only, by completed_at in [start, end). Returns (credit notes) count
+by the day the cash went out (SaleReturn.created_at). store_id=None means all stores.
 """
 from datetime import datetime
 
 from app.extensions import db
 from app.models.enums import PaymentMethod, SaleStatus, ShiftStatus
 from app.models.payment import Payment
+from app.models.returns import SaleReturn, SaleReturnItem
 from app.models.sale import Sale, SaleItem
 from app.models.shift import CashierShift
 from app.models.store import Counter
@@ -32,6 +34,48 @@ class ReportRepository:
             f.coalesce(f.sum(Sale.total), 0).label("total"),
         ).where(*self._paid(store_id, start, end))
         return db.session.execute(q).one()
+
+    def _returned(self, store_id: int | None, start: datetime, end: datetime) -> list:
+        conds = [SaleReturn.created_at >= start, SaleReturn.created_at < end]
+        if store_id is not None:
+            conds.append(SaleReturn.store_id == store_id)
+        return conds
+
+    def refunds_summary(self, store_id: int | None, start: datetime, end: datetime):
+        """(returns, refunded): number of returns and cash given back (incl. GST)."""
+        f = db.func
+        q = db.select(
+            f.count(SaleReturn.id).label("returns"),
+            f.coalesce(f.sum(SaleReturn.refund_amount), 0).label("refunded"),
+        ).where(*self._returned(store_id, start, end))
+        return db.session.execute(q).one()
+
+    def refunds_gst_by_rate(self, store_id: int | None, start: datetime, end: datetime):
+        q = (
+            db.select(
+                SaleReturnItem.tax_rate,
+                db.func.sum(SaleReturnItem.line_total - SaleReturnItem.discount_amount),
+                db.func.sum(SaleReturnItem.tax_amount),
+            )
+            .join(SaleReturn, SaleReturn.id == SaleReturnItem.return_id)
+            .where(*self._returned(store_id, start, end))
+            .group_by(SaleReturnItem.tax_rate)
+        )
+        return db.session.execute(q).all()
+
+    def refunds_gst_by_hsn(self, store_id: int | None, start: datetime, end: datetime):
+        q = (
+            db.select(
+                SaleReturnItem.hsn_code,
+                SaleReturnItem.tax_rate,
+                db.func.sum(SaleReturnItem.line_total - SaleReturnItem.discount_amount),
+                db.func.sum(SaleReturnItem.tax_amount),
+            )
+            .join(SaleReturn, SaleReturn.id == SaleReturnItem.return_id)
+            .where(*self._returned(store_id, start, end))
+            .group_by(SaleReturnItem.hsn_code, SaleReturnItem.tax_rate)
+        )
+        return db.session.execute(q).all()
 
     def voided_count(self, store_id: int | None, start: datetime, end: datetime) -> int:
         q = db.select(db.func.count(Sale.id)).where(
@@ -76,6 +120,22 @@ class ReportRepository:
             .where(*self._paid(store_id, start, end))
             .group_by(SaleItem.tax_rate)
             .order_by(SaleItem.tax_rate)
+        )
+        return db.session.execute(q).all()
+
+    def gst_by_hsn(self, store_id: int | None, start: datetime, end: datetime):
+        """(hsn_code, tax_rate, taxable, tax) — HSN-wise summary for GST returns. hsn_code None = not set."""
+        q = (
+            db.select(
+                SaleItem.hsn_code,
+                SaleItem.tax_rate,
+                db.func.sum(SaleItem.line_total - SaleItem.discount_amount).label("taxable"),
+                db.func.sum(SaleItem.tax_amount).label("tax"),
+            )
+            .join(Sale, Sale.id == SaleItem.sale_id)
+            .where(*self._paid(store_id, start, end))
+            .group_by(SaleItem.hsn_code, SaleItem.tax_rate)
+            .order_by(SaleItem.hsn_code.nulls_last(), SaleItem.tax_rate)
         )
         return db.session.execute(q).all()
 
@@ -149,6 +209,16 @@ class ReportRepository:
             .group_by(Sale.shift_id)
             .subquery()
         )
+        refunds = (
+            db.select(
+                SaleReturn.shift_id,
+                db.func.sum(SaleReturn.refund_amount)
+                .filter(SaleReturn.refund_method == PaymentMethod.CASH)
+                .label("cash_refunds"),
+            )
+            .group_by(SaleReturn.shift_id)
+            .subquery()
+        )
         q = (
             db.select(
                 CashierShift,
@@ -156,10 +226,12 @@ class ReportRepository:
                 Counter.code,
                 db.func.coalesce(paid.c.bills, 0),
                 db.func.coalesce(paid.c.cash_sales, 0),
+                db.func.coalesce(refunds.c.cash_refunds, 0),
             )
             .join(User, User.id == CashierShift.user_id)
             .outerjoin(Counter, Counter.id == CashierShift.counter_id)
             .outerjoin(paid, paid.c.shift_id == CashierShift.id)
+            .outerjoin(refunds, refunds.c.shift_id == CashierShift.id)
             .where(CashierShift.opened_at >= start, CashierShift.opened_at < end)
             .order_by(CashierShift.opened_at.desc())
         )

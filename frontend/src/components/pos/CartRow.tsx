@@ -17,6 +17,9 @@ interface Props {
 export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManualDiscount }: Props) {
   const { t } = useTranslation();
   const [qty, setQty] = useState(String(item.qty));
+  // Show the MRP only when it is above our price incl. GST (i.e. the customer actually saves).
+  const priceWithGst = Number(item.unit_price) * (1 + Number(item.tax_rate) / 100);
+  const showMrp = item.mrp !== null && Number(item.mrp) > priceWithGst + 0.005;
 
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
   useEffect(() => setQty(String(item.qty)), [item.qty]);
@@ -50,6 +53,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
       <td className="row-index">{index + 1}</td>
       <td className="item-name-cell">
         <span className="product-title">{item.product_name}</span>
+        {showMrp && <span className="mrp-tag">{t('pos.mrp', { mrp: formatRupees(item.mrp!) })}</span>}
       </td>
       <td className="num unit-price-cell">{formatRupees(item.unit_price)}</td>
       <td className="num qty-cell">

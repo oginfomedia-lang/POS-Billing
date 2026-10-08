@@ -16,6 +16,7 @@ from app.schemas.product_schemas import (
     ProductUpdate,
 )
 from app.utils.barcode_utils import generate_inhouse_barcode, parse_variable_weight_barcode
+from app.utils.money import round_money
 from app.utils.transactions import transaction
 
 
@@ -85,10 +86,13 @@ def create_product(data: ProductCreate) -> Product:
         category_id=data.category_id,
         price=data.price,
         tax_rate=data.tax_rate,
+        mrp=data.mrp,
+        hsn_code=data.hsn_code,
         uom=data.uom,
         is_variable_weight=data.is_variable_weight,
         store_id=data.store_id,
     )
+    _check_mrp(product)
 
     with transaction():
         repo.add(product)
@@ -146,6 +150,12 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
         product.price = data.price
     if data.tax_rate is not None:
         product.tax_rate = data.tax_rate
+    # mrp / hsn_code can be cleared, so "sent" (even as null) means "set it".
+    if "mrp" in data.model_fields_set:
+        product.mrp = data.mrp
+    if "hsn_code" in data.model_fields_set:
+        product.hsn_code = data.hsn_code
+    _check_mrp(product)
     if data.uom is not None:
         product.uom = data.uom
 
@@ -385,3 +395,13 @@ def _get_category_or_404(category_id: int) -> Category:
     if c is None:
         raise NotFoundError(f"Category {category_id} not found.")
     return c
+
+
+def _check_mrp(product: Product) -> None:
+    """MRP includes GST, so it can't be below our price + GST (that would be selling above MRP — illegal)."""
+    if product.mrp is None:
+        return
+    with_gst = round_money(Decimal(product.price) * (1 + Decimal(product.tax_rate or 0) / 100))
+    if Decimal(product.mrp) < with_gst:
+        db.session.rollback()  # undo the in-memory edits on an existing product
+        raise BadRequestError(f"MRP (₹{product.mrp}) can't be lower than the selling price with GST (₹{with_gst}).")

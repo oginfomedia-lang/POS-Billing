@@ -5,6 +5,7 @@ from app.schemas.payment_schemas import PaymentIntentOut, StartPaymentRequest
 from app.schemas.sale_schemas import (
     AddItemRequest,
     CompleteSaleRequest,
+    CustomerMobileRequest,
     HoldSaleRequest,
     ManualDiscountRequest,
     SaleOut,
@@ -98,6 +99,14 @@ def complete_sale(sale_id: int):
     data = CompleteSaleRequest.model_validate(request.get_json(force=True))
     actor = auth_service.current_user()
     sale = billing_service.complete(sale_id, data, actor)
+    return jsonify(_sale_json(sale)), 200
+
+
+@billing_bp.put("/sales/<int:sale_id>/customer-mobile")
+@require_permission("sales.create")
+def set_customer_mobile(sale_id: int):
+    data = CustomerMobileRequest.model_validate(request.get_json(force=True))
+    sale = billing_service.set_customer_mobile(sale_id, data.mobile, auth_service.current_user())
     return jsonify(_sale_json(sale)), 200
 
 

@@ -11,6 +11,7 @@ import { ManualDiscountDialog } from '../../components/pos/ManualDiscountDialog'
 import { PaymentDialog } from '../../components/pos/PaymentDialog';
 import { ShortcutBar } from '../../components/pos/ShortcutBar';
 import {
+  IconArrowLeft,
   IconCreditCard,
   IconDashboard,
   IconFileText,
@@ -23,8 +24,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getProductByBarcode } from '../../services/api/productApi';
+import { openDrawer } from '../../services/hardware/printerService';
 import type { ManualDiscountInput } from '../../services/api/billingApi';
 import { useBillStore } from '../../store/billStore';
+import type { ProductOut } from '../../types/product';
 import type { SaleItemOut, SaleOut, TenderMethod } from '../../types/sale';
 import { useShiftStore } from '../../store/shiftStore';
 import { useStores } from '../../store/storeContext';
@@ -41,7 +44,8 @@ export function BillingPage() {
   const shiftStoreId = useShiftStore((s) => s.shift?.store_id) ?? user?.store_id;
   const storeName = useStores().find((s) => s.id === shiftStoreId)?.name ?? t('pos.counterFallback');
   const {
-    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, markPaid, void: voidBill,
+    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, markPaid, setCustomerMobile,
+    void: voidBill,
   } = useBillStore();
 
   const [error, setError] = useState('');
@@ -84,6 +88,11 @@ export function BillingPage() {
     });
   }
 
+  /** Product picked from the name/SKU suggestions: add one (1 kg for weighed items; qty can be changed in the cart). */
+  function handlePick(product: ProductOut) {
+    act(() => addItem(product.id, 1));
+  }
+
   function openDialog(d: Exclude<Dialog, null>) {
     if (!hasItems || busy) return;
     setDialogError('');
@@ -109,6 +118,7 @@ export function BillingPage() {
     setDialogError('');
     try {
       const paid = await complete(method, cashTendered, reference);
+      if (method === 'cash') openDrawer(); // don't wait: a drawer problem must not hold up the bill
       setDialog(null);
       navigate(`/pos/reprint/${paid.id}?print=1`);
     } catch (err) {
@@ -137,6 +147,7 @@ export function BillingPage() {
   const shortcuts = {
     F2: () => openDialog('hold'),
     F3: () => navigate('/pos/held'),
+    F4: () => navigate('/pos/returns'),
     F12: () => openDialog('pay'),
     Escape: handleVoid,
   };
@@ -149,7 +160,12 @@ export function BillingPage() {
           <IconShoppingCart size={22} color="#4f46e5" />
           <span className="pos-counter-title" title={storeName}>{storeName}</span>
         </div>
-        <BarcodeInput onScan={handleScan} active={dialog === null && discountItem === null} />
+        <BarcodeInput
+          onScan={handleScan}
+          onPick={handlePick}
+          active={dialog === null && discountItem === null}
+          storeId={shiftStoreId}
+        />
         <div className="billing-meta">
           <div className="cashier-chip">
             <span className="cashier-name">{user?.full_name || user?.username}</span>
@@ -203,6 +219,7 @@ export function BillingPage() {
         shortcuts={[
           { key: 'F2', label: t('pos.holdBill'), icon: IconPauseCircle, variant: 'warning', onClick: shortcuts.F2, disabled: !hasItems },
           { key: 'F3', label: t('pos.heldBills'), icon: IconFileText, variant: 'default', onClick: shortcuts.F3 },
+          { key: 'F4', label: t('pos.returns'), icon: IconArrowLeft, variant: 'default', onClick: shortcuts.F4 },
           { key: 'F12', label: t('pos.payNow'), icon: IconCreditCard, variant: 'primary', onClick: shortcuts.F12, disabled: !hasItems },
           { key: 'Esc', label: t('pos.voidBill'), icon: IconTrash, variant: 'danger', onClick: shortcuts.Escape, disabled: !hasItems },
         ]}
@@ -228,6 +245,8 @@ export function BillingPage() {
         <PaymentDialog
           saleId={sale.id}
           total={sale.total}
+          customerMobile={sale.customer_mobile}
+          onSaveMobile={setCustomerMobile}
           busy={busy}
           error={dialogError}
           onConfirm={handlePay}

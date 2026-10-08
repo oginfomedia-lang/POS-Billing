@@ -1,4 +1,4 @@
-"""Pure functions: line totals, GST (inclusive/exclusive), CGST/SGST split, discounts, round-off.
+"""Pure functions: line totals, GST, CGST/SGST split, discounts, MRP savings.
 
 Prices are tax-exclusive. Discounts reduce the taxable value, so GST is charged on
 (line_total - discount).
@@ -73,6 +73,41 @@ def allocate(amount, weights: list[Decimal]) -> list[Decimal]:
     biggest = max(range(len(weights)), key=lambda i: weights[i])
     shares[biggest] += amount - sum(shares, ZERO)
     return shares
+
+
+def split_gst(tax) -> tuple[Decimal, Decimal]:
+    """Intra-state GST is half CGST, half SGST. An odd paisa goes to SGST so the two always add up."""
+    tax = round_money(tax)
+    cgst = round_money(tax / 2)
+    return cgst, tax - cgst
+
+
+def line_saving(mrp, qty, line_total, discount, tax) -> Decimal:
+    """What the customer saved on one line: MRP × qty − what they paid (incl. GST).
+
+    MRP includes GST but our prices don't, so we compare against the amount actually paid.
+    Without an MRP, the saving is just the discount on the line.
+    """
+    if mrp is None:
+        return round_money(discount)
+    paid = to_decimal(line_total) - to_decimal(discount) + to_decimal(tax)
+    return max(round_money(to_decimal(mrp) * to_decimal(qty) - paid), ZERO)
+
+
+def gst_summary(lines) -> list[dict]:
+    """Rate-wise GST table for a receipt/credit note. `lines` need tax_rate, line_total, discount_amount, tax_amount."""
+    by_rate: dict[Decimal, list[Decimal]] = {}
+    for ln in lines:
+        rate = to_decimal(ln.tax_rate)
+        taxable_tax = by_rate.setdefault(rate, [ZERO, ZERO])
+        taxable_tax[0] += to_decimal(ln.line_total) - to_decimal(ln.discount_amount)
+        taxable_tax[1] += to_decimal(ln.tax_amount)
+    rows = []
+    for rate in sorted(by_rate):
+        taxable, tax = by_rate[rate]
+        cgst, sgst = split_gst(tax)
+        rows.append({"tax_rate": rate, "taxable": round_money(taxable), "cgst": cgst, "sgst": sgst, "tax": round_money(tax)})
+    return rows
 
 
 def bill_totals(lines: list[tuple[Decimal, Decimal, Decimal]]) -> dict[str, Decimal]:

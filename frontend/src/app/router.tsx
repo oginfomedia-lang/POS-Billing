@@ -20,6 +20,8 @@ import { HeldBillsPage } from '../pages/pos/HeldBillsPage';
 import { OpenShiftPage } from '../pages/pos/OpenShiftPage';
 import { PosPage } from '../pages/pos/PosPage';
 import { ReprintPage } from '../pages/pos/ReprintPage';
+import { ReturnReceiptPage } from '../pages/pos/ReturnReceiptPage';
+import { ReturnsPage } from '../pages/pos/ReturnsPage';
 import { ProtectedRoute } from './ProtectedRoute';
 
 export const router = createHashRouter([
@@ -38,6 +40,8 @@ export const router = createHashRouter([
           { path: '/pos/shift/close', element: <CloseShiftPage /> },
           { path: '/pos/held', element: <HeldBillsPage /> },
           { path: '/pos/reprint/:saleId', element: <ReprintPage /> },
+          { path: '/pos/returns', element: <ReturnsPage /> },
+          { path: '/pos/return-receipt/:returnId', element: <ReturnReceiptPage /> },
         ],
       },
 

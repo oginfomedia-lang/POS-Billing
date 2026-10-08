@@ -23,13 +23,14 @@ class Product(TimestampMixin, db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
-    price = db.Column(db.Numeric(12, 2), nullable=False)
+    price = db.Column(db.Numeric(12, 2), nullable=False)  # selling price, before GST
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
+    mrp = db.Column(db.Numeric(12, 2), nullable=True)  # printed MRP, incl. GST (per unit, or per kg if weighed)
+    hsn_code = db.Column(db.String(8), nullable=True)  # GST HSN code, 4-8 digits
     uom = db.Column(db.Enum(UOMType, values_callable=lambda x: [e.value for e in x]), nullable=False, default=UOMType.PCS)
     is_variable_weight = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
-
 
     category = db.relationship("Category", back_populates="products")
     store = db.relationship("Store")

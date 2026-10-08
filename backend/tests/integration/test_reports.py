@@ -79,7 +79,9 @@ def test_dashboard(client, admin_headers, cashier_headers, shift, store):
 
 def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_headers, shift, store):
     s = client.get("/api/v1/settings", headers=admin_headers).get_json()
-    assert s == {"receipt_header": "", "receipt_footer": "Thank you! Visit again.", "low_stock_threshold": "5"}
+    assert s == {
+        "receipt_header": "", "receipt_footer": "Thank you! Visit again.", "low_stock_threshold": "5", "return_window_days": 30,
+    }
 
     resp = client.put("/api/v1/settings", json={**s, "receipt_footer": "No returns after 7 days", "low_stock_threshold": "2"}, headers=admin_headers)
     assert resp.status_code == 200 and resp.get_json()["low_stock_threshold"] == "2"

@@ -86,3 +86,44 @@ def test_qty_price_bundle_is_gst_inclusive():
     assert qty_price_discount(D("40.00"), D("2"), D("0"), 3, D("99"), D("80.00")) == D("0.00")
     # 18% GST: bundle 118 incl. GST = 100 ex-GST; 3 x 40 = 120 -> saves 20
     assert qty_price_discount(D("40.00"), D("3"), D("18"), 3, D("118"), D("120.00")) == D("20.00")
+
+
+# ── MRP savings and GST summary ──────────────────────────────────────────────
+
+from types import SimpleNamespace  # noqa: E402
+
+from app.services.pricing_service import gst_summary, line_saving, split_gst  # noqa: E402
+
+
+def test_split_gst_always_adds_up():
+    assert split_gst(D("5.00")) == (D("2.50"), D("2.50"))
+    cgst, sgst = split_gst(D("0.05"))
+    assert cgst + sgst == D("0.05")
+
+
+def test_line_saving_against_mrp():
+    # MRP 60 incl. GST; we sell at 50 + 5% GST = 52.50 -> saved 7.50
+    assert line_saving(D("60"), 1, D("50.00"), D("0"), D("2.50")) == D("7.50")
+    # With an offer of 10 off (GST on 40 = 2.00): paid 42.00 -> saved 18.00
+    assert line_saving(D("60"), 1, D("50.00"), D("10.00"), D("2.00")) == D("18.00")
+
+
+def test_line_saving_weighed_item_and_no_mrp():
+    # MRP ₹100/kg, 0.5 kg sold at ₹80/kg (40.00) + 5% (2.00) -> MRP 50 - 42 = 8
+    assert line_saving(D("100"), D("0.5"), D("40.00"), D("0"), D("2.00")) == D("8.00")
+    # No MRP: the saving is just the discount
+    assert line_saving(None, 2, D("100.00"), D("15.00"), D("4.25")) == D("15.00")
+    # Never negative (price above MRP)
+    assert line_saving(D("10"), 1, D("50.00"), D("0"), D("0")) == D("0")
+
+
+def test_gst_summary_groups_by_rate():
+    lines = [
+        SimpleNamespace(tax_rate=D("5"), line_total=D("100"), discount_amount=D("10"), tax_amount=D("4.50")),
+        SimpleNamespace(tax_rate=D("18"), line_total=D("50"), discount_amount=D("0"), tax_amount=D("9.00")),
+        SimpleNamespace(tax_rate=D("5"), line_total=D("20"), discount_amount=D("0"), tax_amount=D("1.00")),
+    ]
+    rows = gst_summary(lines)
+    assert [r["tax_rate"] for r in rows] == [D("5"), D("18")]
+    assert rows[0] == {"tax_rate": D("5"), "taxable": D("110.00"), "cgst": D("2.75"), "sgst": D("2.75"), "tax": D("5.50")}
+    assert rows[1]["cgst"] + rows[1]["sgst"] == D("9.00")

@@ -4,8 +4,9 @@ from __future__ import annotations
 from app.errors.exceptions import ConflictError
 from app.models.enums import SaleStatus
 from app.schemas.payment_schemas import PaymentOut
-from app.schemas.sale_schemas import ReceiptOut, SaleItemOut
-from app.services import settings_service
+from app.schemas.sale_schemas import GstSummaryRow, ReceiptOut, SaleItemOut
+from app.services import pricing_service, settings_service
+from app.utils.phone import mask_mobile
 from app.services.billing_service import get_sale
 
 
@@ -24,6 +25,7 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         store_gstin=sale.store.gstin,
         counter_code=sale.counter.code if sale.counter else None,
         cashier_name=sale.cashier.full_name,
+        customer_mobile=mask_mobile(sale.customer_mobile),
         completed_at=sale.completed_at,
         items=[SaleItemOut.model_validate(i) for i in sale.items],
         subtotal=sale.subtotal,
@@ -32,6 +34,8 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         bill_offer_discount=sale.bill_offer_discount,
         tax_amount=sale.tax_amount,
         total=sale.total,
+        total_saving=sale.total_saving,
+        gst_summary=[GstSummaryRow(**row) for row in pricing_service.gst_summary(sale.items)],
         payments=[PaymentOut.model_validate(p) for p in sale.payments],
         receipt_header=settings.receipt_header,
         receipt_footer=settings.receipt_footer,

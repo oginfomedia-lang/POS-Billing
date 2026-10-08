@@ -32,6 +32,7 @@ from app.services import (
 from app.services.shift_service import require_active_shift
 from app.utils.dates import now_ist
 from app.utils.money import money_mul, round_money
+from app.utils.phone import normalize_mobile
 from app.utils.security import verify_pin
 from app.utils.transactions import transaction
 
@@ -69,6 +70,8 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
                 product_name=product.name,
                 unit_price=inventory_service.selling_price(sale.store_id, product),
                 tax_rate=product.tax_rate,
+                mrp=product.mrp,
+                hsn_code=product.hsn_code,
                 qty=data.qty,
             )
             sale.items.append(item)
@@ -134,14 +137,24 @@ def set_manual_discount(sale_id: int, item_id: int, data: ManualDiscountRequest,
     return sale
 
 
-def _verify_approver(username: str, pin: str) -> User:
-    """Manual discounts need a manager or admin to approve with their own PIN."""
+def _verify_approver(username: str, pin: str, what: str = "a discount") -> User:
+    """Manual discounts and returns need a manager or admin to approve with their own PIN."""
     user = UserRepository().get_by_username(username.strip())
     if user is None or not user.is_active or not verify_pin(pin, user.pin_hash):
         raise PermissionDeniedError("Approval failed: wrong manager username or PIN.")
     if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
-        raise PermissionDeniedError("Only a manager or admin can approve a discount.")
+        raise PermissionDeniedError(f"Only a manager or admin can approve {what}.")
     return user
+
+
+def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
+    """Optional customer mobile on an OPEN bill. The amount doesn't change, so a live QR / card payment is kept."""
+    number = normalize_mobile(mobile)
+    with transaction():
+        sale = _lock_owned_sale(sale_id, actor)
+        _require_status(sale, SaleStatus.OPEN)
+        sale.customer_mobile = number
+    return sale
 
 
 def hold(sale_id: int, data: HoldSaleRequest, actor: User) -> Sale:

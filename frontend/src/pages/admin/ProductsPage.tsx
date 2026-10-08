@@ -49,6 +49,8 @@ export function ProductsPage() {
   const [formName, setFormName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formTax, setFormTax] = useState('0');
+  const [formMrp, setFormMrp] = useState('');
+  const [formHsn, setFormHsn] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formUom, setFormUom] = useState<UOMType>('pcs');
   const [formVariableWeight, setFormVariableWeight] = useState(false);
@@ -129,6 +131,12 @@ export function ProductsPage() {
     if (store) setStockStoreId(String(store.id));
   }
 
+  // Selling price + GST, to compare with the MRP the user types (MRP includes GST).
+  const priceNum = parseFloat(formPrice);
+  const priceWithGst = Number.isFinite(priceNum) ? priceNum * (1 + (parseFloat(formTax) || 0) / 100) : null;
+  const mrpNum = parseFloat(formMrp);
+  const mrpTooLow = priceWithGst !== null && Number.isFinite(mrpNum) && mrpNum + 0.005 < priceWithGst;
+
   function openCreate() {
     defaultStockStore();
     setModal('create');
@@ -137,6 +145,8 @@ export function ProductsPage() {
     setFormName('');
     setFormPrice('');
     setFormTax('0');
+    setFormMrp('');
+    setFormHsn('');
     setFormCategory('');
     setFormUom('pcs');
     setFormVariableWeight(false);
@@ -156,6 +166,8 @@ export function ProductsPage() {
     setFormName(p.name);
     setFormPrice(String(p.price));
     setFormTax(String(p.tax_rate));
+    setFormMrp(p.mrp ?? '');
+    setFormHsn(p.hsn_code ?? '');
     setFormCategory(p.category_id ? String(p.category_id) : '');
     setFormUom(p.uom || 'pcs');
     setFormVariableWeight(p.is_variable_weight || false);
@@ -243,6 +255,8 @@ export function ProductsPage() {
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
+        mrp: formMrp.trim() ? parseFloat(formMrp) : null,
+        hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
         uom: formUom,
         is_variable_weight: formVariableWeight,
@@ -274,6 +288,8 @@ export function ProductsPage() {
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
+        mrp: formMrp.trim() ? parseFloat(formMrp) : null,
+        hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
         uom: formUom,
         is_variable_weight: formVariableWeight,
@@ -341,6 +357,7 @@ export function ProductsPage() {
               <th>{t('products.colSku')}</th>
               <th>{t('products.colName')}</th>
               <th>{t('products.colPrice')}</th>
+              <th>{t('products.colMrp')}</th>
               <th>{t('products.colUom')}</th>
               <th>{t('products.colTax')}</th>
               <th>{t('products.colCategory')}</th>
@@ -352,7 +369,7 @@ export function ProductsPage() {
           <tbody>
             {!loading && products.length === 0 && (
               <tr>
-                <td colSpan={9} className="empty-row">
+                <td colSpan={10} className="empty-row">
                   {view === 'active' ? t('products.emptyActive') : t('products.emptyInactive')}
                 </td>
               </tr>
@@ -367,6 +384,7 @@ export function ProductsPage() {
                     {formatRupees(p.store_price ?? p.price)}
                     {p.store_price && <span className="status-muted price-hq">{t('products.hqPrice', { price: formatRupees(p.price) })}</span>}
                   </td>
+                  <td>{p.mrp ? formatRupees(p.mrp) : '—'}</td>
                   <td><code>{p.uom || 'pcs'}</code></td>
                   <td>{Number(p.tax_rate).toFixed(1)}%</td>
                   <td>{cat?.name ?? '—'}</td>
@@ -504,6 +522,41 @@ export function ProductsPage() {
                       </option>
                     ))}
                   </select>
+                </label>
+              </div>
+
+              <div className="form-row">
+                <label className="field-label">
+                  {t('products.mrp')}
+                  <input
+                    className="field-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formMrp}
+                    onChange={(e) => setFormMrp(e.target.value)}
+                    placeholder={t('products.mrpPlaceholder')}
+                  />
+                  {priceWithGst !== null && (
+                    <span className={`hint-text${mrpTooLow ? ' text-danger' : ''}`}>
+                      {mrpTooLow
+                        ? t('products.mrpTooLow', { price: formatRupees(priceWithGst.toFixed(2)) })
+                        : t('products.priceWithGst', { price: formatRupees(priceWithGst.toFixed(2)) })}
+                    </span>
+                  )}
+                </label>
+                <label className="field-label">
+                  {t('products.hsn')}
+                  <input
+                    className="field-input"
+                    inputMode="numeric"
+                    pattern="[0-9]{4,8}"
+                    maxLength={8}
+                    value={formHsn}
+                    onChange={(e) => setFormHsn(e.target.value.replace(/\D/g, ''))}
+                    placeholder={t('products.hsnPlaceholder')}
+                    title={t('products.hsnTitle')}
+                  />
                 </label>
               </div>
 
