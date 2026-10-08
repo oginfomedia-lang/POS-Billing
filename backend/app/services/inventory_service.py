@@ -17,7 +17,7 @@ from app.schemas.inventory_schemas import (
     ExpiringBatchOut,
     StockInRequest,
     StockLevelOut,
-    StorePriceRequest
+    StorePriceRequest,
     ThresholdRequest,
 )
 from app.services import audit_service, settings_service
