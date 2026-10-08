@@ -1,44 +1,62 @@
-// Stock-in, adjustments, ledger, low stock.
+// Stock-in, adjustments, ledger, low stock, and expiry alerts.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { adjustStock, getLedger, getStockLevels, setStorePrice, setThreshold, stockIn } from '../../services/api/inventoryApi';
+import { adjustStock, getExpiringProducts, getLedger, getStockLevels, setStorePrice, setThreshold, stockIn } from '../../services/api/inventoryApi';
+import { listStores } from '../../services/api/storeApi';
 import { useStoreContext, useStores } from '../../store/storeContext';
-import type { InventoryTxnOut, StockLevelOut } from '../../types/inventory';
+import type { StoreOut } from '../../types/api';
+import type { ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 
+type Tab = 'stock' | 'expiry';
 type Kind = 'in' | 'adjust' | 'threshold' | 'price' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
 
-/** "12.500" -> "12.5" */
+const TXN_LABEL: Record<string, string> = {
+  purchase: 'Stock in',
+  sale: 'Sale',
+  return: 'Return',
+  adjustment: 'Adjustment',
+};
+
 function qtyText(qty: string): string {
   return String(Number(qty));
+}
+
+function expiryRowStyle(days: number): { background: string } {
+  if (days <= 7) return { background: '#fef2f2' };
+  if (days <= 15) return { background: '#fff7ed' };
+  return { background: '#fefce8' };
 }
 
 export function InventoryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  // Stock always belongs to one branch: the one picked in the sidebar switcher.
+  const [tab, setTab] = useState<Tab>('stock');
   const stores = useStores().filter((s) => s.is_active);
   const selectStore = useStoreContext((s) => s.select);
-  const storeId = useStoreContext((s) => s.selectedId);
+  const [storeId, setStoreId] = useState<number | null>(user?.store_id ?? null);
   const [rows, setRows] = useState<StockLevelOut[]>([]);
   const [filter, setFilter] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [expiringRows, setExpiringRows] = useState<ExpiringBatchOut[]>([]);
+  const [expiryLoading, setExpiryLoading] = useState(false);
+
   const [modal, setModal] = useState<Modal>(null);
   const [qty, setQty] = useState('');
   const [notes, setNotes] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
   const [ledger, setLedger] = useState<InventoryTxnOut[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  // After goods are received, offer to print that many stickers.
   const [printOffer, setPrintOffer] = useState<{ productId: number; name: string; qty: number } | null>(null);
 
   async function fetchLevels(id = storeId) {
@@ -54,7 +72,20 @@ export function InventoryPage() {
     }
   }
 
+  async function fetchExpiring(id = storeId) {
+    if (id === null) return;
+    setExpiryLoading(true);
+    try {
+      setExpiringRows(await getExpiringProducts(id));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setExpiryLoading(false);
+    }
+  }
+
   useEffect(() => { fetchLevels(); }, [storeId]);
+  useEffect(() => { if (tab === 'expiry') fetchExpiring(); }, [tab, storeId]);
 
   async function open(kind: Kind, row: StockLevelOut) {
     setQty(
@@ -64,6 +95,7 @@ export function InventoryPage() {
         : '',
     );
     setNotes('');
+    setExpiryDate('');
     setFormError('');
     setLedger([]);
     setModal({ kind, row });
@@ -83,7 +115,7 @@ export function InventoryPage() {
     setFormError('');
     try {
       if (modal.kind === 'in') {
-        await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim());
+        await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim(), expiryDate || undefined);
         const received = Number(qty);
         setPrintOffer(
           modal.row.barcode
@@ -138,16 +170,36 @@ export function InventoryPage() {
       )}
 
       <div className="filter-bar">
-        <input
-          className="field-input filter-input"
-          placeholder={t('inventory.searchPlaceholder')}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <label className="field-label checkbox-label">
-          <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
-          {t('inventory.lowOnly', { count: lowCount })}
-        </label>
+        {tab === 'stock' && (
+          <>
+            <input
+              className="field-input filter-input"
+              placeholder={t('inventory.searchPlaceholder')}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <label className="field-label checkbox-label">
+              <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
+              {t('inventory.lowOnly', { count: lowCount })}
+            </label>
+          </>
+        )}
+      </div>
+
+      <div className="tab-bar">
+        <button
+          className={`tab-btn${tab === 'stock' ? ' tab-active' : ''}`}
+          onClick={() => setTab('stock')}
+        >
+          {t('inventory.tabStock')}
+        </button>
+        <button
+          className={`tab-btn${tab === 'expiry' ? ' tab-active' : ''}`}
+          onClick={() => setTab('expiry')}
+        >
+          {t('inventory.tabExpiry')}
+          {expiringRows.length > 0 && <span className="badge-count"> {expiringRows.length}</span>}
+        </button>
       </div>
 
       {printOffer && (
@@ -166,46 +218,88 @@ export function InventoryPage() {
         </div>
       )}
 
-      {loading && <div className="loading-text">{t('common.loading')}</div>}
+      {tab === 'stock' && (
+        <>
+          {loading && <div className="loading-text">{t('common.loading')}</div>}
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr><th>{t('inventory.colProduct')}</th><th>{t('inventory.colBarcode')}</th><th className="num">{t('inventory.colInStock')}</th><th className="num">{t('inventory.colLowAt')}</th><th className="num">{t('inventory.colPrice')}</th><th>{t('inventory.colStatus')}</th><th /></tr>
+              </thead>
+              <tbody>
+                {!loading && visible.length === 0 && (
+                  <tr><td colSpan={7} className="empty-row">{t('inventory.empty')}</td></tr>
+                )}
+                {visible.map((r) => (
+                  <tr key={r.product_id}>
+                    <td>{r.product_name}</td>
+                    <td>{r.barcode ?? '—'}</td>
+                    <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
+                    <td className="num" title={r.low_stock_threshold === null ? t('inventory.defaultTip') : t('inventory.productTip')}>
+                      {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> {t('inventory.default')}</span>}
+                    </td>
+                    <td className="num" title={r.store_price === null ? t('inventory.hqPrice') : t('inventory.branchPrice')}>
+                      {formatRupees(r.price)}
+                      {r.store_price !== null && <span className="price-tag-branch">{t('inventory.branchPrice')}</span>}
+                    </td>
+                    <td>
+                      {Number(r.qty_on_hand) <= 0
+                        ? <span className="stock-badge stock-out">{t('inventory.outOfStock')}</span>
+                        : r.is_low ? <span className="stock-badge stock-low">{t('inventory.low')}</span> : '—'}
+                    </td>
+                    <td className="table-actions">
+                      <button className="btn-sm" onClick={() => open('in', r)}>{t('inventory.stockIn')}</button>
+                      <button className="btn-sm" onClick={() => open('adjust', r)}>{t('inventory.adjust')}</button>
+                      <button className="btn-sm" onClick={() => open('threshold', r)}>{t('inventory.lowLevel')}</button>
+                      <button className="btn-sm" onClick={() => open('price', r)}>{t('inventory.setPrice')}</button>
+                      <button className="btn-sm" onClick={() => open('history', r)}>{t('inventory.history')}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
-      <div className="table-card">
-        <table className="data-table">
-          <thead>
-            <tr><th>{t('inventory.colProduct')}</th><th>{t('inventory.colBarcode')}</th><th className="num">{t('inventory.colInStock')}</th><th className="num">{t('inventory.colLowAt')}</th><th className="num">{t('inventory.colPrice')}</th><th>{t('inventory.colStatus')}</th><th /></tr>
-          </thead>
-          <tbody>
-            {!loading && visible.length === 0 && (
-              <tr><td colSpan={7} className="empty-row">{t('inventory.empty')}</td></tr>
-            )}
-            {visible.map((r) => (
-              <tr key={r.product_id}>
-                <td>{r.product_name}</td>
-                <td>{r.barcode ?? '—'}</td>
-                <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
-                <td className="num" title={r.low_stock_threshold === null ? t('inventory.defaultTip') : t('inventory.productTip')}>
-                  {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> {t('inventory.default')}</span>}
-                </td>
-                <td className="num" title={r.store_price === null ? t('inventory.hqPrice') : t('inventory.branchPrice')}>
-                  {formatRupees(r.price)}
-                  {r.store_price !== null && <span className="price-tag-branch">{t('inventory.branchPrice')}</span>}
-                </td>
-                <td>
-                  {Number(r.qty_on_hand) <= 0
-                    ? <span className="stock-badge stock-out">{t('inventory.outOfStock')}</span>
-                    : r.is_low ? <span className="stock-badge stock-low">{t('inventory.low')}</span> : '—'}
-                </td>
-                <td className="table-actions">
-                  <button className="btn-sm" onClick={() => open('in', r)}>{t('inventory.stockIn')}</button>
-                  <button className="btn-sm" onClick={() => open('adjust', r)}>{t('inventory.adjust')}</button>
-                  <button className="btn-sm" onClick={() => open('threshold', r)}>{t('inventory.lowLevel')}</button>
-                  <button className="btn-sm" onClick={() => open('price', r)}>{t('inventory.setPrice')}</button>
-                  <button className="btn-sm" onClick={() => open('history', r)}>{t('inventory.history')}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {tab === 'expiry' && (
+        <>
+          {expiryLoading && <div className="loading-text">{t('common.loading')}</div>}
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr><th>{t('inventory.colProduct')}</th><th>{t('inventory.colBarcode')}</th><th className="num">{t('inventory.colInStock')}</th><th>{t('inventory.colExpiry')}</th><th className="num">{t('inventory.colDaysLeft')}</th><th /></tr>
+              </thead>
+              <tbody>
+                {!expiryLoading && expiringRows.length === 0 && (
+                  <tr><td colSpan={6} className="empty-row">{t('inventory.noExpiring')}</td></tr>
+                )}
+                {expiringRows.map((r) => (
+                  <tr key={r.product_id} style={expiryRowStyle(r.days_to_expiry)}>
+                    <td>{r.product_name}</td>
+                    <td>{r.barcode ?? '—'}</td>
+                    <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
+                    <td>{r.nearest_expiry}</td>
+                    <td className="num">{t('inventory.daysLeft', { count: r.days_to_expiry })}</td>
+                    <td className="table-actions">
+                      <button
+                        className="btn-primary btn-sm"
+                        onClick={() => navigate(
+                          `/admin/discounts?product_id=${r.product_id}&product_name=${encodeURIComponent(r.product_name)}&ends_at=${r.nearest_expiry}`,
+                        )}
+                      >
+                        {t('inventory.createOffer')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint-text">{t('inventory.expiryLegend')}</p>
+        </>
+      )}
+
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
@@ -220,16 +314,18 @@ export function InventoryPage() {
                 <div className="table-card">
                   <table className="data-table">
                     <thead>
-                      <tr><th>{t('inventory.colWhen')}</th><th>{t('inventory.colType')}</th><th className="num">{t('inventory.colQty')}</th><th>{t('inventory.colRef')}</th></tr>
+                      <tr><th>{t('inventory.colWhen')}</th><th>{t('inventory.colType')}</th><th className="num">{t('inventory.colQty')}</th><th>{t('inventory.colExpiry')}</th><th>{t('inventory.colRef')}</th></tr>
                     </thead>
                     <tbody>
-                      {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">{t('inventory.noMovements')}</td></tr>}
+                      {ledger.length === 0 && <tr><td colSpan={5} className="empty-row">{t('inventory.noMovements')}</td></tr>}
                       {ledger.map((txn) => (
                         <tr key={txn.id}>
                           <td className="ts-cell">{formatDateTime(txn.created_at)}</td>
                           <td>{t(`inventory.txn.${txn.txn_type}`)}</td>
                           <td className="num">{Number(txn.qty) > 0 ? '+' : ''}{qtyText(txn.qty)} {modal.row.uom || 'pcs'}</td>
+                          <td>{txn.expiry_date ?? '—'}</td>
                           <td>{txn.txn_type === 'sale' && txn.reference_id ? t('inventory.saleRef', { id: txn.reference_id }) : txn.notes ?? '—'}</td>
+
                         </tr>
                       ))}
                     </tbody>
@@ -311,6 +407,17 @@ export function InventoryPage() {
                     placeholder={modal.kind === 'adjust' ? t('inventory.reasonPlaceholder') : ''}
                   />
                 </label>
+                {modal.kind === 'in' && (
+                  <label className="field-label">
+                    Expiry date (optional)
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                    />
+                  </label>
+                )}
                 <div className="modal-buttons">
                   <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
                   <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>

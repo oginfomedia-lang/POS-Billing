@@ -2,6 +2,7 @@
 import type { TFunction } from 'i18next';
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -134,6 +135,7 @@ function toDiscount(form: DiscountForm): DiscountIn {
 
 export function DiscountsPage() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [discounts, setDiscounts] = useState<DiscountOut[]>([]);
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
@@ -172,6 +174,25 @@ export function DiscountsPage() {
     return () => { cancelled = true; };
   }, [branchId]);
 
+  // Auto-open create modal when navigated from Expiry Alerts with ?product_id=...
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(location.search);
+    const pid = params.get('product_id');
+    if (!pid) return;
+    const endsAt = params.get('ends_at') ?? '';
+    const productName = params.get('product_name') ?? '';
+    setEditingId(null);
+    setForm({
+      ...EMPTY,
+      scope: 'product',
+      product_id: pid,
+      name: productName ? `Expiry offer – ${productName}` : '',
+      ends_at: endsAt ? `${endsAt}T23:59` : '',
+    });
+    setError('');
+    setModal(true);
+  }, [loading, location.search]);
   // Search products as you type (debounced), instead of loading only the first 100.
   useEffect(() => {
     const q = productSearch.trim();
