@@ -15,7 +15,6 @@ import { formatRupees } from '../../utils/money';
 type Tab = 'stock' | 'expiry';
 type Kind = 'in' | 'adjust' | 'threshold' | 'price' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
-type Tab = 'stock' | 'expiry';
 
 const TXN_LABEL: Record<string, string> = {
   purchase: 'Stock in',
@@ -41,17 +40,15 @@ export function InventoryPage() {
   const [tab, setTab] = useState<Tab>('stock');
   const stores = useStores().filter((s) => s.is_active);
   const selectStore = useStoreContext((s) => s.select);
-  const [storeId, setStoreId] = useState<number | null>(user?.store_id ?? null);
+  const [storeId, setStoreId] = useState<number | null>(null);
   const [rows, setRows] = useState<StockLevelOut[]>([]);
   const [filter, setFilter] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [tab, setTab] = useState<Tab>('stock');
   const [expiringRows, setExpiringRows] = useState<ExpiringBatchOut[]>([]);
   const [expiryLoading, setExpiryLoading] = useState(false);
-  const [expiryDate, setExpiryDate] = useState('');
 
   const [modal, setModal] = useState<Modal>(null);
   const [qty, setQty] = useState('');
@@ -421,17 +418,6 @@ export function InventoryPage() {
                     placeholder={modal.kind === 'adjust' ? t('inventory.reasonPlaceholder') : ''}
                   />
                 </label>
-                {modal.kind === 'in' && (
-                  <label className="field-label">
-                    Expiry date (optional)
-                    <input
-                      className="field-input"
-                      type="date"
-                      value={expiryDate}
-                      onChange={(e) => setExpiryDate(e.target.value)}
-                    />
-                  </label>
-                )}
                 <div className="modal-buttons">
                   <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
                   <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
