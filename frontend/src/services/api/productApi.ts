@@ -19,6 +19,10 @@ export async function listProducts(params?: {
   category_id?: number;
   /** Name or SKU contains, or exact barcode. */
   q?: string;
+  /** Only active or only deactivated products; omit for all. */
+  status?: 'active' | 'inactive';
+  /** Branch: shared products + that branch's own, with its store_price filled in. */
+  store_id?: number;
 }): Promise<PagedResponse<ProductOut>> {
   const resp = await httpClient.get<PagedResponse<ProductOut>>('/products', { params });
   return resp.data;
@@ -75,8 +79,8 @@ export async function deleteBarcode(id: number, barcode: string): Promise<void> 
   await httpClient.delete(`/products/${id}/barcodes/${encodeURIComponent(barcode)}`);
 }
 
-export async function getProduct(id: number): Promise<ProductOut> {
-  const resp = await httpClient.get<ProductOut>(`/products/${id}`);
+export async function getProduct(id: number, storeId?: number | null): Promise<ProductOut> {
+  const resp = await httpClient.get<ProductOut>(`/products/${id}`, { params: { store_id: storeId ?? undefined } });
   return resp.data;
 }
 

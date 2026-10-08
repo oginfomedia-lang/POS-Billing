@@ -46,6 +46,7 @@ class InventoryTransaction(db.Model):
     qty = db.Column(db.Numeric(12, 3), nullable=False)
     reference_id = db.Column(db.Integer, nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

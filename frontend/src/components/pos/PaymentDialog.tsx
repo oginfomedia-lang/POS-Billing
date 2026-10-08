@@ -1,15 +1,18 @@
 // Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself.
+// Enter CASH/CARD/UPI amounts, show change.
+import type { ParseKeys } from 'i18next';
 import React, { type FormEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import type { SaleOut, TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
 import { DigitalPaymentPanel } from './DigitalPaymentPanel';
 
-const METHODS: { value: TenderMethod; label: string; icon: React.FC<{ size?: number }> }[] = [
-  { value: 'cash', label: 'Cash', icon: IconCash },
-  { value: 'card', label: 'Card', icon: IconCreditCard },
-  { value: 'upi', label: 'UPI QR', icon: IconQrCode },
+const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
+  { value: 'cash', label: 'methods.cash', icon: IconCash },
+  { value: 'card', label: 'methods.card', icon: IconCreditCard },
+  { value: 'upi', label: 'pay.upiQr', icon: IconQrCode },
 ];
 
 const QUICK_CASH_PRESETS = [100, 200, 500, 2000];
@@ -50,8 +53,8 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
       <div className="modal-box payment-dialog-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <span className="modal-subtitle">Complete Checkout</span>
-            <h3 className="modal-title">Payment — {formatRupees(total)}</h3>
+            <span className="modal-subtitle">{t('pay.subtitle')}</span>
+            <h3 className="modal-title">{t('pay.title', { amount: formatRupees(total) })}</h3>
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose}>
             <IconX size={18} />
@@ -71,7 +74,7 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
                 onClick={() => setMethod(m.value)}
               >
                 <Icon size={18} />
-                <span>{m.label}</span>
+                <span>{t(m.label)}</span>
               </button>
             );
           })}
@@ -83,7 +86,7 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
           {method === 'cash' ? (
             <div className="cash-payment-section">
               <label className="field-label">
-                <span>Cash Tendered (₹)</span>
+                <span>{t('pay.cashTendered')}</span>
                 <input
                   className="field-input pay-amount"
                   inputMode="decimal"
@@ -95,13 +98,13 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
               </label>
 
               <div className="quick-cash-presets">
-                <span className="presets-label">Quick Cash:</span>
+                <span className="presets-label">{t('pay.quickCash')}</span>
                 <button
                   type="button"
                   className="preset-chip"
                   onClick={() => setTendered(total)}
                 >
-                  Exact ({formatRupees(total)})
+                  {t('pay.exact', { amount: formatRupees(total) })}
                 </button>
                 {QUICK_CASH_PRESETS.map((amt) => (
                   <button
@@ -118,15 +121,13 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
               <div className={`change-due-box ${cashValid ? 'valid' : 'invalid'}`}>
                 {cashValid ? (
                   <>
-                    <span className="change-label">Balance Change to Return:</span>
+                    <span className="change-label">{t('pay.changeLabel')}</span>
                     <strong className="change-amount">
                       {formatRupees(paiseToString(tenderedPaise - totalPaise))}
                     </strong>
                   </>
                 ) : (
-                  <span className="change-warning">
-                    ⚠️ Tendered amount is less than total amount ({formatRupees(total)})
-                  </span>
+                  <span className="change-warning">{t('pay.short', { amount: formatRupees(total) })}</span>
                 )}
               </div>
             </div>
@@ -142,7 +143,7 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
 
           <div className="modal-buttons">
             <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             {method === 'cash' && (
               <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>

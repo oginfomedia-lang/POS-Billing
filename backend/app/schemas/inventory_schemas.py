@@ -1,7 +1,7 @@
 """Inventory and stock movement schemas."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -18,6 +18,9 @@ class StockLevelOut(BaseModel):
     low_stock_threshold: Decimal | None  # this product's own level; None = use the Settings default
     effective_threshold: Decimal
     is_low: bool
+    base_price: Decimal  # head-office price (products.price)
+    store_price: Decimal | None  # this store's own price; None = sells at base_price
+    price: Decimal  # what this store actually charges (before GST)
 
 
 
@@ -27,11 +30,20 @@ class ThresholdRequest(BaseModel):
     threshold: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=3)
 
 
+class StorePriceRequest(BaseModel):
+    """This store's own selling price (before GST). None = go back to the head-office price."""
+
+    store_id: int
+    product_id: int
+    price: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
+
+
 class StockInRequest(BaseModel):
     store_id: int
     product_id: int
     qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
     notes: str | None = Field(None, max_length=500)
+    expiry_date: date | None = None
 
 
 class AdjustStockRequest(BaseModel):
@@ -50,6 +62,17 @@ class InventoryTxnOut(BaseModel):
     qty: Decimal
     reference_id: int | None
     notes: str | None
+    expiry_date: date | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExpiringBatchOut(BaseModel):
+    product_id: int
+    product_name: str
+    barcode: str | None
+    qty_on_hand: Decimal
+    uom: UOMType
+    nearest_expiry: date
+    days_to_expiry: int

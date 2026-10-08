@@ -1,5 +1,6 @@
 // One bill line (name, qty, price, total).
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SaleItemOut } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
 import { IconMinus, IconPercent, IconPlus, IconTrash } from '../common/Icons';
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManualDiscount }: Props) {
+  const { t } = useTranslation();
   const [qty, setQty] = useState(String(item.qty));
 
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
@@ -57,7 +59,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
             className="stepper-btn stepper-btn-minus"
             disabled={disabled}
             onClick={handleDecrement}
-            title="Decrease quantity"
+            title={t('pos.decreaseQty')}
           >
             <IconMinus size={14} />
           </button>
@@ -77,7 +79,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
             className="stepper-btn stepper-btn-plus"
             disabled={disabled}
             onClick={handleIncrement}
-            title="Increase quantity"
+            title={t('pos.increaseQty')}
           >
             <IconPlus size={14} />
           </button>
@@ -92,7 +94,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
         )}
         {Number(item.manual_discount) > 0 && (
           <div className="line-discount-badge line-discount-manual" title={item.manual_discount_reason ?? undefined}>
-            Manual − {formatRupees(item.manual_discount)}
+            {t('pos.manual')} − {formatRupees(item.manual_discount)}
           </div>
         )}
       </td>
@@ -101,7 +103,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
           className="btn-line-discount"
           disabled={disabled}
           onClick={() => onManualDiscount(item)}
-          title="Manual discount (manager approval)"
+          title={t('pos.manualDiscountTitle')}
         >
           <IconPercent size={16} />
         </button>
@@ -109,7 +111,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
           className="btn-remove-line"
           disabled={disabled}
           onClick={() => onRemove(item.id)}
-          title="Void / remove line"
+          title={t('pos.removeLine')}
         >
           <IconTrash size={16} />
         </button>

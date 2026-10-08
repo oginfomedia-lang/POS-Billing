@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useShiftStore } from '../../store/shiftStore';
 import { getErrorMessage } from '../../services/api/httpClient';
 
 export function CloseShiftPage() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const { shift, close, busy } = useShiftStore();
   const navigate = useNavigate();
@@ -28,15 +30,15 @@ export function CloseShiftPage() {
     return (
       <div className="admin-page">
         <div className="admin-header">
-          <h2>Shift Closed</h2>
+          <h2>{t('shift.closedTitle')}</h2>
           <div className="admin-actions">
-            <button className="btn-secondary" onClick={logout}>Logout</button>
+            <button className="btn-secondary" onClick={logout}>{t('common.logout')}</button>
           </div>
         </div>
         <div className="shift-panel shift-panel-center">
-          <p className="shift-done-text">Shift has been closed successfully.</p>
+          <p className="shift-done-text">{t('shift.closedOk')}</p>
           <button className="btn-primary" onClick={() => navigate('/', { replace: true })}>
-            Back to Login
+            {t('shift.backToLogin')}
           </button>
         </div>
       </div>
@@ -46,10 +48,10 @@ export function CloseShiftPage() {
   return (
     <div className="admin-page">
       <div className="admin-header">
-        <h2>Close Shift — {user?.full_name ?? user?.username}</h2>
+        <h2>{t('shift.closeTitle', { name: user?.full_name ?? user?.username })}</h2>
         <div className="admin-actions">
-          <button className="btn-secondary" onClick={() => navigate('/pos/billing')}>Back to POS</button>
-          <button className="btn-secondary" onClick={logout}>Logout</button>
+          <button className="btn-secondary" onClick={() => navigate('/pos/billing')}>{t('shift.backToPos')}</button>
+          <button className="btn-secondary" onClick={logout}>{t('common.logout')}</button>
         </div>
       </div>
 
@@ -57,12 +59,12 @@ export function CloseShiftPage() {
         {shift && (
           <div className="shift-summary">
             <div className="shift-summary-row">
-              <span>Opening Float</span>
+              <span>{t('shift.openingFloat')}</span>
               <strong>₹{Number(shift.opening_float).toFixed(2)}</strong>
             </div>
             {shift.expected_cash !== null && (
               <div className="shift-summary-row">
-                <span>Expected Cash</span>
+                <span>{t('shift.expectedCash')}</span>
                 <strong>₹{Number(shift.expected_cash).toFixed(2)}</strong>
               </div>
             )}
@@ -73,7 +75,7 @@ export function CloseShiftPage() {
 
         <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">
-            Actual Cash Count (₹)
+            {t('shift.actualCash')}
             <input
               className="field-input"
               type="number"
@@ -85,7 +87,7 @@ export function CloseShiftPage() {
           </label>
           <div className="modal-buttons">
             <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? 'Closing…' : 'Close Shift'}
+              {busy ? t('shift.closing') : t('shift.close')}
             </button>
           </div>
         </form>

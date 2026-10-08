@@ -22,6 +22,7 @@ from app.repositories.store_repository import StoreRepository
 from app.schemas.discount_schemas import DiscountIn, DiscountOut
 from app.services import audit_service, pricing_service
 from app.utils.dates import now_ist
+from app.utils.store_scope import require_store_access
 from app.utils.transactions import transaction
 
 ZERO = Decimal("0.00")
@@ -48,11 +49,13 @@ class ChosenOffer:
 
 # ── Admin CRUD ───────────────────────────────────────────────────────────────
 
-def list_discounts() -> list[Discount]:
-    return DiscountRepository().list_all()
+def list_discounts(store_id: int | None = None) -> list[Discount]:
+    """All offers, or (store_id given) that store's own offers plus the all-store ones."""
+    return DiscountRepository().list_all(store_id)
 
 
 def create_discount(data: DiscountIn, actor: User) -> Discount:
+    require_store_access(actor, data.store_id)  # branch managers: own-store offers only
     _check_refs(data)
     discount = Discount(**data.model_dump())
     with transaction():
@@ -66,6 +69,9 @@ def update_discount(discount_id: int, data: DiscountIn, actor: User) -> Discount
     discount = DiscountRepository().get_by_id(discount_id)
     if discount is None:
         raise NotFoundError(f"Discount {discount_id} not found.")
+    # Branch managers can't edit all-store or other stores' offers, or move an offer to another store.
+    require_store_access(actor, discount.store_id)
+    require_store_access(actor, data.store_id)
     _check_refs(data)
     old = _snap(discount)
     for field, value in data.model_dump().items():

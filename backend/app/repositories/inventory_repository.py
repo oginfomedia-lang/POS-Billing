@@ -1,10 +1,12 @@
 """Inventory queries; lock_rows() uses SELECT FOR UPDATE for safe stock decrements."""
+from datetime import date, timedelta
+
 from sqlalchemy.dialects.postgresql import insert
 
 from app.extensions import db
 from app.models.inventory import Inventory, InventoryTransaction
 from app.models.enums import InventoryTxnType
-from app.models.product import Product
+from app.models.product import Product, ProductBarcode
 from app.repositories.base_repository import BaseRepository
 
 
@@ -17,6 +19,17 @@ class InventoryRepository(BaseRepository):
             .where(Inventory.store_id == store_id)
             .where(Inventory.product_id == product_id)
         )
+
+    def price_overrides(self, store_id: int, product_ids: list[int]) -> dict:
+        """{product_id: price} for this store's own prices among product_ids."""
+        if not product_ids:
+            return {}
+        q = db.select(Inventory.product_id, Inventory.price).where(
+            Inventory.store_id == store_id,
+            Inventory.product_id.in_(product_ids),
+            Inventory.price.is_not(None),
+        )
+        return dict(db.session.execute(q).all())
 
     def lock_rows(self, store_id: int, product_ids: list[int]) -> list[Inventory]:
         """Return locked Inventory rows for the given products (SELECT FOR UPDATE)."""
@@ -74,6 +87,7 @@ class InventoryRepository(BaseRepository):
         qty: float,
         reference_id: int | None = None,
         notes: str | None = None,
+        expiry_date: date | None = None,
     ) -> InventoryTransaction:
         txn = InventoryTransaction(
             store_id=store_id,
@@ -82,6 +96,44 @@ class InventoryRepository(BaseRepository):
             qty=qty,
             reference_id=reference_id,
             notes=notes,
+            expiry_date=expiry_date,
         )
         db.session.add(txn)
         return txn
+
+    def expiring_batches(self, store_id: int, days: int = 30) -> list[tuple]:
+        """Return one row per product with any purchase batch expiring within `days` days.
+
+        Filters to products that still have qty_on_hand > 0.
+        Returns tuples of (Product, Inventory, nearest_expiry_date).
+        """
+        today = date.today()
+        cutoff = today + timedelta(days=days)
+
+        nearest = (
+            db.select(
+                InventoryTransaction.product_id,
+                db.func.min(InventoryTransaction.expiry_date).label("nearest_expiry"),
+            )
+            .where(
+                InventoryTransaction.store_id == store_id,
+                InventoryTransaction.txn_type == InventoryTxnType.PURCHASE,
+                InventoryTransaction.expiry_date.is_not(None),
+                InventoryTransaction.expiry_date >= today,
+                InventoryTransaction.expiry_date <= cutoff,
+            )
+            .group_by(InventoryTransaction.product_id)
+            .subquery()
+        )
+
+        rows = db.session.execute(
+            db.select(Product, Inventory, nearest.c.nearest_expiry)
+            .join(nearest, nearest.c.product_id == Product.id)
+            .join(
+                Inventory,
+                (Inventory.product_id == Product.id) & (Inventory.store_id == store_id),
+            )
+            .where(Product.is_active.is_(True), Inventory.qty_on_hand > 0)
+            .order_by(nearest.c.nearest_expiry)
+        ).all()
+        return rows

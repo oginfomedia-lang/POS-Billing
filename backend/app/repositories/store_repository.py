@@ -12,8 +12,11 @@ class StoreRepository(BaseRepository):
         page: int = 1,
         per_page: int = 25,
         active_only: bool = False,
+        store_id: int | None = None,
     ) -> tuple[list[Store], int]:
         q = db.select(Store)
+        if store_id is not None:
+            q = q.where(Store.id == store_id)
         if active_only:
             q = q.where(Store.is_active.is_(True))
         total = db.session.scalar(db.select(db.func.count()).select_from(q.subquery()))

@@ -60,8 +60,10 @@ def get_user(user_id: int) -> User:
     return _get_or_404(user_id)
 
 
-def list_users(page: int, per_page: int) -> tuple[list[User], int]:
-    return UserRepository().list(page=page, per_page=per_page)
+def list_users(
+    page: int, per_page: int, is_active: bool | None = None, store_id: int | None = None,
+) -> tuple[list[User], int]:
+    return UserRepository().list(page=page, per_page=per_page, is_active=is_active, store_id=store_id)
 
 
 def _get_or_404(user_id: int) -> User:

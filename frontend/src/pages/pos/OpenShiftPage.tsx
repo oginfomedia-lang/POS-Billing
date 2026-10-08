@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCounterStore } from '../../store/counterStore';
@@ -7,6 +8,7 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { listCounters } from '../../services/api/storeApi';
 
 export function OpenShiftPage() {
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
   const counterCode = useCounterStore((s) => s.config?.counterCode ?? '');
   const { open, busy } = useShiftStore();
@@ -20,14 +22,14 @@ export function OpenShiftPage() {
     setError('');
     const storeId = user?.store_id;
     if (!storeId) {
-      setError('Your account is not assigned to a store. Contact an admin.');
+      setError(t('shift.noStore'));
       return;
     }
     try {
       // The shift records which till it runs on; bill numbers include that counter's code.
       const counter = (await listCounters(storeId)).find((c) => c.code.toLowerCase() === counterCode.toLowerCase() && c.is_active);
       if (!counter) {
-        setError(`Counter ${counterCode} is not set up for your store. Ask an admin to add it, or fix counter.json.`);
+        setError(t('shift.counterMissing', { code: counterCode }));
         return;
       }
       await open(storeId, parseFloat(openingFloat) || 0, counter.id);
@@ -40,9 +42,9 @@ export function OpenShiftPage() {
   return (
     <div className="admin-page">
       <div className="admin-header">
-        <h2>Open Shift — {user?.full_name ?? user?.username} · Counter {counterCode}</h2>
+        <h2>{t('shift.openTitle', { name: user?.full_name ?? user?.username, code: counterCode })}</h2>
         <div className="admin-actions">
-          <button className="btn-secondary" onClick={logout}>Logout</button>
+          <button className="btn-secondary" onClick={logout}>{t('common.logout')}</button>
         </div>
       </div>
 
@@ -50,7 +52,7 @@ export function OpenShiftPage() {
         {error && <div className="page-error">{error}</div>}
         <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">
-            Opening Float (₹)
+            {t('shift.openingFloatLabel')}
             <input
               className="field-input"
               type="number"
@@ -62,7 +64,7 @@ export function OpenShiftPage() {
           </label>
           <div className="modal-buttons">
             <button type="submit" className="btn-primary" disabled={busy}>
-              {busy ? 'Opening…' : 'Open Shift'}
+              {busy ? t('shift.opening') : t('shift.open')}
             </button>
           </div>
         </form>

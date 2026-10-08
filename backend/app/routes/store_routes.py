@@ -5,6 +5,7 @@ from app.schemas.common import PagedResponse, PaginationQuery
 from app.schemas.store_schemas import CounterCreate, CounterOut, CounterUpdate, StoreCreate, StoreOut, StoreUpdate
 from app.services import auth_service, store_service
 from app.utils.permissions import require_permission
+from app.utils.store_scope import require_store_access, scoped_store_id
 
 store_bp = Blueprint("stores", __name__)
 
@@ -13,7 +14,8 @@ store_bp = Blueprint("stores", __name__)
 @require_permission("stores.read")
 def list_stores():
     q = PaginationQuery.model_validate(request.args)
-    items, total = store_service.list_stores(q.page, q.per_page)
+    only = scoped_store_id(auth_service.current_user(), None)  # None = all stores (admins)
+    items, total = store_service.list_stores(q.page, q.per_page, only)
     resp = PagedResponse.build(
         [StoreOut.model_validate(s).model_dump(mode="json") for s in items],
         total, q.page, q.per_page,
@@ -33,6 +35,7 @@ def create_store():
 @store_bp.get("/stores/<int:store_id>")
 @require_permission("stores.read")
 def get_store(store_id: int):
+    require_store_access(auth_service.current_user(), store_id)
     store = store_service.get_store(store_id)
     return jsonify(StoreOut.model_validate(store).model_dump(mode="json")), 200
 
@@ -49,6 +52,7 @@ def update_store(store_id: int):
 @store_bp.get("/stores/<int:store_id>/counters")
 @require_permission("counters.read")
 def list_counters(store_id: int):
+    require_store_access(auth_service.current_user(), store_id)
     counters = store_service.list_counters(store_id)
     return jsonify([CounterOut.model_validate(c).model_dump(mode="json") for c in counters]), 200
 
@@ -65,6 +69,7 @@ def create_counter(store_id: int):
 @store_bp.get("/stores/<int:store_id>/counters/<int:counter_id>")
 @require_permission("counters.read")
 def get_counter(store_id: int, counter_id: int):
+    require_store_access(auth_service.current_user(), store_id)
     counter = store_service.get_counter(store_id, counter_id)
     return jsonify(CounterOut.model_validate(counter).model_dump(mode="json")), 200
 

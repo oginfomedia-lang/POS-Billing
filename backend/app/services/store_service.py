@@ -49,8 +49,9 @@ def get_store(store_id: int) -> Store:
     return _get_store_or_404(store_id)
 
 
-def list_stores(page: int, per_page: int) -> tuple[list[Store], int]:
-    return StoreRepository().list(page=page, per_page=per_page)
+def list_stores(page: int, per_page: int, only_store_id: int | None = None) -> tuple[list[Store], int]:
+    """All stores, or just one (a branch user only sees their own store)."""
+    return StoreRepository().list(page=page, per_page=per_page, store_id=only_store_id)
 
 
 def create_counter(store_id: int, data: CounterCreate, actor: User) -> Counter:

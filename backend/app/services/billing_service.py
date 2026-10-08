@@ -67,7 +67,7 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
             item = SaleItem(
                 product=product,
                 product_name=product.name,
-                unit_price=product.price,
+                unit_price=inventory_service.selling_price(sale.store_id, product),
                 tax_rate=product.tax_rate,
                 qty=data.qty,
             )
