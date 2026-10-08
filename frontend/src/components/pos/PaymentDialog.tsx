@@ -1,11 +1,13 @@
+// Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself.
 // Enter CASH/CARD/UPI amounts, show change.
 import type { ParseKeys } from 'i18next';
 import React, { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
-import type { TenderMethod } from '../../types/sale';
+import type { SaleOut, TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
+import { DigitalPaymentPanel } from './DigitalPaymentPanel';
 
 const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
   { value: 'cash', label: 'methods.cash', icon: IconCash },
@@ -16,30 +18,30 @@ const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: 
 const QUICK_CASH_PRESETS = [100, 200, 500, 2000];
 
 interface Props {
+  saleId: number;
   total: string;
   busy: boolean;
   error: string;
+  /** Cash only: card/UPI are confirmed by Razorpay and reported through onDigitalPaid. */
   onConfirm: (method: TenderMethod, cashTendered?: string, reference?: string) => void;
+  onDigitalPaid: (sale: SaleOut) => void;
   onClose: () => void;
 }
 
-export function PaymentDialog({ total, busy, error, onConfirm, onClose }: Props) {
-  const { t } = useTranslation();
+export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigitalPaid, onClose }: Props) {
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
-  const [reference, setReference] = useState('');
   useKeyboardShortcuts({ Escape: onClose });
 
   const totalPaise = toPaise(total);
   const tenderedPaise = toPaise(tendered);
   const cashValid = Number.isFinite(tenderedPaise) && tenderedPaise >= totalPaise;
-  const canConfirm = !busy && (method !== 'cash' || cashValid);
+  const canConfirm = !busy && method === 'cash' && cashValid;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!canConfirm) return;
-    if (method === 'cash') onConfirm('cash', paiseToString(tenderedPaise));
-    else onConfirm(method, undefined, reference.trim() || undefined);
+    onConfirm('cash', paiseToString(tenderedPaise));
   }
 
   function handleQuickCash(amount: number) {
@@ -130,38 +132,25 @@ export function PaymentDialog({ total, busy, error, onConfirm, onClose }: Props)
               </div>
             </div>
           ) : (
-            <div className="digital-payment-section">
-              <label className="field-label">
-                <span>{method === 'card' ? t('pay.cardRef') : t('pay.upiRef')}</span>
-                <input
-                  key={method}
-                  className="field-input"
-                  placeholder={method === 'card' ? 'e.g. 849201' : 'e.g. UPI/3094850293/PAY'}
-                  value={reference}
-                  maxLength={100}
-                  onChange={(e) => setReference(e.target.value)}
-                  autoFocus
-                />
-              </label>
-
-              <div className="digital-pay-info">
-                {method === 'card' ? (
-                  <p>{t('pay.cardInfo')}</p>
-                ) : (
-                  <p>{t('pay.upiInfo')}</p>
-                )}
-              </div>
-            </div>
+            <DigitalPaymentPanel
+              key={method} // switching Card <-> UPI cancels the old request and starts a new one
+              saleId={saleId}
+              method={method}
+              total={total}
+              onPaid={onDigitalPaid}
+            />
           )}
 
           <div className="modal-buttons">
             <button type="button" className="btn-secondary" onClick={onClose}>
               {t('common.cancel')}
             </button>
-            <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
-              <IconCheck size={18} />
-              <span>{busy ? t('pay.processing') : t('pay.complete')}</span>
-            </button>
+            {method === 'cash' && (
+              <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
+                <IconCheck size={18} />
+                <span>{busy ? 'Processing Transaction…' : 'Complete Sale'}</span>
+              </button>
+            )}
           </div>
         </form>
       </div>

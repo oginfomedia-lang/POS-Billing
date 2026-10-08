@@ -53,6 +53,7 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        _cancel_live_payments(sale.id)
 
         product = ProductRepository().get_by_id(data.product_id)
         # store_id NULL = product sold in every store.
@@ -72,6 +73,7 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
             )
             sale.items.append(item)
         _recalculate(sale)
+        
     return sale
 
 
@@ -79,6 +81,7 @@ def update_item(sale_id: int, item_id: int, data: UpdateItemRequest, actor: User
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        _cancel_live_payments(sale.id)
         item = _get_item_or_404(sale, item_id)
         item.qty = data.qty
         _recalculate(sale)
@@ -89,6 +92,7 @@ def remove_item(sale_id: int, item_id: int, actor: User) -> Sale:
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        _cancel_live_payments(sale.id)
         item = _get_item_or_404(sale, item_id)
         sale.items.remove(item)
         _recalculate(sale)
@@ -101,6 +105,7 @@ def set_manual_discount(sale_id: int, item_id: int, data: ManualDiscountRequest,
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        _cancel_live_payments(sale.id)
         item = _get_item_or_404(sale, item_id)
         line_total = money_mul(item.unit_price, item.qty)
         if data.amount > line_total:
@@ -143,6 +148,7 @@ def hold(sale_id: int, data: HoldSaleRequest, actor: User) -> Sale:
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        _cancel_live_payments(sale.id)
         if not sale.items:
             raise AppError("Cannot hold an empty bill.")
         sale.status = SaleStatus.HELD
@@ -178,6 +184,7 @@ def void(sale_id: int, actor: User) -> Sale:
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN, SaleStatus.HELD)
+        _cancel_live_payments(sale.id)
         old_status = sale.status.value
         sale.status = SaleStatus.VOIDED
         audit_service.log(
@@ -196,6 +203,8 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
             raise AppError("Cannot complete an empty bill.")
 
         _recalculate(sale)
+        if data.method in ("card", "upi"):
+            _require_paid_intent(sale, data)
         payment = payment_service.build_payment(data.method, sale.total, data.cash_tendered, data.reference)
         inventory_service.deduct_for_sale(sale.store_id, sale.items, sale.id)
 
@@ -229,6 +238,13 @@ def _lock_owned_sale(sale_id: int, actor: User) -> Sale:
 def _require_status(sale: Sale, *allowed: SaleStatus) -> None:
     if sale.status not in allowed:
         raise ConflictError(f"Bill is {sale.status.value}; this action is not allowed.")
+
+
+def _cancel_live_payments(sale_id: int) -> None:
+    """The bill amount is changing (or the bill is leaving the counter): kill any pending QR / card push."""
+    # Imported here, not at the top: payment_intent_service imports billing_service (circular import).
+    from app.services import payment_intent_service
+    payment_intent_service.cancel_pending_for_sale(sale_id)
 
 
 def _get_item_or_404(sale: Sale, item_id: int) -> SaleItem:
@@ -282,3 +298,12 @@ def _recalculate(sale: Sale) -> None:
     sale.discount_amount = totals["discount_amount"]
     sale.tax_amount = totals["tax_amount"]
     sale.total = totals["total"]
+
+
+def _require_paid_intent(sale: Sale, data: CompleteSaleRequest) -> None:
+    from app.models.payment_intent import PaymentIntent
+    from app.models.enums import PaymentIntentStatus
+    intent = db.session.get(PaymentIntent, data.payment_intent_id) if data.payment_intent_id else None
+    if (intent is None or intent.sale_id != sale.id or intent.status is not PaymentIntentStatus.PAID
+            or intent.method.value != data.method or intent.amount != sale.total):
+        raise AppError("Card/UPI payment is not confirmed by Razorpay for this exact amount.")

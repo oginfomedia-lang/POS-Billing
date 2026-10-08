@@ -55,6 +55,7 @@ export interface CounterOut {
   label: string;
   store_id: number;
   is_active: boolean;
+  edc_device_id: string | null; // Razorpay POS card machine on this counter; null = none
   created_at: string;
 }
 

@@ -2270,6 +2270,69 @@ select.field-input {
   font-weight: 500;
 }
 
+/* Card / UPI (Razorpay) */
+.digital-pay-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.upi-qr-img {
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  padding: 8px;
+  background: #fff;
+  border-radius: var(--radius-sm);
+}
+
+.digital-pay-amount {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.digital-wait {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+.digital-pay-box .digital-wait {
+  margin: 0;
+}
+
+.digital-pulse {
+  animation: digital-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes digital-pulse {
+  50% { opacity: 0.45; }
+}
+
+.digital-ok {
+  margin: 14px 0 0;
+  color: var(--ok-text);
+  font-weight: 700;
+  text-align: center;
+}
+
+.digital-retry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .btn-confirm-pay {
   min-height: 46px;
   padding: 12px 22px;

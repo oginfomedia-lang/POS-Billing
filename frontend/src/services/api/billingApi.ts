@@ -1,5 +1,5 @@
 // Sale draft, items, hold, resume, complete API calls.
-import type { ReceiptOut, SaleOut, TenderMethod } from '../../types/sale';
+import type { DigitalMethod, PaymentIntentOut, ReceiptOut, SaleOut, TenderMethod } from '../../types/sale';
 import { httpClient } from './httpClient';
 
 /** Returns the cashier's open bill, creating one if needed. 409 = no open shift. */
@@ -58,6 +58,23 @@ export async function completeSale(
     reference: reference || null,
   });
   return resp.data;
+}
+
+/** Card: pushes the bill total to this counter's card machine. UPI: creates a Razorpay QR for exactly the total. */
+export async function startPayment(saleId: number, method: DigitalMethod): Promise<PaymentIntentOut> {
+  const resp = await httpClient.post<PaymentIntentOut>(`/sales/${saleId}/payment-intents`, { method });
+  return resp.data;
+}
+
+/** Asks the backend (which asks Razorpay) whether the customer has paid. When paid, `sale` is the completed bill. */
+export async function checkPayment(intentId: number): Promise<PaymentIntentOut> {
+  const resp = await httpClient.get<PaymentIntentOut>(`/payment-intents/${intentId}`);
+  return resp.data;
+}
+
+/** Closes the QR / clears the card machine. Safe to call if it was already paid or cancelled. */
+export async function cancelPayment(intentId: number): Promise<void> {
+  await httpClient.post(`/payment-intents/${intentId}/cancel`);
 }
 
 export async function voidSale(saleId: number): Promise<SaleOut> {

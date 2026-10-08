@@ -36,6 +36,16 @@ class BaseConfig:
 
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_FILE = os.environ.get("LOG_FILE") or None
+    # --- Razorpay (card + UPI) ---
+    RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+    RAZORPAY_POS_BASE_URL = os.environ.get("RAZORPAY_POS_BASE_URL") or "https://demo.ezetap.com/api/3.0/p2padapter"
+    RAZORPAY_POS_USERNAME = os.environ.get("RAZORPAY_POS_USERNAME", "")
+    RAZORPAY_POS_APP_KEY = os.environ.get("RAZORPAY_POS_APP_KEY", "")
+    # 1 = fake gateway for development/tests (no real money, no real machine)
+    RAZORPAY_MOCK = os.environ.get("RAZORPAY_MOCK", "0") == "1"
+    # A UPI QR closes itself after this many seconds (Razorpay minimum is 120)
+    UPI_QR_EXPIRY_SECONDS = int(os.environ.get("UPI_QR_EXPIRY_SECONDS") or "300")  # empty in .env = default
 
     @classmethod
     def validate(cls) -> None:

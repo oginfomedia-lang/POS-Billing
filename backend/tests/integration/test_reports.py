@@ -3,21 +3,24 @@ from decimal import Decimal
 
 import pytest
 
-from tests.factories import make_counter, make_product, make_shift
+from tests.factories import make_counter, make_product, make_shift, pay_by_razorpay
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 def shift(cashier_user, store):
-    return make_shift(cashier_user, make_counter(store), opening_float="500.00")
+    return make_shift(cashier_user, make_counter(store, edc_device_id="TEST01|ezetap_android"), opening_float="500.00")
 
 
 def _sell(client, headers, product, qty, method="cash", tendered="1000"):
     sid = client.post("/api/v1/sales", headers=headers).get_json()["id"]
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id, "qty": qty}, headers=headers)
-    body = {"method": method, "cash_tendered": tendered} if method == "cash" else {"method": method}
-    resp = client.post(f"/api/v1/sales/{sid}/complete", json=body, headers=headers)
+    if method != "cash":
+        resp = pay_by_razorpay(client, headers, sid, method)
+        assert resp.status_code == 200, resp.get_json()
+        return resp.get_json()["sale"]
+    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "cash", "cash_tendered": tendered}, headers=headers)
     assert resp.status_code == 200, resp.get_json()
     return resp.get_json()
 

@@ -25,9 +25,10 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { getProductByBarcode } from '../../services/api/productApi';
 import type { ManualDiscountInput } from '../../services/api/billingApi';
 import { useBillStore } from '../../store/billStore';
+import type { SaleItemOut, SaleOut, TenderMethod } from '../../types/sale';
 import { useShiftStore } from '../../store/shiftStore';
 import { useStores } from '../../store/storeContext';
-import type { SaleItemOut, TenderMethod } from '../../types/sale';
+
 import { formatRupees } from '../../utils/money';
 
 type Dialog = 'pay' | 'hold' | null;
@@ -40,7 +41,7 @@ export function BillingPage() {
   const shiftStoreId = useShiftStore((s) => s.shift?.store_id) ?? user?.store_id;
   const storeName = useStores().find((s) => s.id === shiftStoreId)?.name ?? t('pos.counterFallback');
   const {
-    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, void: voidBill,
+    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, markPaid, void: voidBill,
   } = useBillStore();
 
   const [error, setError] = useState('');
@@ -113,6 +114,13 @@ export function BillingPage() {
     } catch (err) {
       setDialogError(getErrorMessage(err));
     }
+  }
+
+  /** Card/UPI: Razorpay confirmed and the backend already completed the bill. Same receipt flow as cash. */
+  function handleDigitalPaid(paid: SaleOut) {
+    markPaid();
+    setDialog(null);
+    navigate(`/pos/reprint/${paid.id}?print=1`);
   }
 
   async function handleManualDiscount(data: ManualDiscountInput) {
@@ -218,10 +226,12 @@ export function BillingPage() {
 
       {dialog === 'pay' && sale && (
         <PaymentDialog
+          saleId={sale.id}
           total={sale.total}
           busy={busy}
           error={dialogError}
           onConfirm={handlePay}
+          onDigitalPaid={handleDigitalPaid}
           onClose={() => setDialog(null)}
         />
       )}

@@ -3,7 +3,7 @@ import pytest
 
 from app.extensions import db
 from app.models.category import Category
-from tests.factories import make_counter, make_product, make_shift, make_user
+from tests.factories import make_counter, make_product, make_shift, make_user, pay_by_razorpay
 
 pytestmark = pytest.mark.integration
 
@@ -81,7 +81,7 @@ def test_completed_bill_keeps_discount(client, admin_headers, cashier_headers, s
     p = make_product(store, price="100.00", tax_rate="0")
     _discount(client, admin_headers, value="10")
     sid = _bill(client, cashier_headers, (p, 1))["id"]
-    sale = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers).get_json()
+    sale = pay_by_razorpay(client, cashier_headers, sid).get_json()["sale"]
     assert sale["total"] == "90.00"
     receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
     assert receipt["discount_amount"] == "10.00"
@@ -186,7 +186,7 @@ def test_buy_1_get_1_single_unit_is_half_price(client, admin_headers, cashier_he
 def test_stock_shortage_names_the_product(client, cashier_headers, shift, store):
     p = make_product(store, name="Amul Butter", price="50.00", stock=1)
     sid = _bill(client, cashier_headers, (p, 3))["id"]
-    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "cash", "cash_tendered": "1000"}, headers=cashier_headers)
     assert resp.status_code == 400
     assert "Amul Butter (need 3, only 1 in stock)" in resp.get_json()["error"]["message"]
 
@@ -215,7 +215,7 @@ def test_offers_report(client, admin_headers, cashier_headers, shift, store):
     p = make_product(store, price="100.00", tax_rate="0")
     _discount(client, admin_headers, name="Weekend Sale", value="10")
     sid = _bill(client, cashier_headers, (p, 1))["id"]
-    client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    assert pay_by_razorpay(client, cashier_headers, sid).status_code == 200
     report = client.get("/api/v1/reports/sales", headers=admin_headers).get_json()
     assert report["offers"][0]["name"] == "Weekend Sale"
     assert report["offers"][0]["amount"] == "10.00"

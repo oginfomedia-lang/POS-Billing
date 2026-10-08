@@ -1,7 +1,7 @@
 """Shift open/close and cash difference tests."""
 import pytest
 
-from tests.factories import make_counter, make_product, make_store
+from tests.factories import make_counter, make_product, make_store, pay_by_razorpay
 
 pytestmark = pytest.mark.integration
 
@@ -19,7 +19,7 @@ def test_open_shift_with_counter_puts_code_on_bill(client, cashier_headers, stor
 
     sid = client.post("/api/v1/sales", headers=cashier_headers).get_json()["id"]
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id}, headers=cashier_headers)
-    sale = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers).get_json()
+    sale = pay_by_razorpay(client, cashier_headers, sid, "upi").get_json()["sale"]
     assert sale["bill_number"].startswith(f"ST{store.id:02d}-C03-")
 
 

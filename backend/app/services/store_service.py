@@ -61,7 +61,12 @@ def create_counter(store_id: int, data: CounterCreate, actor: User) -> Counter:
     if repo.get_by_code(data.code):
         raise ConflictError(f"Counter code '{data.code}' is already in use.")
 
-    counter = Counter(code=data.code, label=data.label, store_id=store_id)
+    counter = Counter(
+        code=data.code, 
+        label=data.label, 
+        store_id=store_id,
+        edc_device_id=(data.edc_device_id or "").strip() or None,
+    )
     with transaction():
         repo.add(counter)
         db.session.flush()
@@ -77,6 +82,8 @@ def update_counter(store_id: int, counter_id: int, data: CounterUpdate, actor: U
         counter.label = data.label
     if data.is_active is not None:
         counter.is_active = data.is_active
+    if data.edc_device_id is not None:                                  
+        counter.edc_device_id = data.edc_device_id.strip() or None 
 
     with transaction():
         audit_service.log(actor, "counter.update", "counter", counter.id, old, _counter_snap(counter))
@@ -111,4 +118,4 @@ def _store_snap(s: Store) -> dict:
 
 
 def _counter_snap(c: Counter) -> dict:
-    return {"code": c.code, "label": c.label, "store_id": c.store_id, "is_active": c.is_active}
+    return {"code": c.code, "label": c.label, "store_id": c.store_id, "is_active": c.is_active, "edc_device_id": c.edc_device_id,}

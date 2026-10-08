@@ -40,6 +40,7 @@ class CounterOut(BaseModel):
     store_id: int
     is_active: bool
     created_at: datetime
+    eds_device_id: str | None=None
 
     model_config = {"from_attributes": True}
 
@@ -47,8 +48,10 @@ class CounterOut(BaseModel):
 class CounterCreate(BaseModel):
     code: str = Field(..., min_length=1, max_length=10, pattern=r"^[A-Z0-9]+$")
     label: str = Field(..., min_length=1, max_length=100)
+    edc_device_id: str | None = Field(None, max_length=100)
 
 
 class CounterUpdate(BaseModel):
     label: str | None = Field(None, min_length=1, max_length=100)
     is_active: bool | None = None
+    edc_device_id: str | None = Field(None, max_length=100)

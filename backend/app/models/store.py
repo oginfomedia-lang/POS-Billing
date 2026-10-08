@@ -28,6 +28,8 @@ class Counter(TimestampMixin, db.Model):
     label = db.Column(db.String(100), nullable=False)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Razorpay POS card machine on this counter, e.g. "1490123456|ezetap_android". Empty = no card machine.
+    edc_device_id = db.Column(db.String(100), nullable=True)
 
     store = db.relationship("Store", back_populates="counters")
 
