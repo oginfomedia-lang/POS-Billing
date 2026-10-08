@@ -12,3 +12,4 @@ class TestingConfig(BaseConfig):
         "postgresql+psycopg://pos_app:change_me@localhost:5432/pos_test",
     )
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    RAZORPAY_MOCK = True  # no real money, no real machine

@@ -19,6 +19,8 @@ class DiscountRepository(BaseRepository):
         )
         return list(db.session.scalars(q).all())
 
-    def list_all(self) -> list[Discount]:
+    def list_all(self, store_id: int | None = None) -> list[Discount]:
         q = db.select(Discount).order_by(Discount.is_active.desc(), Discount.name)
+        if store_id is not None:
+            q = q.where((Discount.store_id.is_(None)) | (Discount.store_id == store_id))
         return list(db.session.scalars(q).all())

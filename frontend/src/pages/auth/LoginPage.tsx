@@ -1,11 +1,15 @@
 // Cashier / admin login screen.
 import { type FormEvent, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { LanguageSwitcher } from '../../components/common/LanguageSwitcher';
 import { IconLogOut, IconShoppingCart } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
+import { lastStoreName } from '../../store/storeContext';
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
@@ -40,23 +44,24 @@ export function LoginPage() {
   return (
     <section className="login-page">
       <div className="login-card">
+        <LanguageSwitcher className="login-language" />
         <div className="login-brand-header">
           <div className="login-brand-logo">
             <IconShoppingCart size={28} color="#ffffff" />
           </div>
-          <h1 className="login-title">SUPERMARKET POS</h1>
-          <p className="login-subtitle">Billing & Inventory Terminal Login</p>
+          <h1 className="login-title">{lastStoreName() || 'SUPERMARKET POS'}</h1>
+          <p className="login-subtitle">{t('login.subtitle')}</p>
         </div>
 
         {error && <div className="login-error">{error}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
           <label className="field-label">
-            <span>Staff Username</span>
+            <span>{t('login.username')}</span>
             <input
               className="field-input"
               type="text"
-              placeholder="e.g. admin or cashier1"
+              placeholder={t('login.usernamePlaceholder')}
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -66,7 +71,7 @@ export function LoginPage() {
           </label>
 
           <label className="field-label">
-            <span>Passcode / PIN</span>
+            <span>{t('login.pin')}</span>
             <input
               className="field-input"
               type="password"
@@ -83,12 +88,12 @@ export function LoginPage() {
 
           <button className="btn-primary btn-login-submit" type="submit" disabled={busy}>
             <IconLogOut size={18} />
-            <span>{busy ? 'Authenticating Terminal…' : 'Sign In to POS'}</span>
+            <span>{busy ? t('login.signingIn') : t('login.signIn')}</span>
           </button>
         </form>
 
         <div className="login-footer-hint">
-          <span>🔒 Secured Supermarket Counter Session</span>
+          <span>🔒 {t('login.secured', { store: lastStoreName() })}</span>
         </div>
       </div>
     </section>

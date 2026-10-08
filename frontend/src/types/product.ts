@@ -22,7 +22,9 @@ export interface ProductOut {
   name: string;
   description: string | null;
   category_id: number | null;
-  price: string;
+  price: string; // head-office price
+  /** This branch's own price, when the request named a store (null = sells at `price`). */
+  store_price?: string | null;
   tax_rate: string;
   uom: UOMType;
   is_variable_weight: boolean;

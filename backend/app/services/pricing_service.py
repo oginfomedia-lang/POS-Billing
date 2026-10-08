@@ -21,22 +21,46 @@ def line_amounts(unit_price, qty: int, tax_rate, discount=ZERO) -> tuple[Decimal
     return line_total, tax_amount
 
 
-def item_discount(discount_type: DiscountType, value, line_total, qty: int) -> Decimal:
-    """Product/category discount for one line. FIXED is rupees off each unit. Never exceeds the line."""
+def item_discount(discount_type: DiscountType, value, line_total, qty, cap=None) -> Decimal:
+    """Product/category discount for one line. FIXED is rupees off each unit. A PERCENTAGE offer
+    stops at `cap` rupees per line when a cap is set. Never exceeds the line."""
     if discount_type is DiscountType.PERCENTAGE:
         amount = to_decimal(line_total) * to_decimal(value) / Decimal("100")
+        if cap is not None:
+            amount = min(amount, to_decimal(cap))
     else:
-        amount = to_decimal(value) * qty
+        amount = to_decimal(value) * to_decimal(qty)
     return round_money(min(amount, to_decimal(line_total)))
 
 
-def bill_discount(discount_type: DiscountType, value, amount) -> Decimal:
-    """Whole-bill discount on `amount`. FIXED is rupees off the bill. Never exceeds the amount."""
+def bill_discount(discount_type: DiscountType, value, amount, cap=None) -> Decimal:
+    """Whole-bill discount on `amount`. FIXED is rupees off the bill. A PERCENTAGE offer stops at
+    `cap` rupees when a cap is set. Never exceeds the amount."""
     if discount_type is DiscountType.PERCENTAGE:
         off = to_decimal(amount) * to_decimal(value) / Decimal("100")
+        if cap is not None:
+            off = min(off, to_decimal(cap))
     else:
         off = to_decimal(value)
     return round_money(min(off, to_decimal(amount)))
+
+
+def buy_x_get_y_discount(buy_qty: int, get_qty: int, line_total) -> Decimal:
+    """'Buy X get Y free' on the same product, shared proportionally across every unit:
+    each unit is get / (buy + get) off. So Buy 1 Get 1 with just 1 unit = half price, and a
+    full group still works out exactly (Buy 2 Get 1 on 3 units = 1 unit free)."""
+    return round_money(to_decimal(line_total) * get_qty / (buy_qty + get_qty))
+
+
+def qty_price_discount(unit_price, qty, tax_rate, bundle_qty: int, bundle_price, line_total) -> Decimal:
+    """'3 for ₹99': each full bundle costs `bundle_price` (incl. GST, as the shelf tag says)
+    instead of bundle_qty × unit_price. No discount if the bundle isn't actually cheaper."""
+    bundles = int(to_decimal(qty) // bundle_qty)
+    bundle_price_ex_gst = to_decimal(bundle_price) * Decimal("100") / (Decimal("100") + to_decimal(tax_rate))
+    saving_per_bundle = to_decimal(unit_price) * bundle_qty - bundle_price_ex_gst
+    if bundles == 0 or saving_per_bundle <= 0:
+        return ZERO
+    return round_money(min(saving_per_bundle * bundles, to_decimal(line_total)))
 
 
 def allocate(amount, weights: list[Decimal]) -> list[Decimal]:

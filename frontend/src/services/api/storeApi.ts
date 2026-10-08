@@ -29,15 +29,24 @@ export async function listCounters(storeId: number): Promise<CounterOut[]> {
   return resp.data;
 }
 
-export async function createCounter(storeId: number, code: string, label: string): Promise<CounterOut> {
-  const resp = await httpClient.post<CounterOut>(`/stores/${storeId}/counters`, { code, label });
+export async function createCounter(
+  storeId: number,
+  code: string,
+  label: string,
+  edcDeviceId?: string | null,
+): Promise<CounterOut> {
+  const resp = await httpClient.post<CounterOut>(`/stores/${storeId}/counters`, {
+    code,
+    label,
+    edc_device_id: edcDeviceId || null,
+  });
   return resp.data;
 }
 
 export async function updateCounter(
   storeId: number,
   counterId: number,
-  data: { label?: string; is_active?: boolean },
+  data: { label?: string; is_active?: boolean; edc_device_id?: string }, // edc_device_id "" removes the machine
 ): Promise<CounterOut> {
   const resp = await httpClient.put<CounterOut>(`/stores/${storeId}/counters/${counterId}`, data);
   return resp.data;

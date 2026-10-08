@@ -96,6 +96,44 @@ class ReportRepository:
         )
         return db.session.execute(q).all()
 
+    def offer_usage(self, store_id: int | None, start: datetime, end: datetime):
+        """(kind, name, bills, amount) for item offers, bill offers and manual discounts on paid bills."""
+        paid = self._paid(store_id, start, end)
+        item = (
+            db.select(
+                db.literal("item"),
+                db.func.max(SaleItem.offer_name),
+                db.func.count(db.distinct(SaleItem.sale_id)),
+                db.func.sum(SaleItem.offer_discount),
+            )
+            .join(Sale, Sale.id == SaleItem.sale_id)
+            .where(*paid, SaleItem.offer_id.is_not(None))
+            .group_by(SaleItem.offer_id)
+        )
+        bill = (
+            db.select(
+                db.literal("bill"),
+                db.func.max(Sale.bill_offer_name),
+                db.func.count(Sale.id),
+                db.func.sum(Sale.bill_offer_discount),
+            )
+            .where(*paid, Sale.bill_offer_id.is_not(None))
+            .group_by(Sale.bill_offer_id)
+        )
+        manual = (
+            db.select(
+                db.literal("manual"),
+                db.literal("Manual discounts"),
+                db.func.count(db.distinct(SaleItem.sale_id)),
+                db.func.sum(SaleItem.manual_discount),
+            )
+            .join(Sale, Sale.id == SaleItem.sale_id)
+            .where(*paid, SaleItem.manual_discount > 0)
+            .having(db.func.count(SaleItem.id) > 0)
+        )
+        rows = [*db.session.execute(item).all(), *db.session.execute(bill).all(), *db.session.execute(manual).all()]
+        return sorted(rows, key=lambda r: r[3], reverse=True)
+
     def shifts(self, store_id: int | None, start: datetime, end: datetime):
         """Shifts opened in the range, with bill count and cash taken."""
         paid = (

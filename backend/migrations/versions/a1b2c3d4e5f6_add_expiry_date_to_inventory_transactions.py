@@ -15,8 +15,11 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('inventory_transactions', sa.Column('expiry_date', sa.Date(), nullable=True))
+    op.add_column(
+        "inventory_transactions",
+        sa.Column("expiry_date", sa.Date, nullable=True),
+    )
 
 
 def downgrade():
-    op.drop_column('inventory_transactions', 'expiry_date')
+    op.drop_column("inventory_transactions", "expiry_date")

@@ -1,7 +1,9 @@
 // Store and counter management. Admins edit; managers can view.
 // A counter's code must match "counterCode" in counter.json on that till's PC.
 import { type FormEvent, useEffect, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 import {
@@ -13,6 +15,7 @@ import {
   updateStore,
 } from '../../services/api/storeApi';
 import type { CounterOut, StoreOut } from '../../types/api';
+import { useStoreContext } from '../../store/storeContext';
 
 type Modal =
   | { kind: 'store'; store: StoreOut | null }
@@ -20,6 +23,7 @@ type Modal =
   | null;
 
 export function CountersPage() {
+  const { t } = useTranslation();
   const { isAdmin } = useAuth();
 
   const [stores, setStores] = useState<StoreOut[]>([]);
@@ -27,9 +31,12 @@ export function CountersPage() {
   const [counters, setCounters] = useState<CounterOut[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Active and deactivated stores / counters are listed separately.
+  const [storeView, setStoreView] = useState<StatusView>('active');
+  const [counterView, setCounterView] = useState<StatusView>('active');
 
   const [modal, setModal] = useState<Modal>(null);
-  const [form, setForm] = useState({ name: '', address: '', phone: '', gstin: '', code: '', label: '', active: true });
+  const [form, setForm] = useState({ name: '', address: '', phone: '', gstin: '', code: '', label: '', edc: '', active: true });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -56,6 +63,16 @@ export function CountersPage() {
   }
 
   useEffect(() => { fetchStores(); }, []);
+
+  const visibleStores = stores.filter((s) => s.is_active === (storeView === 'active'));
+  const visibleCounters = counters.filter((c) => c.is_active === (counterView === 'active'));
+  const storeCounts = { active: stores.filter((s) => s.is_active).length, inactive: stores.filter((s) => !s.is_active).length };
+  const counterCounts = { active: counters.filter((c) => c.is_active).length, inactive: counters.filter((c) => !c.is_active).length };
+
+  // Keep the selected store inside the tab being shown (e.g. after deactivating it or switching tabs).
+  useEffect(() => {
+    if (!visibleStores.some((s) => s.id === selected?.id)) setSelected(visibleStores[0] ?? null);
+  }, [storeView, stores]);
   useEffect(() => {
     if (selected) fetchCounters(selected.id);
     else setCounters([]);
@@ -75,7 +92,13 @@ export function CountersPage() {
   }
 
   function openCounter(counter: CounterOut | null) {
-    setForm({ ...form, code: counter?.code ?? '', label: counter?.label ?? '', active: counter?.is_active ?? true });
+    setForm({
+      ...form,
+      code: counter?.code ?? '',
+      label: counter?.label ?? '',
+      edc: counter?.edc_device_id ?? '',
+      active: counter?.is_active ?? true,
+    });
     setFormError('');
     setModal({ kind: 'counter', counter });
   }
@@ -97,11 +120,16 @@ export function CountersPage() {
           ? await updateStore(modal.store.id, { ...data, is_active: form.active })
           : await createStore(data);
         await fetchStores(saved.id);
+        await useStoreContext.getState().refresh();
       } else if (selected) {
         if (modal.counter) {
-          await updateCounter(selected.id, modal.counter.id, { label: form.label.trim(), is_active: form.active });
+          await updateCounter(selected.id, modal.counter.id, {
+            label: form.label.trim(),
+            is_active: form.active,
+            edc_device_id: form.edc.trim(), // "" = no card machine
+          });
         } else {
-          await createCounter(selected.id, form.code.trim().toUpperCase(), form.label.trim());
+          await createCounter(selected.id, form.code.trim().toUpperCase(), form.label.trim(), form.edc.trim());
         }
         await fetchCounters(selected.id);
       }
@@ -117,27 +145,34 @@ export function CountersPage() {
     <div className="admin-page">
       <AdminNav />
       <div className="admin-header">
-        <h2>Stores &amp; Counters</h2>
+        <h2>{t('stores.title')}</h2>
         {isAdmin && (
           <div className="admin-actions">
-            <button className="btn-primary" onClick={() => openStore(null)}>+ Add Store</button>
+            <button className="btn-primary" onClick={() => openStore(null)}>{t('stores.addStore')}</button>
           </div>
         )}
       </div>
 
       {error && <div className="page-error">{error}</div>}
-      {loading && <div className="loading-text">Loading…</div>}
+      <StatusTabs value={storeView} onChange={setStoreView} counts={storeCounts} />
+      {loading && <div className="loading-text">{t('common.loading')}</div>}
 
       <div className="table-card">
         <table className="data-table">
           <thead>
-            <tr><th>Store</th><th>Address</th><th>Phone</th><th>GSTIN</th><th>Active</th><th /></tr>
+            <tr><th>{t('stores.colStore')}</th><th>{t('stores.colAddress')}</th><th>{t('stores.colPhone')}</th><th>{t('stores.colGstin')}</th><th /></tr>
           </thead>
           <tbody>
-            {!loading && stores.length === 0 && (
-              <tr><td colSpan={6} className="empty-row">No stores yet. Add one to get started.</td></tr>
+            {!loading && visibleStores.length === 0 && (
+              <tr>
+                <td colSpan={5} className="empty-row">
+                  {storeView === 'inactive'
+                    ? t('stores.emptyInactive')
+                    : stores.length === 0 ? t('stores.emptyNone') : t('stores.emptyActive')}
+                </td>
+              </tr>
             )}
-            {stores.map((s) => (
+            {visibleStores.map((s) => (
               <tr
                 key={s.id}
                 className={`clickable-row${selected?.id === s.id ? ' selected-row' : ''}`}
@@ -147,10 +182,9 @@ export function CountersPage() {
                 <td>{s.address ?? '—'}</td>
                 <td>{s.phone ?? '—'}</td>
                 <td>{s.gstin ?? '—'}</td>
-                <td>{s.is_active ? '✓' : '—'}</td>
                 <td className="table-actions">
                   {isAdmin && (
-                    <button className="btn-sm" onClick={(e) => { e.stopPropagation(); openStore(s); }}>Edit</button>
+                    <button className="btn-sm" onClick={(e) => { e.stopPropagation(); openStore(s); }}>{t('common.edit')}</button>
                   )}
                 </td>
               </tr>
@@ -162,33 +196,39 @@ export function CountersPage() {
       {selected && (
         <section className="sub-section">
           <div className="admin-header">
-            <h3>Counters — {selected.name}</h3>
+            <h3>{t('stores.countersTitle', { store: selected.name })}</h3>
             {isAdmin && (
               <div className="admin-actions">
-                <button className="btn-primary" onClick={() => openCounter(null)}>+ Add Counter</button>
+                <button className="btn-primary" onClick={() => openCounter(null)}>{t('stores.addCounter')}</button>
               </div>
             )}
           </div>
           <p className="hint-text">
-            Each till PC's <code>counter.json</code> must have <code>"counterCode"</code> set to one of these codes,
-            or cashiers on that PC can't open a shift.
+            <Trans i18nKey="stores.counterHint" components={{ code: <code /> }} />
           </p>
+          <StatusTabs value={counterView} onChange={setCounterView} counts={counterCounts} />
           <div className="table-card">
             <table className="data-table">
               <thead>
-                <tr><th>Code</th><th>Label</th><th>Active</th><th /></tr>
+                <tr><th>{t('stores.colCode')}</th><th>{t('stores.colLabel')}</th><th>{t('stores.colCardMachine')}</th><th /></tr>
               </thead>
               <tbody>
-                {counters.length === 0 && (
-                  <tr><td colSpan={4} className="empty-row">No counters in this store.</td></tr>
+                {visibleCounters.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="empty-row">
+                      {counterView === 'active' ? t('stores.emptyCountersActive') : t('stores.emptyCountersInactive')}
+                    </td>
+                  </tr>
+
                 )}
-                {counters.map((c) => (
+                {visibleCounters.map((c) => (
                   <tr key={c.id}>
                     <td><strong>{c.code}</strong></td>
                     <td>{c.label}</td>
+                    <td>{c.edc_device_id ?? '—'}</td>
                     <td>{c.is_active ? '✓' : '—'}</td>
                     <td className="table-actions">
-                      {isAdmin && <button className="btn-sm" onClick={() => openCounter(c)}>Edit</button>}
+                      {isAdmin && <button className="btn-sm" onClick={() => openCounter(c)}>{t('common.edit')}</button>}
                     </td>
                   </tr>
                 ))}
@@ -203,29 +243,29 @@ export function CountersPage() {
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <h3>
               {modal.kind === 'store'
-                ? (modal.store ? `Edit ${modal.store.name}` : 'Add Store')
-                : (modal.counter ? `Edit Counter ${modal.counter.code}` : `Add Counter — ${selected?.name}`)}
+                ? (modal.store ? t('stores.editStore', { name: modal.store.name }) : t('stores.addStoreTitle'))
+                : (modal.counter ? t('stores.editCounter', { code: modal.counter.code }) : t('stores.addCounterTitle', { store: selected?.name }))}
             </h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={handleSubmit} className="modal-form">
               {modal.kind === 'store' ? (
                 <>
-                  <label className="field-label">Name
+                  <label className="field-label">{t('common.name')}
                     <input className="field-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={150} autoFocus />
                   </label>
-                  <label className="field-label">Address
+                  <label className="field-label">{t('stores.address')}
                     <input className="field-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
                   </label>
-                  <label className="field-label">Phone
+                  <label className="field-label">{t('stores.phone')}
                     <input className="field-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={20} />
                   </label>
-                  <label className="field-label">GSTIN
+                  <label className="field-label">{t('stores.gstin')}
                     <input className="field-input" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} maxLength={20} />
                   </label>
                 </>
               ) : (
                 <>
-                  <label className="field-label">Code (e.g. C02)
+                  <label className="field-label">{t('stores.code')}
                     <input
                       className="field-input"
                       value={form.code}
@@ -234,24 +274,33 @@ export function CountersPage() {
                       pattern="[A-Z0-9]+"
                       maxLength={10}
                       disabled={modal.counter !== null}
-                      title="Letters and digits only. Can't be changed later."
+                      title={t('stores.codeTitle')}
                       autoFocus={modal.counter === null}
                     />
                   </label>
-                  <label className="field-label">Label
-                    <input className="field-input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required maxLength={100} placeholder="e.g. Counter 2 (near entrance)" />
+                  <label className="field-label">{t('stores.label')}
+                    <input className="field-input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required maxLength={100} placeholder={t('stores.labelPlaceholder')} />
+                  </label>
+                  <label className="field-label">Card machine ID (Razorpay POS)
+                    <input
+                      className="field-input"
+                      value={form.edc}
+                      onChange={(e) => setForm({ ...form, edc: e.target.value })}
+                      maxLength={100}
+                      placeholder="e.g. 1490123456|ezetap_android — leave empty if no card machine"
+                    />
                   </label>
                 </>
               )}
               {(modal.kind === 'store' ? modal.store : modal.counter) && (
                 <label className="field-label checkbox-label">
                   <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
-                  Active
+                  {t('common.active')}
                 </label>
               )}
               <div className="modal-buttons">
-                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>Cancel</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+                <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
               </div>
             </form>
           </div>

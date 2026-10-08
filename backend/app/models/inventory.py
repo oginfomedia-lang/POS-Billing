@@ -12,6 +12,7 @@ class Inventory(db.Model):
     __table_args__ = (
         UniqueConstraint("store_id", "product_id", name="uq_inventory_store_product"),
         CheckConstraint("qty_on_hand >= 0", name="ck_inventory_qty_non_negative"),
+        CheckConstraint("price IS NULL OR price >= 0", name="ck_inventory_price_non_negative"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -19,6 +20,8 @@ class Inventory(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
     qty_on_hand = db.Column(db.Numeric(12, 3), nullable=False, default=0)
     low_stock_threshold = db.Column(db.Numeric(12, 3), nullable=True)
+    # This store's own selling price (before GST). NULL = use the head-office price (products.price).
+    price = db.Column(db.Numeric(12, 2), nullable=True)
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

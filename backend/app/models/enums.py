@@ -37,6 +37,8 @@ class ShiftStatus(str, enum.Enum):
 class DiscountType(str, enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
+    BUY_X_GET_Y = "buy_x_get_y"  # buy `buy_qty` units, get `get_qty` more of the same product free
+    QTY_PRICE = "qty_price"  # `buy_qty` units for `value` rupees incl. GST (e.g. 3 for ₹99)
 
 
 class DiscountScope(str, enum.Enum):
@@ -58,5 +60,11 @@ class UOMType(str, enum.Enum):
     LTR = "ltr"
     ML = "ml"
     PACK = "pack"
+
+class PaymentIntentStatus(str, enum.Enum):
+    PENDING = "pending"      # QR shown / amount pushed to card machine, waiting for customer
+    PAID = "paid"            # Razorpay confirmed the money; sale completed
+    FAILED = "failed"        # card declined / machine error
+    CANCELLED = "cancelled"  # cashier cancelled, or QR expired
 
 

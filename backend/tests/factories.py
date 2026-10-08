@@ -86,3 +86,21 @@ def make_shift(user: User, counter: Counter | None = None, opening_float: str = 
     db.session.add(shift)
     db.session.commit()
     return shift
+
+
+def pay_by_razorpay(client, headers, sale_id: int, method: str = "upi"):
+    """Pays a bill by card/UPI the way the POS does (Razorpay mock mode).
+
+    Starts the payment, pretends the customer paid, then polls once. Returns the poll response:
+    on success its JSON has status "paid" and the completed bill under "sale".
+    """
+    from app.models.payment_intent import PaymentIntent
+    from app.services import razorpay_gateway
+
+    resp = client.post(f"/api/v1/sales/{sale_id}/payment-intents", json={"method": method}, headers=headers)
+    if resp.status_code != 201:
+        return resp
+    intent_id = resp.get_json()["id"]
+    ref = db.session.get(PaymentIntent, intent_id).provider_ref
+    razorpay_gateway._mock_started[ref] = 0  # "paid" long ago
+    return client.get(f"/api/v1/payment-intents/{intent_id}", headers=headers)

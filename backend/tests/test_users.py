@@ -71,3 +71,12 @@ def test_reset_pin(client, admin_user, admin_headers, cashier_user):
         json={"username": cashier_user.username, "pin": "9876"},
     )
     assert login_resp.status_code == 200
+
+
+def test_list_users_by_status(client, admin_user, admin_headers, cashier_user):
+    client.put(f"/api/v1/users/{cashier_user.id}", json={"is_active": False}, headers=admin_headers)
+    active = client.get("/api/v1/users?status=active", headers=admin_headers).get_json()["items"]
+    inactive = client.get("/api/v1/users?status=inactive", headers=admin_headers).get_json()["items"]
+    assert [u["username"] for u in inactive] == ["cashier1"]
+    assert "cashier1" not in [u["username"] for u in active]
+    assert client.get("/api/v1/users?status=bogus", headers=admin_headers).status_code == 422

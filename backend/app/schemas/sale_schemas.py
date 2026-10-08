@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 from app.models.enums import SaleStatus
@@ -21,6 +21,10 @@ class SaleItemOut(BaseModel):
     qty: int | float
     line_total: Decimal
     discount_amount: Decimal
+    offer_name: str | None = None
+    offer_discount: Decimal = Decimal("0")
+    manual_discount: Decimal = Decimal("0")
+    manual_discount_reason: str | None = None
     tax_amount: Decimal
 
     model_config = {"from_attributes": True}
@@ -47,6 +51,8 @@ class SaleOut(BaseModel):
     status: SaleStatus
     subtotal: Decimal
     discount_amount: Decimal
+    bill_offer_name: str | None = None
+    bill_offer_discount: Decimal = Decimal("0")
     tax_amount: Decimal
     total: Decimal
     note: str | None
@@ -67,6 +73,22 @@ class UpdateItemRequest(BaseModel):
     qty: Decimal = Field(..., ge=Decimal("0.001"), le=Decimal("9999"))
 
 
+class ManualDiscountRequest(BaseModel):
+    """Counter discount on one line (e.g. damaged pack). amount 0 removes it.
+    A manager or admin approves it by typing their own username and PIN."""
+
+    amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
+    reason: str = Field("", max_length=100)
+    approver_username: str = Field(..., min_length=1, max_length=50)
+    approver_pin: str = Field(..., min_length=4, max_length=8)
+
+    @model_validator(mode="after")
+    def need_reason(self) -> "ManualDiscountRequest":
+        if self.amount > 0 and not self.reason.strip():
+            raise ValueError("Enter a reason for the discount.")
+        return self
+
+
 
 class HoldSaleRequest(BaseModel):
     note: str | None = Field(None, max_length=255)
@@ -76,6 +98,7 @@ class CompleteSaleRequest(BaseModel):
     method: Literal["cash", "card", "upi"]
     cash_tendered: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
     reference: str | None = Field(None, max_length=100)
+    payment_intent_id: int | None = None   # required for card/upi: proof Razorpay confirmed the money
 
 
 class ReceiptOut(BaseModel):
@@ -91,6 +114,8 @@ class ReceiptOut(BaseModel):
     items: list[SaleItemOut]
     subtotal: Decimal
     discount_amount: Decimal
+    bill_offer_name: str | None = None
+    bill_offer_discount: Decimal = Decimal("0")
     tax_amount: Decimal
     total: Decimal
     payments: list[PaymentOut]

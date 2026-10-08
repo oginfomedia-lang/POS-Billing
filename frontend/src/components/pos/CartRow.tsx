@@ -1,8 +1,9 @@
 // One bill line (name, qty, price, total).
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SaleItemOut } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
-import { IconMinus, IconPlus, IconTrash } from '../common/Icons';
+import { IconMinus, IconPercent, IconPlus, IconTrash } from '../common/Icons';
 
 interface Props {
   item: SaleItemOut;
@@ -10,9 +11,11 @@ interface Props {
   disabled: boolean;
   onQtyChange: (itemId: number, qty: number) => void;
   onRemove: (itemId: number) => void;
+  onManualDiscount: (item: SaleItemOut) => void;
 }
 
-export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props) {
+export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManualDiscount }: Props) {
+  const { t } = useTranslation();
   const [qty, setQty] = useState(String(item.qty));
 
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
@@ -56,7 +59,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
             className="stepper-btn stepper-btn-minus"
             disabled={disabled}
             onClick={handleDecrement}
-            title="Decrease quantity"
+            title={t('pos.decreaseQty')}
           >
             <IconMinus size={14} />
           </button>
@@ -76,7 +79,7 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
             className="stepper-btn stepper-btn-plus"
             disabled={disabled}
             onClick={handleIncrement}
-            title="Increase quantity"
+            title={t('pos.increaseQty')}
           >
             <IconPlus size={14} />
           </button>
@@ -84,16 +87,31 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove }: Props)
       </td>
       <td className="num line-total-cell">
         <div className="line-total-val">{formatRupees(item.line_total)}</div>
-        {Number(item.discount_amount) > 0 && (
-          <div className="line-discount-badge">− {formatRupees(item.discount_amount)}</div>
+        {Number(item.offer_discount) > 0 && (
+          <div className="line-discount-badge" title={item.offer_name ?? undefined}>
+            {item.offer_name} − {formatRupees(item.offer_discount)}
+          </div>
+        )}
+        {Number(item.manual_discount) > 0 && (
+          <div className="line-discount-badge line-discount-manual" title={item.manual_discount_reason ?? undefined}>
+            {t('pos.manual')} − {formatRupees(item.manual_discount)}
+          </div>
         )}
       </td>
       <td className="actions-cell">
         <button
+          className="btn-line-discount"
+          disabled={disabled}
+          onClick={() => onManualDiscount(item)}
+          title={t('pos.manualDiscountTitle')}
+        >
+          <IconPercent size={16} />
+        </button>
+        <button
           className="btn-remove-line"
           disabled={disabled}
           onClick={() => onRemove(item.id)}
-          title="Void / remove line"
+          title={t('pos.removeLine')}
         >
           <IconTrash size={16} />
         </button>

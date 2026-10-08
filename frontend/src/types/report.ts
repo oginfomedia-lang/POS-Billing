@@ -39,6 +39,13 @@ export interface TopProductRow {
   amount: string;
 }
 
+export interface OfferRow {
+  kind: 'item' | 'bill' | 'manual';
+  name: string;
+  bills: number;
+  amount: string;
+}
+
 export interface SalesReportOut {
   store_id: number | null;
   date_from: string;
@@ -48,6 +55,7 @@ export interface SalesReportOut {
   daily: DailyRow[];
   gst: GstRow[];
   top_products: TopProductRow[];
+  offers: OfferRow[];
 }
 
 export interface ShiftRow {
@@ -83,7 +91,7 @@ export interface DashboardOut {
   recent_sales: RecentSale[];
 }
 
-export type DiscountType = 'percentage' | 'fixed';
+export type DiscountType = 'percentage' | 'fixed' | 'buy_x_get_y' | 'qty_price';
 export type DiscountScope = 'bill' | 'product' | 'category';
 
 export interface DiscountOut {
@@ -96,12 +104,18 @@ export interface DiscountOut {
   category_id: number | null;
   store_id: number | null;
   min_bill_amount: string | null;
+  max_discount_amount: string | null;
+  buy_qty: number | null;
+  get_qty: number | null;
   starts_at: string | null;
   ends_at: string | null;
   is_active: boolean;
+  /** Filled by the server for display (never sent back). */
+  product_name: string | null;
+  category_name: string | null;
 }
 
-export type DiscountIn = Omit<DiscountOut, 'id'>;
+export type DiscountIn = Omit<DiscountOut, 'id' | 'product_name' | 'category_name'>;
 
 export interface SettingsData {
   receipt_header: string;

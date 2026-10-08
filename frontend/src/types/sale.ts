@@ -22,7 +22,11 @@ export interface SaleItemOut {
   tax_rate: string;
   qty: number;
   line_total: string; // unit_price × qty, before discount
-  discount_amount: string;
+  discount_amount: string; // offer + manual + this line's share of the bill offer
+  offer_name: string | null;
+  offer_discount: string; // item offer only
+  manual_discount: string; // counter discount, manager-approved
+  manual_discount_reason: string | null;
   tax_amount: string;
 }
 
@@ -36,6 +40,8 @@ export interface SaleOut {
   status: SaleStatus;
   subtotal: string;
   discount_amount: string;
+  bill_offer_name: string | null;
+  bill_offer_discount: string;
   tax_amount: string;
   total: string;
   note: string | null;
@@ -58,6 +64,8 @@ export interface ReceiptOut {
   items: SaleItemOut[];
   subtotal: string;
   discount_amount: string;
+  bill_offer_name: string | null;
+  bill_offer_discount: string;
   tax_amount: string;
   total: string;
   payments: PaymentOut[];
@@ -67,3 +75,21 @@ export interface ReceiptOut {
 
 /** Methods the complete-sale endpoint accepts. */
 export type TenderMethod = Exclude<PaymentMethod, 'split'>;
+
+/** Card/UPI go through Razorpay; cash is completed directly. */
+export type DigitalMethod = Exclude<TenderMethod, 'cash'>;
+
+export type PaymentIntentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
+
+/** One Razorpay attempt: a UPI QR for the exact total, or the total pushed to the card machine. */
+export interface PaymentIntentOut {
+  id: number;
+  sale_id: number;
+  method: DigitalMethod;
+  amount: string;
+  status: PaymentIntentStatus;
+  qr_image_url: string | null; // UPI only
+  failure_reason: string | null;
+  created_at: string;
+  sale?: SaleOut | null; // set by the poll endpoint once Razorpay confirms and the bill is completed
+}

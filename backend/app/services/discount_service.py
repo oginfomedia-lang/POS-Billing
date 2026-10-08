@@ -1,16 +1,18 @@
-"""Discount management (audited) and selection of the best discount for a bill.
+"""Discount management (audited) and selection of the one best offer for a bill.
 
-Rules: each line gets the single best PRODUCT/CATEGORY discount; the bill then gets the
-single best BILL discount (on the amount after line discounts). Discounts don't stack.
+Rule: only ONE automatic offer applies per bill — whichever saves the customer the most.
+Item offers (PRODUCT/CATEGORY; a category offer also covers its sub-categories) and bill
+offers all compete. Manager-approved manual discounts are separate and still apply.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal
 
 from app.errors.exceptions import NotFoundError
 from app.extensions import db
 from app.models.discount import Discount
-from app.models.enums import DiscountScope
+from app.models.enums import DiscountScope, DiscountType
 from app.models.sale import SaleItem
 from app.models.user import User
 from app.repositories.category_repository import CategoryRepository
@@ -20,18 +22,40 @@ from app.repositories.store_repository import StoreRepository
 from app.schemas.discount_schemas import DiscountIn, DiscountOut
 from app.services import audit_service, pricing_service
 from app.utils.dates import now_ist
+from app.utils.store_scope import require_store_access
 from app.utils.transactions import transaction
 
 ZERO = Decimal("0.00")
 
 
+@dataclass(frozen=True)
+class AppliedOffer:
+    """The offer chosen for the bill. id/name are None when no offer applies; amount is the total saved."""
+    discount_id: int | None
+    name: str | None
+    amount: Decimal
+
+
+NO_OFFER = AppliedOffer(None, None, ZERO)
+
+
+@dataclass(frozen=True)
+class ChosenOffer:
+    """The single automatic offer applied to a bill and the rupees it takes off each line."""
+    offer: AppliedOffer
+    line_amounts: list[Decimal]
+    is_bill_offer: bool  # True: a BILL offer spread across lines; False: an item offer
+
+
 # ── Admin CRUD ───────────────────────────────────────────────────────────────
 
-def list_discounts() -> list[Discount]:
-    return DiscountRepository().list_all()
+def list_discounts(store_id: int | None = None) -> list[Discount]:
+    """All offers, or (store_id given) that store's own offers plus the all-store ones."""
+    return DiscountRepository().list_all(store_id)
 
 
 def create_discount(data: DiscountIn, actor: User) -> Discount:
+    require_store_access(actor, data.store_id)  # branch managers: own-store offers only
     _check_refs(data)
     discount = Discount(**data.model_dump())
     with transaction():
@@ -45,6 +69,9 @@ def update_discount(discount_id: int, data: DiscountIn, actor: User) -> Discount
     discount = DiscountRepository().get_by_id(discount_id)
     if discount is None:
         raise NotFoundError(f"Discount {discount_id} not found.")
+    # Branch managers can't edit all-store or other stores' offers, or move an offer to another store.
+    require_store_access(actor, discount.store_id)
+    require_store_access(actor, data.store_id)
     _check_refs(data)
     old = _snap(discount)
     for field, value in data.model_dump().items():
@@ -73,25 +100,62 @@ def active_for_store(store_id: int) -> list[Discount]:
     return DiscountRepository().active_for_store(store_id, now_ist())
 
 
-def line_discounts(discounts: list[Discount], items: list[SaleItem]) -> list[Decimal]:
-    """Best PRODUCT/CATEGORY discount for each item (items must have line_total set)."""
-    out = []
-    for item in items:
-        category_id = item.product.category_id if item.product else None
-        best = ZERO
-        for d in discounts:
-            matches = (d.scope is DiscountScope.PRODUCT and d.product_id == item.product_id) or (
-                d.scope is DiscountScope.CATEGORY and category_id is not None and d.category_id == category_id
-            )
-            if matches:
-                best = max(best, pricing_service.item_discount(d.discount_type, d.value, item.line_total, item.qty))
-        out.append(best)
-    return out
+def choose_best_offer(
+    discounts: list[Discount], items: list[SaleItem], room: list[Decimal], qualifying_amount: Decimal
+) -> ChosenOffer:
+    """Only ONE automatic offer applies per bill: whichever saves the customer the most in total.
 
+    items must have line_total set. room[i] = what's left of line i after its manual discount
+    (an offer can't take a line below zero). A bill offer's % is taken from sum(room) (before GST);
+    its minimum is checked against `qualifying_amount` (with GST — the total the customer sees).
+    Ties keep the offer found first.
+    """
+    best = ChosenOffer(NO_OFFER, [ZERO] * len(items), False)
+    parents = CategoryRepository().parent_map()
+    families = [_with_ancestors(item.product.category_id if item.product else None, parents) for item in items]
+    bill_amount = sum(room, ZERO)
 
-def best_bill_discount(discounts: list[Discount], amount: Decimal) -> Decimal:
-    best = ZERO
     for d in discounts:
-        if d.scope is DiscountScope.BILL and amount > 0 and amount >= (d.min_bill_amount or ZERO):
-            best = max(best, pricing_service.bill_discount(d.discount_type, d.value, amount))
+        if d.scope is DiscountScope.BILL:
+            if bill_amount <= 0 or qualifying_amount < (d.min_bill_amount or ZERO):
+                continue
+            off = pricing_service.bill_discount(d.discount_type, d.value, bill_amount, d.max_discount_amount)
+            if off > best.offer.amount:
+                best = ChosenOffer(AppliedOffer(d.id, d.name, off), pricing_service.allocate(off, room), True)
+        else:
+            lines = [
+                min(_item_offer_amount(d, item), r) if _matches(d, item, family) else ZERO
+                for item, family, r in zip(items, families, room)
+            ]
+            total = sum(lines, ZERO)
+            if total > best.offer.amount:
+                best = ChosenOffer(AppliedOffer(d.id, d.name, total), lines, False)
     return best
+
+
+def _matches(d: Discount, item: SaleItem, family: set[int]) -> bool:
+    """Does this PRODUCT/CATEGORY offer cover the item? `family` = the item's category and its parents."""
+    if d.scope is DiscountScope.PRODUCT:
+        return d.product_id == item.product_id
+    return d.scope is DiscountScope.CATEGORY and d.category_id in family
+
+
+def _item_offer_amount(d: Discount, item: SaleItem) -> Decimal:
+    """Rupees one item offer takes off one line, whatever its type."""
+    if d.discount_type is DiscountType.BUY_X_GET_Y:
+        return pricing_service.buy_x_get_y_discount(d.buy_qty, d.get_qty, item.line_total)
+    if d.discount_type is DiscountType.QTY_PRICE:
+        return pricing_service.qty_price_discount(
+            item.unit_price, item.qty, item.tax_rate, d.buy_qty, d.value, item.line_total
+        )
+    return pricing_service.item_discount(d.discount_type, d.value, item.line_total, item.qty, d.max_discount_amount)
+
+
+def _with_ancestors(category_id: int | None, parents: dict[int, int | None]) -> set[int]:
+    """The category plus every parent above it (Chips -> Snacks -> Food).
+    Stops if it meets a category twice, so a bad parent loop can't run forever."""
+    family: set[int] = set()
+    while category_id is not None and category_id not in family:
+        family.add(category_id)
+        category_id = parents.get(category_id)
+    return family

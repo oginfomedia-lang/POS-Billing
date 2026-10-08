@@ -1,6 +1,7 @@
 // Always-focused input that receives scanner keystrokes.
 // USB scanners type the code and press Enter, so a plain input handles both scanning and typing.
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { IconScan, IconX } from '../common/Icons';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function BarcodeInput({ onScan, active }: Props) {
+  const { t } = useTranslation();
   const [value, setValue] = useState('');
   const ref = useRef<HTMLInputElement>(null);
 
@@ -27,13 +29,13 @@ export function BarcodeInput({ onScan, active }: Props) {
 
   return (
     <div className="barcode-input-wrapper">
-      <div className="barcode-scanner-icon" title="Barcode scanner active">
+      <div className="barcode-scanner-icon" title={t('pos.scannerActive')}>
         <IconScan size={22} />
       </div>
       <input
         ref={ref}
         className="field-input barcode-input"
-        placeholder="Scan barcode or search product SKU/Name (Enter to add)..."
+        placeholder={t('pos.scanPlaceholder')}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -47,14 +49,14 @@ export function BarcodeInput({ onScan, active }: Props) {
             setValue('');
             ref.current?.focus();
           }}
-          title="Clear"
+          title={t('pos.clear')}
         >
           <IconX size={16} />
         </button>
       ) : (
         <span className="scanner-badge">
           <span className="scanner-dot" />
-          Ready
+          {t('pos.ready')}
         </span>
       )}
     </div>

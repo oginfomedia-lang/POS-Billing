@@ -1,5 +1,5 @@
 // Sale draft, items, hold, resume, complete API calls.
-import type { ReceiptOut, SaleOut, TenderMethod } from '../../types/sale';
+import type { DigitalMethod, PaymentIntentOut, ReceiptOut, SaleOut, TenderMethod } from '../../types/sale';
 import { httpClient } from './httpClient';
 
 /** Returns the cashier's open bill, creating one if needed. 409 = no open shift. */
@@ -20,6 +20,19 @@ export async function updateItem(saleId: number, itemId: number, qty: number): P
 
 export async function removeItem(saleId: number, itemId: number): Promise<SaleOut> {
   const resp = await httpClient.delete<SaleOut>(`/sales/${saleId}/items/${itemId}`);
+  return resp.data;
+}
+
+export interface ManualDiscountInput {
+  amount: string;
+  reason: string;
+  approver_username: string;
+  approver_pin: string;
+}
+
+/** Counter discount on one line; a manager/admin approves with their PIN. amount "0" removes it. */
+export async function setManualDiscount(saleId: number, itemId: number, data: ManualDiscountInput): Promise<SaleOut> {
+  const resp = await httpClient.post<SaleOut>(`/sales/${saleId}/items/${itemId}/manual-discount`, data);
   return resp.data;
 }
 
@@ -45,6 +58,23 @@ export async function completeSale(
     reference: reference || null,
   });
   return resp.data;
+}
+
+/** Card: pushes the bill total to this counter's card machine. UPI: creates a Razorpay QR for exactly the total. */
+export async function startPayment(saleId: number, method: DigitalMethod): Promise<PaymentIntentOut> {
+  const resp = await httpClient.post<PaymentIntentOut>(`/sales/${saleId}/payment-intents`, { method });
+  return resp.data;
+}
+
+/** Asks the backend (which asks Razorpay) whether the customer has paid. When paid, `sale` is the completed bill. */
+export async function checkPayment(intentId: number): Promise<PaymentIntentOut> {
+  const resp = await httpClient.get<PaymentIntentOut>(`/payment-intents/${intentId}`);
+  return resp.data;
+}
+
+/** Closes the QR / clears the card machine. Safe to call if it was already paid or cancelled. */
+export async function cancelPayment(intentId: number): Promise<void> {
+  await httpClient.post(`/payment-intents/${intentId}/cancel`);
 }
 
 export async function voidSale(saleId: number): Promise<SaleOut> {

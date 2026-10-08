@@ -12,7 +12,14 @@ from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.store_repository import StoreRepository
-from app.schemas.inventory_schemas import AdjustStockRequest, ExpiringBatchOut, StockInRequest, StockLevelOut, ThresholdRequest
+from app.schemas.inventory_schemas import (
+    AdjustStockRequest,
+    ExpiringBatchOut,
+    StockInRequest,
+    StockLevelOut,
+    StorePriceRequest
+    ThresholdRequest,
+)
 from app.services import audit_service, settings_service
 from app.utils.transactions import transaction
 
@@ -35,8 +42,37 @@ def stock_levels(store_id: int) -> list[StockLevelOut]:
             low_stock_threshold=own,
             effective_threshold=threshold,
             is_low=qty <= threshold,
+            base_price=product.price,
+            store_price=inv.price if inv else None,
+            price=inv.price if inv and inv.price is not None else product.price,
         ))
     return out
+
+
+def selling_price(store_id: int, product: Product) -> Decimal:
+    """What this store charges for the product (before GST): its own price, else the head-office price."""
+    row = InventoryRepository().get_for_store_product(store_id, product.id)
+    return row.price if row is not None and row.price is not None else product.price
+
+
+def store_prices(store_id: int, product_ids: list[int]) -> dict[int, Decimal]:
+    """{product_id: store price} for products this store has its own price for (one query)."""
+    return InventoryRepository().price_overrides(store_id, product_ids)
+
+
+def set_store_price(data: StorePriceRequest, actor: User) -> Inventory:
+    """Set (or clear, with None) this store's own selling price for a product."""
+    _check_store_product(data.store_id, data.product_id)
+    with transaction():
+        row = InventoryRepository().lock_or_create(data.store_id, data.product_id)
+        old = row.price
+        row.price = data.price
+        audit_service.log(
+            actor, "inventory.store_price", "inventory", row.id,
+            {"price": None if old is None else str(old)},
+            {"price": None if data.price is None else str(data.price), "store_id": data.store_id},
+        )
+    return row
 
 
 
@@ -69,7 +105,8 @@ def stock_in(data: StockInRequest, actor: User) -> Inventory:
         )
         audit_service.log(
             actor, "inventory.stock_in", "inventory", row.id,
-            {"qty_on_hand": str(old)}, {"qty_on_hand": str(row.qty_on_hand), "added": str(data.qty)},
+            {"qty_on_hand": str(old)},
+            {"qty_on_hand": str(row.qty_on_hand), "added": str(data.qty)},
         )
     return row
 
@@ -111,6 +148,25 @@ def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
             {"qty_on_hand": str(old)}, {"qty_on_hand": str(data.new_qty), "reason": data.notes},
         )
     return row
+
+
+def expiring_soon(store_id: int, days: int = 30) -> list[ExpiringBatchOut]:
+    """Products that have at least one purchase batch expiring within `days` days and qty > 0."""
+    _get_store_or_404(store_id)
+    today = date.today()
+    out = []
+    for product, inv, nearest_expiry in InventoryRepository().expiring_batches(store_id, days):
+        primary = next((b for b in product.barcodes if b.is_primary), None) or next(iter(product.barcodes), None)
+        out.append(ExpiringBatchOut(
+            product_id=product.id,
+            product_name=product.name,
+            barcode=primary.barcode if primary else None,
+            qty_on_hand=inv.qty_on_hand,
+            uom=product.uom,
+            nearest_expiry=nearest_expiry,
+            days_to_expiry=(nearest_expiry - today).days,
+        ))
+    return out
 
 
 def ledger(store_id: int, product_id: int | None = None) -> list[InventoryTransaction]:
@@ -156,9 +212,19 @@ def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
                 "available": float(available),
             })
     if shortages:
-        raise InsufficientStockError("Not enough stock for some items.", details=shortages)
+        lines = ", ".join(
+            f"{s['product_name']} (need {_qty_text(s['requested'])}, only {_qty_text(s['available'])} in stock)"
+            for s in shortages
+        )
+        raise InsufficientStockError(f"Not enough stock: {lines}.", details=shortages)
 
     for product_id, qty in wanted.items():
         rows[product_id].qty_on_hand -= qty
         # Ledger qty is signed: negative = stock out.
         repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -qty, reference_id=sale_id)
+
+
+def _qty_text(qty) -> str:
+    """3.000 -> "3", 1.250 -> "1.25" (weighed items)."""
+    d = Decimal(str(qty)).normalize()
+    return f"{d:f}"
