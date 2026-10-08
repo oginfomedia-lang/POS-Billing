@@ -1,17 +1,18 @@
-// Stock-in, adjustments, ledger, low stock.
+// Stock-in, adjustments, ledger, low stock, expiry alerts.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { adjustStock, getLedger, getStockLevels, setThreshold, stockIn } from '../../services/api/inventoryApi';
+import { adjustStock, getLedger, getStockLevels, setThreshold, stockIn, getExpiringProducts } from '../../services/api/inventoryApi';
 import { listStores } from '../../services/api/storeApi';
 import type { StoreOut } from '../../types/api';
-import type { InventoryTxnOut, StockLevelOut } from '../../types/inventory';
+import type { ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
 import { formatDateTime } from '../../utils/format';
 
 type Kind = 'in' | 'adjust' | 'threshold' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
+type Tab = 'stock' | 'expiry';
 
 const TXN_LABEL: Record<string, string> = {
   purchase: 'Stock in',
@@ -20,9 +21,14 @@ const TXN_LABEL: Record<string, string> = {
   adjustment: 'Adjustment',
 };
 
-/** "12.500" -> "12.5" */
 function qtyText(qty: string): string {
   return String(Number(qty));
+}
+
+function expiryRowStyle(days: number): { background: string } {
+  if (days <= 7) return { background: '#fef2f2' };
+  if (days <= 15) return { background: '#fff7ed' };
+  return { background: '#fefce8' };
 }
 
 export function InventoryPage() {
@@ -37,13 +43,17 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [tab, setTab] = useState<Tab>('stock');
+  const [expiringRows, setExpiringRows] = useState<ExpiringBatchOut[]>([]);
+  const [expiryLoading, setExpiryLoading] = useState(false);
+  const [expiryDate, setExpiryDate] = useState('');
+
   const [modal, setModal] = useState<Modal>(null);
   const [qty, setQty] = useState('');
   const [notes, setNotes] = useState('');
   const [ledger, setLedger] = useState<InventoryTxnOut[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  // After goods are received, offer to print that many stickers.
   const [printOffer, setPrintOffer] = useState<{ productId: number; name: string; qty: number } | null>(null);
 
   useEffect(() => {
@@ -68,7 +78,20 @@ export function InventoryPage() {
     }
   }
 
+  async function fetchExpiring(id = storeId) {
+    if (id === null) return;
+    setExpiryLoading(true);
+    try {
+      setExpiringRows(await getExpiringProducts(id));
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setExpiryLoading(false);
+    }
+  }
+
   useEffect(() => { fetchLevels(); }, [storeId]);
+  useEffect(() => { if (tab === 'expiry') fetchExpiring(); }, [tab, storeId]);
 
   async function open(kind: Kind, row: StockLevelOut) {
     setQty(
@@ -77,6 +100,7 @@ export function InventoryPage() {
         : '',
     );
     setNotes('');
+    setExpiryDate('');
     setFormError('');
     setLedger([]);
     setModal({ kind, row });
@@ -96,7 +120,7 @@ export function InventoryPage() {
     setFormError('');
     try {
       if (modal.kind === 'in') {
-        await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim());
+        await stockIn(storeId, modal.row.product_id, qty.trim(), notes.trim(), expiryDate || undefined);
         const received = Number(qty);
         setPrintOffer(
           modal.row.barcode
@@ -138,108 +162,165 @@ export function InventoryPage() {
 
       {error && <div className="page-error">{error}</div>}
 
-      <div className="filter-bar">
-        <select
-          className="field-input filter-input"
-          value={storeId ?? ''}
-          onChange={(e) => setStoreId(Number(e.target.value))}
+      <div className="tab-bar">
+        <button
+          className={`tab-btn${tab === 'stock' ? ' tab-active' : ''}`}
+          onClick={() => setTab('stock')}
         >
-          {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <input
-          className="field-input filter-input"
-          placeholder="Search name or barcode"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <label className="field-label checkbox-label">
-          <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
-          Low / out of stock only ({lowCount})
-        </label>
+          Stock Levels
+        </button>
+        <button
+          className={`tab-btn${tab === 'expiry' ? ' tab-active' : ''}`}
+          onClick={() => setTab('expiry')}
+        >
+          Expiry Alerts
+          {expiringRows.length > 0 && <span className="badge-count"> {expiringRows.length}</span>}
+        </button>
       </div>
 
-      {printOffer && (
-        <div className="notice-bar">
-          Received {printOffer.qty} × {printOffer.name}.
-          <button
-            className="btn-primary btn-compact"
-            onClick={() => navigate(
-              `/admin/labels?product=${printOffer.productId}&qty=${printOffer.qty}`,
-              { state: { from: '/admin/inventory' } },
-            )}
-          >
-            Print {printOffer.qty} labels
-          </button>
-          <button className="btn-sm" onClick={() => setPrintOffer(null)}>Dismiss</button>
-        </div>
+      {tab === 'stock' && (
+        <>
+          <div className="filter-bar">
+            <select
+              className="field-input filter-input"
+              value={storeId ?? ''}
+              onChange={(e) => setStoreId(Number(e.target.value))}
+            >
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <input
+              className="field-input filter-input"
+              placeholder="Search name or barcode"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <label className="field-label checkbox-label">
+              <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
+              Low / out of stock only ({lowCount})
+            </label>
+          </div>
+
+          {printOffer && (
+            <div className="notice-bar">
+              Received {printOffer.qty} × {printOffer.name}.
+              <button
+                className="btn-primary btn-compact"
+                onClick={() => navigate(
+                  `/admin/labels?product=${printOffer.productId}&qty=${printOffer.qty}`,
+                  { state: { from: '/admin/inventory' } },
+                )}
+              >
+                Print {printOffer.qty} labels
+              </button>
+              <button className="btn-sm" onClick={() => setPrintOffer(null)}>Dismiss</button>
+            </div>
+          )}
+
+          {loading && <div className="loading-text">Loading…</div>}
+
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Barcode</th>
+                  <th className="num">In stock</th>
+                  <th className="num">Low at</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {!loading && visible.length === 0 && (
+                  <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
+                )}
+                {visible.map((r) => (
+                  <tr key={r.product_id}>
+                    <td>{r.product_name}</td>
+                    <td>{r.barcode ?? '—'}</td>
+                    <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
+                    <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
+                      {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
+                    </td>
+                    <td>
+                      {Number(r.qty_on_hand) <= 0
+                        ? <span className="stock-badge stock-out">Out of stock</span>
+                        : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
+                    </td>
+                    <td className="table-actions">
+                      <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
+                      <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
+                      <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
+                      <button className="btn-sm" onClick={() => open('history', r)}>History</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
-      {loading && <div className="loading-text">Loading…</div>}
+      {tab === 'expiry' && (
+        <>
+          <div className="filter-bar">
+            <select
+              className="field-input filter-input"
+              value={storeId ?? ''}
+              onChange={(e) => setStoreId(Number(e.target.value))}
+            >
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button className="btn-secondary" onClick={() => fetchExpiring()}>Refresh</button>
+          </div>
 
-      <table className="data-table">
-        <thead>
-          <tr><th>Product</th><th>Barcode</th><th className="num">In stock</th><th className="num">Low at</th><th>Status</th><th /></tr>
-        </thead>
-        <tbody>
-          {!loading && visible.length === 0 && (
-            <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
-          )}
-          {visible.map((r) => (
-            <tr key={r.product_id}>
-              <td>{r.product_name}</td>
-              <td>{r.barcode ?? '—'}</td>
-              <td className="num">{qtyText(r.qty_on_hand)} {r.uom || 'pcs'}</td>
-              <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
-                {qtyText(r.effective_threshold)} {r.uom || 'pcs'}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
-              </td>
-              <td>
-                {Number(r.qty_on_hand) <= 0
-                  ? <span className="stock-badge stock-out">Out of stock</span>
-                  : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
-              </td>
-              <td className="table-actions">
-                <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
-                <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
-                <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
-                <button className="btn-sm" onClick={() => open('history', r)}>History</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="table-card">
-        <table className="data-table">
-          <thead>
-            <tr><th>Product</th><th>Barcode</th><th className="num">In stock</th><th className="num">Low at</th><th>Status</th><th /></tr>
-          </thead>
-          <tbody>
-            {!loading && visible.length === 0 && (
-              <tr><td colSpan={6} className="empty-row">No products match.</td></tr>
-            )}
-            {visible.map((r) => (
-              <tr key={r.product_id}>
-                <td>{r.product_name}</td>
-                <td>{r.barcode ?? '—'}</td>
-                <td className="num">{qtyText(r.qty_on_hand)}</td>
-                <td className="num" title={r.low_stock_threshold === null ? 'Store-wide default (Settings)' : 'Set for this product'}>
-                  {qtyText(r.effective_threshold)}{r.low_stock_threshold === null && <span className="status-muted"> (default)</span>}
-                </td>
-                <td>
-                  {Number(r.qty_on_hand) <= 0
-                    ? <span className="stock-badge stock-out">Out of stock</span>
-                    : r.is_low ? <span className="stock-badge stock-low">Low</span> : '—'}
-                </td>
-                <td className="table-actions">
-                  <button className="btn-sm" onClick={() => open('in', r)}>Stock In</button>
-                  <button className="btn-sm" onClick={() => open('adjust', r)}>Adjust</button>
-                  <button className="btn-sm" onClick={() => open('threshold', r)}>Low level</button>
-                  <button className="btn-sm" onClick={() => open('history', r)}>History</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          {expiryLoading && <div className="loading-text">Loading expiry data…</div>}
+
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Barcode</th>
+                  <th className="num">In Stock</th>
+                  <th>Expiry Date</th>
+                  <th className="num">Days Left</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!expiryLoading && expiringRows.length === 0 && (
+                  <tr><td colSpan={6} className="empty-row">No products expiring within 30 days.</td></tr>
+                )}
+                {expiringRows.map((r) => (
+                  <tr key={r.product_id} style={expiryRowStyle(r.days_to_expiry)}>
+                    <td>{r.product_name}</td>
+                    <td>{r.barcode ?? '—'}</td>
+                    <td className="num">{qtyText(r.qty_on_hand)} {r.uom}</td>
+                    <td>{r.nearest_expiry}</td>
+                    <td className="num">{r.days_to_expiry}d</td>
+                    <td>
+                      <button
+                        className="btn-primary btn-sm"
+                        onClick={() => navigate(
+                          `/admin/discounts?product_id=${r.product_id}&product_name=${encodeURIComponent(r.product_name)}&ends_at=${r.nearest_expiry}`,
+                        )}
+                      >
+                        Create Offer
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint-text">
+            Colour key: <span style={{ background: '#fef2f2', padding: '0 6px' }}>≤7 days</span>{' '}
+            <span style={{ background: '#fff7ed', padding: '0 6px' }}>≤15 days</span>{' '}
+            <span style={{ background: '#fefce8', padding: '0 6px' }}>≤30 days</span>
+          </p>
+        </>
+      )}
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
@@ -252,34 +333,19 @@ export function InventoryPage() {
 
             {modal.kind === 'history' ? (
               <>
-                <table className="data-table">
-                  <thead>
-                    <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Ref / Note</th></tr>
-                  </thead>
-                  <tbody>
-                    {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">No movements yet.</td></tr>}
-                    {ledger.map((t) => (
-                      <tr key={t.id}>
-                        <td className="ts-cell">{formatDateTime(t.created_at)}</td>
-                        <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
-                        <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)} {modal.row.uom || 'pcs'}</td>
-                        <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
                 <div className="table-card">
                   <table className="data-table">
                     <thead>
-                      <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Ref / Note</th></tr>
+                      <tr><th>When</th><th>Type</th><th className="num">Qty</th><th>Expiry</th><th>Ref / Note</th></tr>
                     </thead>
                     <tbody>
-                      {ledger.length === 0 && <tr><td colSpan={4} className="empty-row">No movements yet.</td></tr>}
+                      {ledger.length === 0 && <tr><td colSpan={5} className="empty-row">No movements yet.</td></tr>}
                       {ledger.map((t) => (
                         <tr key={t.id}>
                           <td className="ts-cell">{formatDateTime(t.created_at)}</td>
                           <td>{TXN_LABEL[t.txn_type] ?? t.txn_type}</td>
-                          <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)}</td>
+                          <td className="num">{Number(t.qty) > 0 ? '+' : ''}{qtyText(t.qty)} {modal.row.uom || 'pcs'}</td>
+                          <td>{t.expiry_date ?? '—'}</td>
                           <td>{t.txn_type === 'sale' && t.reference_id ? `Sale #${t.reference_id}` : t.notes ?? '—'}</td>
                         </tr>
                       ))}
@@ -331,6 +397,17 @@ export function InventoryPage() {
                     autoFocus
                   />
                 </label>
+                {modal.kind === 'in' && (
+                  <label className="field-label">
+                    Expiry date (optional)
+                    <input
+                      className="field-input"
+                      type="date"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                    />
+                  </label>
+                )}
                 <label className="field-label">
                   {modal.kind === 'in' ? 'Note (optional, e.g. supplier invoice no.)' : 'Reason (required)'}
                   <input

@@ -1,6 +1,7 @@
 """deduct_for_sale(), add_stock(), adjust(), record_damage(). Every change writes a ledger row."""
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from app.errors.exceptions import InsufficientStockError, NotFoundError
@@ -11,7 +12,7 @@ from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.repositories.store_repository import StoreRepository
-from app.schemas.inventory_schemas import AdjustStockRequest, StockInRequest, StockLevelOut, ThresholdRequest
+from app.schemas.inventory_schemas import AdjustStockRequest, ExpiringBatchOut, StockInRequest, StockLevelOut, ThresholdRequest
 from app.services import audit_service, settings_service
 from app.utils.transactions import transaction
 
@@ -62,12 +63,34 @@ def stock_in(data: StockInRequest, actor: User) -> Inventory:
         row = repo.lock_or_create(data.store_id, data.product_id)
         old = row.qty_on_hand
         row.qty_on_hand = old + data.qty
-        repo.add_transaction(data.store_id, data.product_id, InventoryTxnType.PURCHASE, data.qty, notes=data.notes)
+        repo.add_transaction(
+            data.store_id, data.product_id, InventoryTxnType.PURCHASE, data.qty,
+            notes=data.notes, expiry_date=data.expiry_date,
+        )
         audit_service.log(
             actor, "inventory.stock_in", "inventory", row.id,
             {"qty_on_hand": str(old)}, {"qty_on_hand": str(row.qty_on_hand), "added": str(data.qty)},
         )
     return row
+
+
+def expiring_soon(store_id: int, days: int = 30) -> list[ExpiringBatchOut]:
+    """Products with batches expiring within `days` that still have stock."""
+    _get_store_or_404(store_id)
+    today = date.today()
+    out = []
+    for product, inv, nearest_expiry in InventoryRepository().expiring_batches(store_id, days):
+        primary = next((b for b in product.barcodes if b.is_primary), None) or next(iter(product.barcodes), None)
+        out.append(ExpiringBatchOut(
+            product_id=product.id,
+            product_name=product.name,
+            barcode=primary.barcode if primary else None,
+            qty_on_hand=inv.qty_on_hand,
+            uom=product.uom,
+            nearest_expiry=nearest_expiry,
+            days_to_expiry=(nearest_expiry - today).days,
+        ))
+    return out
 
 
 def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
