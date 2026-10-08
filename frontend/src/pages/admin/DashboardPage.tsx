@@ -65,7 +65,12 @@ export function DashboardPage() {
                 <IconCash size={20} />
               </div>
               <span className="stat-label">{t('dashboard.totalSales')}</span>
-              <span className="stat-value">{formatRupees(s.total)}</span>
+              <span className="stat-value">{formatRupees(s.net_total)}</span>
+              {s.returns > 0 && (
+                <span className="stat-sub">
+                  {t('reports.salesMinusReturns', { sales: formatRupees(s.total), returns: formatRupees(s.refunded) })}
+                </span>
+              )}
             </div>
 
             <div className="stat-tile stat-tile-bills">

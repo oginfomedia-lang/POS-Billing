@@ -66,12 +66,6 @@ def set_store_price():
     require_store_access(actor, data.store_id)
     row = inventory_service.set_store_price(data, actor)
     return jsonify({"product_id": row.product_id, "price": None if row.price is None else str(row.price)}), 200
-@inventory_bp.get("/inventory/expiring")
-@require_permission("inventory.read")
-def expiring():
-    days = request.args.get("days", 30, type=int)
-    results = inventory_service.expiring_soon(_store_id_arg(), days)
-    return jsonify([r.model_dump(mode="json") for r in results]), 200
 
 
 @inventory_bp.get("/inventory/ledger")

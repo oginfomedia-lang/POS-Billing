@@ -54,16 +54,19 @@ export function ReportsPage() {
     } else if (tab === 'gst') {
       downloadCsv(
         `gst_${range}.csv`,
-        ['GST rate %', 'Taxable value', 'CGST', 'SGST', 'Total GST'],
-        sales.gst.map((g) => [g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
+        ['HSN', 'GST rate %', 'Taxable value', 'CGST', 'SGST', 'Total GST'],
+        [
+          ...sales.gst.map((g) => ['All', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
+          ...sales.gst_hsn.map((g) => [g.hsn_code ?? 'No HSN', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
+        ],
       );
     } else {
       downloadCsv(
         `shifts_${range}.csv`,
-        ['Shift', 'Cashier', 'Counter', 'Opened', 'Closed', 'Bills', 'Opening float', 'Cash sales', 'Expected', 'Counted', 'Difference'],
+        ['Shift', 'Cashier', 'Counter', 'Opened', 'Closed', 'Bills', 'Opening float', 'Cash sales', 'Cash refunds', 'Expected', 'Counted', 'Difference'],
         shifts.map((s) => [
           s.id, s.cashier_name, s.counter_code, s.opened_at, s.closed_at, s.bills,
-          s.opening_float, s.cash_sales, s.expected_cash, s.actual_cash, s.difference,
+          s.opening_float, s.cash_sales, s.cash_refunds, s.expected_cash, s.actual_cash, s.difference,
         ]),
       );
     }
@@ -113,7 +116,16 @@ export function ReportsPage() {
       {sales && s && tab === 'sales' && (
         <>
           <div className="stat-grid">
-            <div className="stat-tile"><span className="stat-label">{t('reports.netSales')}</span><span className="stat-value">{formatRupees(s.total)}</span></div>
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.netSales')}</span>
+              <span className="stat-value">{formatRupees(s.net_total)}</span>
+              {s.returns > 0 && <span className="stat-sub">{t('reports.salesMinusReturns', { sales: formatRupees(s.total), returns: formatRupees(s.refunded) })}</span>}
+            </div>
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.returns')}</span>
+              <span className="stat-value">{formatRupees(s.refunded)}</span>
+              <span className="stat-sub">{t('reports.returnsCount', { count: s.returns })}</span>
+            </div>
             <div className="stat-tile"><span className="stat-label">{t('reports.bills')}</span><span className="stat-value">{s.bills}</span><span className="stat-sub">{t('reports.avgVoided', { avg: formatRupees(s.average_bill), voided: s.voided })}</span></div>
             <div className="stat-tile"><span className="stat-label">{t('reports.gross')}</span><span className="stat-value">{formatRupees(s.subtotal)}</span></div>
             <div className="stat-tile"><span className="stat-label">{t('reports.discounts')}</span><span className="stat-value">{formatRupees(s.discount)}</span></div>
@@ -220,6 +232,28 @@ export function ReportsPage() {
               )}
             </table>
           </div>
+
+          <h3 className="section-title">{t('reports.byHsn')}</h3>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr><th>{t('reports.colHsn')}</th><th className="num">{t('reports.colGstRate')}</th><th className="num">{t('reports.colTaxable')}</th><th className="num">{t('reports.colCgst')}</th><th className="num">{t('reports.colSgst')}</th><th className="num">{t('reports.colTotalGst')}</th></tr>
+              </thead>
+              <tbody>
+                {sales.gst_hsn.length === 0 && <tr><td colSpan={6} className="empty-row">{t('reports.noSales')}</td></tr>}
+                {sales.gst_hsn.map((g) => (
+                  <tr key={`${g.hsn_code ?? '-'}-${g.tax_rate}`}>
+                    <td>{g.hsn_code ?? <span className="status-muted">{t('reports.noHsn')}</span>}</td>
+                    <td className="num">{Number(g.tax_rate)}%</td>
+                    <td className="num">{formatRupees(g.taxable)}</td>
+                    <td className="num">{formatRupees(g.cgst)}</td>
+                    <td className="num">{formatRupees(g.sgst)}</td>
+                    <td className="num">{formatRupees(g.tax)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
@@ -231,11 +265,11 @@ export function ReportsPage() {
               <thead>
                 <tr>
                   <th>{t('reports.colCashier')}</th><th>{t('reports.colCounter')}</th><th>{t('reports.colOpened')}</th><th>{t('reports.colClosed')}</th><th className="num">{t('reports.bills')}</th>
-                  <th className="num">{t('reports.colFloat')}</th><th className="num">{t('reports.colCashSales')}</th><th className="num">{t('reports.colExpected')}</th><th className="num">{t('reports.colCounted')}</th><th className="num">{t('reports.colDifference')}</th>
+                  <th className="num">{t('reports.colFloat')}</th><th className="num">{t('reports.colCashSales')}</th><th className="num">{t('reports.colCashRefunds')}</th><th className="num">{t('reports.colExpected')}</th><th className="num">{t('reports.colCounted')}</th><th className="num">{t('reports.colDifference')}</th>
                 </tr>
               </thead>
               <tbody>
-                {shifts.length === 0 && <tr><td colSpan={10} className="empty-row">{t('reports.noShifts')}</td></tr>}
+                {shifts.length === 0 && <tr><td colSpan={11} className="empty-row">{t('reports.noShifts')}</td></tr>}
                 {shifts.map((r) => {
                   const diff = r.difference === null ? null : Number(r.difference);
                   return (
@@ -247,6 +281,7 @@ export function ReportsPage() {
                       <td className="num">{r.bills}</td>
                       <td className="num">{formatRupees(r.opening_float)}</td>
                       <td className="num">{formatRupees(r.cash_sales)}</td>
+                      <td className="num">{Number(r.cash_refunds) > 0 ? `− ${formatRupees(r.cash_refunds)}` : '—'}</td>
                       <td className="num">{r.expected_cash === null ? '—' : formatRupees(r.expected_cash)}</td>
                       <td className="num">{r.actual_cash === null ? '—' : formatRupees(r.actual_cash)}</td>
                       <td className="num">

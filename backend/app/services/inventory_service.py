@@ -205,6 +205,18 @@ def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
         repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -qty, reference_id=sale_id)
 
 
+def restock_for_return(store_id: int, lines, return_id: int, note: str) -> None:
+    """Puts returned items back on the shelf and writes RETURN ledger rows (reference_id = the return).
+
+    `lines` need product_id and qty. Must run inside the caller's transaction.
+    """
+    repo = InventoryRepository()
+    for line in sorted(lines, key=lambda ln: ln.product_id):  # same lock order as sales: no deadlocks
+        row = repo.lock_or_create(store_id, line.product_id)
+        row.qty_on_hand += line.qty
+        repo.add_transaction(store_id, line.product_id, InventoryTxnType.RETURN, line.qty, reference_id=return_id, notes=note)
+
+
 def _qty_text(qty) -> str:
     """3.000 -> "3", 1.250 -> "1.25" (weighed items)."""
     d = Decimal(str(qty)).normalize()

@@ -1,8 +1,10 @@
-// Find and reprint a completed bill.
-import { Fragment, useEffect, useRef, useState } from 'react';
+// Show and (re)print a completed bill. Prints silently on the counter's printer (Electron).
+import { Fragment, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ReceiptGstTable } from '../../components/pos/ReceiptGstTable';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getReceipt } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { ReceiptOut } from '../../types/sale';
@@ -12,13 +14,13 @@ import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 export function ReprintPage() {
   const { t } = useTranslation();
   const { saleId } = useParams();
-  // ?print=1 (straight after payment) opens the print dialog automatically; reopening a past bill doesn't.
+  // ?print=1 (straight after payment) prints automatically; reopening a past bill doesn't.
   const [searchParams] = useSearchParams();
   const autoPrint = searchParams.get('print') === '1';
   const navigate = useNavigate();
   const [receipt, setReceipt] = useState<ReceiptOut | null>(null);
   const [error, setError] = useState('');
-  const printed = useRef(false);
+  const { print, printing, printError } = useReceiptPrint(receipt !== null, autoPrint);
 
   useKeyboardShortcuts({ Enter: () => navigate('/pos/billing'), Escape: () => navigate('/pos/billing') });
 
@@ -40,14 +42,6 @@ export function ReprintPage() {
     return () => { document.title = previous; };
   }, [receipt]);
 
-  // Open the print dialog once, after the receipt has rendered.
-  useEffect(() => {
-    if (!receipt || !autoPrint || printed.current) return;
-    printed.current = true;
-    const t = window.setTimeout(() => window.print(), 100);
-    return () => window.clearTimeout(t);
-  }, [receipt]);
-
   // Item offers + manual discounts (everything except the bill offer).
   const itemSavingsPaise = receipt ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) : 0;
 
@@ -58,12 +52,15 @@ export function ReprintPage() {
       <div className="admin-header no-print">
         <h2>{t('receipt.title')}{receipt ? ` — ${receipt.store_name}` : ''}</h2>
         <div className="admin-actions">
-          <button className="btn-secondary" disabled={!receipt} onClick={() => window.print()}>{t('common.print')}</button>
+          <button className="btn-secondary" disabled={!receipt || printing} onClick={print}>
+            {printing ? t('receipt.printing') : t('common.print')}
+          </button>
           <button className="btn-primary" onClick={() => navigate('/pos/billing')}>{t('receipt.newBill')}</button>
         </div>
       </div>
 
       {error && <div className="page-error">{error}</div>}
+      {printError && <div className="page-error no-print">{t('receipt.printFailed', { error: printError })}</div>}
       {!receipt && !error && <div className="loading-text">{t('common.loading')}</div>}
 
       {receipt && (
@@ -82,6 +79,9 @@ export function ReprintPage() {
           <div className="receipt-row">
             <span>{receipt.counter_code ? t('receipt.counter', { code: receipt.counter_code }) : ''}</span><span>{receipt.cashier_name}</span>
           </div>
+          {receipt.customer_mobile && (
+            <div className="receipt-row"><span>{t('receipt.customer')}</span><span>{receipt.customer_mobile}</span></div>
+          )}
           <hr />
 
           <table className="receipt-items">
@@ -97,6 +97,16 @@ export function ReprintPage() {
                     <td className="num">{i.unit_price}</td>
                     <td className="num">{i.line_total}</td>
                   </tr>
+                  {(i.hsn_code || i.mrp) && (
+                    <tr className="receipt-small">
+                      <td colSpan={4}>
+                        &nbsp;&nbsp;{[
+                          i.hsn_code && t('receipt.hsn', { code: i.hsn_code }),
+                          i.mrp && t('receipt.mrp', { mrp: i.mrp }),
+                        ].filter(Boolean).join(' · ')}
+                      </td>
+                    </tr>
+                  )}
                   {Number(i.offer_discount) > 0 && (
                     <tr>
                       <td colSpan={3}>&nbsp;&nbsp;{i.offer_name ?? t('receipt.offer')}</td>
@@ -124,10 +134,16 @@ export function ReprintPage() {
           )}
           <div className="receipt-row"><span>{t('receipt.gst')}</span><span>{formatRupees(receipt.tax_amount)}</span></div>
           <div className="receipt-row receipt-total"><span>{t('receipt.total')}</span><span>{formatRupees(receipt.total)}</span></div>
-          {Number(receipt.discount_amount) > 0 && (
-            <div className="receipt-row"><span>{t('receipt.youSaved')}</span><span>{formatRupees(receipt.discount_amount)}</span></div>
+          {Number(receipt.total_saving) > 0 && (
+            <div className="receipt-saved-box">
+              {receipt.items.some((i) => i.mrp !== null)
+                ? t('receipt.youSavedOnMrp', { amount: formatRupees(receipt.total_saving) })
+                : t('receipt.youSavedBanner', { amount: formatRupees(receipt.total_saving) })}
+            </div>
           )}
           <hr />
+          <ReceiptGstTable rows={receipt.gst_summary} />
+          {receipt.gst_summary.length > 0 && <hr />}
 
           {receipt.payments.map((p) => (
             <div key={p.id}>

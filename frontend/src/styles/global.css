@@ -1580,6 +1580,40 @@ select.field-input {
   align-items: center;
 }
 
+/* Name/SKU suggestions under the scan box */
+.product-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.suggestion-item.active { background: var(--brand-50); }
+.suggestion-name { display: flex; flex-direction: column; min-width: 0; font-weight: 600; color: var(--text); }
+.suggestion-meta { font-size: 12px; font-weight: 400; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-price { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.suggestion-empty { padding: 10px 12px; color: var(--muted); }
+
 .barcode-scanner-icon {
   position: absolute;
   left: 15px;
@@ -2780,6 +2814,92 @@ button.stat-tile:hover {
 .receipt-items th,
 .receipt-items td { padding: 1px 0; text-align: left; font-weight: normal; }
 .receipt-footer { margin-top: 8px; }
+.receipt-small { font-size: 10.5px; }
+.receipt-saved-box {
+  margin: 8px 0 2px;
+  padding: 5px 4px;
+  border: 1.5px solid #000;
+  border-radius: 3px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+.receipt-doc-title { margin-top: 4px; font-weight: 700; letter-spacing: 0.04em; }
+.receipt-gst-table th,
+.receipt-gst-table td { font-size: 10.5px; }
+.receipt-items .num { text-align: right; }
+
+/* Printer test slip: never on screen; printed alone while body has .printing-test (see @media print). */
+.print-test-receipt { display: none; }
+
+/* ───────────────────────── MRP / savings ───────────────────────── */
+.mrp-tag {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.summary-you-save {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-border);
+  color: var(--ok-text);
+  font-weight: 700;
+}
+
+.summary-you-save .row-label { display: flex; align-items: center; gap: 5px; }
+
+.text-danger { color: var(--danger-text); }
+
+/* Customer mobile in the payment dialog */
+.mobile-field { margin-bottom: 14px; }
+.mobile-ok { font-size: 12.5px; color: var(--ok-text); }
+.mobile-bad { font-size: 12.5px; color: var(--danger-text); }
+.returns-mobile-bills { max-width: 760px; margin-bottom: 14px; }
+
+/* ───────────────────────── Returns ───────────────────────── */
+.returns-lookup {
+  display: flex;
+  gap: 10px;
+  max-width: 560px;
+  margin-bottom: 14px;
+}
+
+.returns-lookup .field-input { flex: 1; font-size: 16px; }
+
+.returns-bill-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+}
+
+.returns-qty { width: 76px; text-align: right; padding: 6px 8px; min-height: 0; }
+.input-invalid { border-color: var(--danger); background: var(--danger-bg); }
+.row-muted td { color: var(--muted-light); }
+
+.returns-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  max-width: 760px;
+}
+
+.returns-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.btn-refund { min-height: 46px; font-size: 15px; }
+
+/* ───────────────────────── Printer settings ───────────────────────── */
+.printer-card { margin-top: 20px; }
+.printer-card h3 { margin: 0; font-size: 16px; }
 
 /* ───────────────────────── Shift pages ───────────────────────── */
 .shift-panel {
@@ -3331,6 +3451,19 @@ button.stat-tile:hover {
 
 /* ───────────────────────── Print ───────────────────────── */
 @media print {
+  /* Printer test: print only the sample slip, not the Settings page. */
+  body.printing-test * { visibility: hidden; }
+  body.printing-test .print-test-receipt,
+  body.printing-test .print-test-receipt * { visibility: visible; }
+  body.printing-test .print-test-receipt {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    border: none;
+    box-shadow: none;
+  }
+
   .no-print,
   .status-bar,
   .admin-sidebar,

@@ -3,8 +3,10 @@ import type { ParseKeys } from 'i18next';
 import React, { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { getErrorMessage } from '../../services/api/httpClient';
 import type { SaleOut, TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
+import { normalizeMobile } from '../../utils/phone';
 import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
 import { DigitalPaymentPanel } from './DigitalPaymentPanel';
 
@@ -19,6 +21,10 @@ const QUICK_CASH_PRESETS = [100, 200, 500, 2000];
 interface Props {
   saleId: number;
   total: string;
+  /** Saved on the bill already (full number), or null. */
+  customerMobile: string | null;
+  /** Saves the optional mobile on the open bill; throws with the server's message on failure. */
+  onSaveMobile: (mobile: string | null) => Promise<void>;
   busy: boolean;
   error: string;
   /** Cash only: card/UPI are confirmed by Razorpay and reported through onDigitalPaid. */
@@ -27,21 +33,52 @@ interface Props {
   onClose: () => void;
 }
 
-export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigitalPaid, onClose }: Props) {
+export function PaymentDialog({
+  saleId, total, customerMobile, onSaveMobile, busy, error, onConfirm, onDigitalPaid, onClose,
+}: Props) {
   const { t } = useTranslation();
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
+  const [mobile, setMobile] = useState(customerMobile ?? '');
+  const [mobileError, setMobileError] = useState('');
+  const [savingMobile, setSavingMobile] = useState(false);
   useKeyboardShortcuts({ Escape: onClose });
 
   const totalPaise = toPaise(total);
   const tenderedPaise = toPaise(tendered);
   const cashValid = Number.isFinite(tenderedPaise) && tenderedPaise >= totalPaise;
-  const canConfirm = !busy && method === 'cash' && cashValid;
+  const normalizedMobile = normalizeMobile(mobile); // '' = none, null = invalid
+  const mobileInvalid = normalizedMobile === null;
+  const canConfirm = !busy && !savingMobile && method === 'cash' && cashValid && !mobileInvalid;
 
-  function handleSubmit(e: FormEvent) {
+  /** Saves the mobile on the bill if it changed. Returns false when it couldn't be saved. */
+  async function saveMobile(): Promise<boolean> {
+    if (normalizedMobile === null) return false;
+    if (normalizedMobile === (customerMobile ?? '')) return true;
+    setSavingMobile(true);
+    setMobileError('');
+    try {
+      await onSaveMobile(normalizedMobile || null);
+      return true;
+    } catch (err) {
+      setMobileError(getErrorMessage(err));
+      return false;
+    } finally {
+      setSavingMobile(false);
+    }
+  }
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!(await saveMobile())) return;
     if (!canConfirm) return;
     onConfirm('cash', paiseToString(tenderedPaise));
+  }
+
+  function chooseMethod(next: TenderMethod) {
+    // Card/UPI complete on the server as soon as the customer pays: save the number before that starts.
+    saveMobile();
+    setMethod(next);
   }
 
   function handleQuickCash(amount: number) {
@@ -71,7 +108,7 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
                 role="tab"
                 aria-selected={method === m.value}
                 className={`pay-tab${method === m.value ? ' active' : ''}`}
-                onClick={() => setMethod(m.value)}
+                onClick={() => chooseMethod(m.value)}
               >
                 <Icon size={18} />
                 <span>{t(m.label)}</span>
@@ -81,6 +118,26 @@ export function PaymentDialog({ saleId, total, busy, error, onConfirm, onDigital
         </div>
 
         {error && <div className="form-error">{error}</div>}
+
+        <label className="field-label mobile-field">
+          <span>{t('pay.customerMobile')}</span>
+          <input
+            className={`field-input${mobileInvalid ? ' input-invalid' : ''}`}
+            type="tel"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={16}
+            placeholder={t('pay.mobilePlaceholder')}
+            value={mobile}
+            onChange={(e) => { setMobile(e.target.value); setMobileError(''); }}
+            onBlur={() => { saveMobile(); }}
+          />
+          {mobileInvalid && <span className="mobile-bad">{t('pay.mobileInvalid')}</span>}
+          {!mobileInvalid && normalizedMobile !== '' && normalizedMobile === (customerMobile ?? '') && (
+            <span className="mobile-ok">✓ {t('pay.mobileSaved')}</span>
+          )}
+          {mobileError && <span className="mobile-bad">{mobileError}</span>}
+        </label>
 
         <form onSubmit={handleSubmit} className="modal-form">
           {method === 'cash' ? (

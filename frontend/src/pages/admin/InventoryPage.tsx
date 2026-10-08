@@ -5,9 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { adjustStock, getExpiringProducts, getLedger, getStockLevels, setStorePrice, setThreshold, stockIn } from '../../services/api/inventoryApi';
-import { listStores } from '../../services/api/storeApi';
 import { useStoreContext, useStores } from '../../store/storeContext';
-import type { StoreOut } from '../../types/api';
 import type { ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
@@ -15,14 +13,6 @@ import { formatRupees } from '../../utils/money';
 type Tab = 'stock' | 'expiry';
 type Kind = 'in' | 'adjust' | 'threshold' | 'price' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
-type Tab = 'stock' | 'expiry';
-
-const TXN_LABEL: Record<string, string> = {
-  purchase: 'Stock in',
-  sale: 'Sale',
-  return: 'Return',
-  adjustment: 'Adjustment',
-};
 
 function qtyText(qty: string): string {
   return String(Number(qty));
@@ -41,17 +31,16 @@ export function InventoryPage() {
   const [tab, setTab] = useState<Tab>('stock');
   const stores = useStores().filter((s) => s.is_active);
   const selectStore = useStoreContext((s) => s.select);
-  const [storeId, setStoreId] = useState<number | null>(user?.store_id ?? null);
+  // The branch picked in the sidebar switcher (null = head office, must pick one).
+  const storeId = useStoreContext((s) => s.selectedId);
   const [rows, setRows] = useState<StockLevelOut[]>([]);
   const [filter, setFilter] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [tab, setTab] = useState<Tab>('stock');
   const [expiringRows, setExpiringRows] = useState<ExpiringBatchOut[]>([]);
   const [expiryLoading, setExpiryLoading] = useState(false);
-  const [expiryDate, setExpiryDate] = useState('');
 
   const [modal, setModal] = useState<Modal>(null);
   const [qty, setQty] = useState('');
@@ -401,7 +390,7 @@ export function InventoryPage() {
                 </label>
                 {modal.kind === 'in' && (
                   <label className="field-label">
-                    Expiry date (optional)
+                    {t('inventory.expiryOptional')}
                     <input
                       className="field-input"
                       type="date"
@@ -421,17 +410,6 @@ export function InventoryPage() {
                     placeholder={modal.kind === 'adjust' ? t('inventory.reasonPlaceholder') : ''}
                   />
                 </label>
-                {modal.kind === 'in' && (
-                  <label className="field-label">
-                    Expiry date (optional)
-                    <input
-                      className="field-input"
-                      type="date"
-                      value={expiryDate}
-                      onChange={(e) => setExpiryDate(e.target.value)}
-                    />
-                  </label>
-                )}
                 <div className="modal-buttons">
                   <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
                   <button type="submit" className="btn-primary" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>

@@ -26,6 +26,8 @@ export interface ProductOut {
   /** This branch's own price, when the request named a store (null = sells at `price`). */
   store_price?: string | null;
   tax_rate: string;
+  mrp: string | null; // printed MRP, incl. GST (per unit, or per kg if weighed)
+  hsn_code: string | null;
   uom: UOMType;
   is_variable_weight: boolean;
   is_active: boolean;

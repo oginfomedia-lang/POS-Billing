@@ -24,6 +24,19 @@ class SaleRepository(BaseRepository):
             db.select(Sale).where(Sale.id == sale_id).with_for_update().execution_options(populate_existing=True)
         )
 
+    def get_by_bill_number(self, bill_number: str, for_update: bool = False) -> Sale | None:
+        q = db.select(Sale).where(Sale.bill_number == bill_number)
+        if for_update:
+            q = q.with_for_update().execution_options(populate_existing=True)
+        return db.session.scalar(q)
+
+    def paid_by_mobile(self, mobile: str, store_id: int | None, limit: int = 20) -> list[Sale]:
+        """A customer's paid bills, newest first. store_id None = all stores."""
+        q = db.select(Sale).where(Sale.customer_mobile == mobile, Sale.status == SaleStatus.PAID)
+        if store_id is not None:
+            q = q.where(Sale.store_id == store_id)
+        return list(db.session.scalars(q.order_by(Sale.completed_at.desc()).limit(limit)).all())
+
     def find_item(self, sale_id: int, product_id: int) -> SaleItem | None:
         return db.session.scalar(
             db.select(SaleItem).where(SaleItem.sale_id == sale_id, SaleItem.product_id == product_id)

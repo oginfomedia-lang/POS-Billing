@@ -33,6 +33,8 @@ export async function createProduct(data: {
   sku?: string;
   price: number;
   tax_rate?: number;
+  mrp?: number | null;
+  hsn_code?: string | null;
   uom?: UOMType;
   category_id?: number | null;
   description?: string | null;
@@ -51,6 +53,9 @@ export async function updateProduct(
     sku: string;
     price: number;
     tax_rate: number;
+    /** null clears it; leave out to keep. */
+    mrp: number | null;
+    hsn_code: string | null;
     uom: UOMType;
     is_variable_weight: boolean;
     is_active: boolean;

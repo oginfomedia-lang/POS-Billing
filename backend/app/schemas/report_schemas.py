@@ -37,6 +37,9 @@ class SalesSummary(BaseModel):
     tax: Decimal
     total: Decimal
     average_bill: Decimal
+    returns: int = 0  # credit notes in the period
+    refunded: Decimal = Decimal("0")  # cash given back for returns (incl. GST)
+    net_total: Decimal = Decimal("0")  # total - refunded
 
 
 class MethodRow(BaseModel):
@@ -56,6 +59,15 @@ class GstRow(BaseModel):
     taxable: Decimal
     tax: Decimal
     cgst: Decimal  # intra-state split: half CGST, half SGST
+    sgst: Decimal
+
+
+class GstHsnRow(BaseModel):
+    hsn_code: str | None  # None = products without an HSN code
+    tax_rate: Decimal
+    taxable: Decimal
+    tax: Decimal
+    cgst: Decimal
     sgst: Decimal
 
 
@@ -81,6 +93,7 @@ class SalesReportOut(BaseModel):
     by_method: list[MethodRow]
     daily: list[DailyRow]
     gst: list[GstRow]
+    gst_hsn: list[GstHsnRow] = []
     top_products: list[TopProductRow]
     offers: list[OfferRow]
 
@@ -95,6 +108,7 @@ class ShiftRow(BaseModel):
     opening_float: Decimal
     bills: int
     cash_sales: Decimal
+    cash_refunds: Decimal = Decimal("0")
     expected_cash: Decimal | None
     actual_cash: Decimal | None
     difference: Decimal | None  # actual - expected; negative = cash short

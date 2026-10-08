@@ -9,6 +9,7 @@ from app.repositories.store_repository import StoreRepository
 from app.schemas.report_schemas import (
     DailyRow,
     DashboardOut,
+    GstHsnRow,
     GstRow,
     MethodRow,
     OfferRow,
@@ -19,7 +20,7 @@ from app.schemas.report_schemas import (
     ShiftRow,
     TopProductRow,
 )
-from app.services import inventory_service
+from app.services import inventory_service, pricing_service
 from app.utils.dates import IST, business_date
 from app.utils.money import round_money
 
@@ -37,6 +38,7 @@ def _range(q: ReportQuery) -> tuple[date, date, datetime, datetime]:
 def _summary(repo: ReportRepository, store_id: int | None, start: datetime, end: datetime) -> SalesSummary:
     row = repo.summary(store_id, start, end)
     total = Decimal(row.total)
+    refunds = repo.refunds_summary(store_id, start, end)
     return SalesSummary(
         bills=row.bills,
         voided=repo.voided_count(store_id, start, end),
@@ -45,7 +47,24 @@ def _summary(repo: ReportRepository, store_id: int | None, start: datetime, end:
         tax=row.tax,
         total=total,
         average_bill=round_money(total / row.bills) if row.bills else Decimal("0.00"),
+        returns=refunds.returns,
+        refunded=refunds.refunded,
+        net_total=total - Decimal(refunds.refunded),
     )
+
+
+def _net(sales_rows, refund_rows) -> list[tuple]:
+    """GST rows minus returned GST rows with the same key: (rate,) or (hsn, rate) -> [(*key, taxable, tax)]."""
+    out: dict[tuple, list[Decimal]] = {}
+    for *key, taxable, tax in sales_rows:
+        out[tuple(key)] = [Decimal(taxable), Decimal(tax)]
+    for *key, taxable, tax in refund_rows:
+        row = out.setdefault(tuple(key), [Decimal("0"), Decimal("0")])
+        row[0] -= Decimal(taxable)
+        row[1] -= Decimal(tax)
+    rows = [(*k, v[0], v[1]) for k, v in out.items()]
+    # No-HSN rows last, then by HSN / rate.
+    return sorted(rows, key=lambda r: tuple((x is None, x if x is not None else 0) for x in r[:-2]))
 
 
 def _methods(repo: ReportRepository, store_id: int | None, start: datetime, end: datetime) -> list[MethodRow]:
@@ -55,10 +74,17 @@ def _methods(repo: ReportRepository, store_id: int | None, start: datetime, end:
 def sales_report(q: ReportQuery) -> SalesReportOut:
     repo = ReportRepository()
     d_from, d_to, start, end = _range(q)
+    # GST is reported net of returns (credit notes) in the same period.
     gst = []
-    for rate, taxable, tax in repo.gst_by_rate(q.store_id, start, end):
-        cgst = round_money(Decimal(tax) / 2)
-        gst.append(GstRow(tax_rate=rate, taxable=taxable, tax=tax, cgst=cgst, sgst=Decimal(tax) - cgst))
+    by_rate = _net(repo.gst_by_rate(q.store_id, start, end), repo.refunds_gst_by_rate(q.store_id, start, end))
+    for rate, taxable, tax in by_rate:
+        cgst, sgst = pricing_service.split_gst(tax)
+        gst.append(GstRow(tax_rate=rate, taxable=taxable, tax=tax, cgst=cgst, sgst=sgst))
+    gst_hsn = []
+    by_hsn = _net(repo.gst_by_hsn(q.store_id, start, end), repo.refunds_gst_by_hsn(q.store_id, start, end))
+    for hsn, rate, taxable, tax in by_hsn:
+        cgst, sgst = pricing_service.split_gst(tax)
+        gst_hsn.append(GstHsnRow(hsn_code=hsn, tax_rate=rate, taxable=taxable, tax=tax, cgst=cgst, sgst=sgst))
     return SalesReportOut(
         store_id=q.store_id,
         date_from=d_from,
@@ -67,6 +93,7 @@ def sales_report(q: ReportQuery) -> SalesReportOut:
         by_method=_methods(repo, q.store_id, start, end),
         daily=[DailyRow(day=d, bills=b, total=t) for d, b, t in repo.daily(q.store_id, start, end)],
         gst=gst,
+        gst_hsn=gst_hsn,
         top_products=[
             TopProductRow(product_id=pid, product_name=name, qty=qty, amount=amt)
             for pid, name, qty, amt in repo.top_products(q.store_id, start, end)
@@ -81,7 +108,9 @@ def sales_report(q: ReportQuery) -> SalesReportOut:
 def shift_report(q: ReportQuery) -> list[ShiftRow]:
     _, _, start, end = _range(q)
     rows = []
-    for shift, cashier, counter_code, bills, cash_sales in ReportRepository().shifts(q.store_id, start, end):
+    for shift, cashier, counter_code, bills, cash_sales, cash_refunds in ReportRepository().shifts(
+        q.store_id, start, end
+    ):
         expected = shift.expected_cash
         diff = shift.actual_cash - expected if expected is not None and shift.actual_cash is not None else None
         rows.append(ShiftRow(
@@ -94,6 +123,7 @@ def shift_report(q: ReportQuery) -> list[ShiftRow]:
             opening_float=shift.opening_float,
             bills=bills,
             cash_sales=cash_sales,
+            cash_refunds=cash_refunds,
             expected_cash=expected,
             actual_cash=shift.actual_cash,
             difference=diff,

@@ -5,6 +5,7 @@ from app.errors.exceptions import ConflictError, NotFoundError
 from app.models.shift import CashierShift
 from app.models.enums import ShiftStatus
 from app.repositories.payment_repository import PaymentRepository
+from app.repositories.return_repository import ReturnRepository
 from app.repositories.shift_repository import ShiftRepository
 from app.repositories.store_repository import CounterRepository
 from app.schemas.shift_schemas import CloseShiftRequest, OpenShiftRequest
@@ -54,8 +55,13 @@ def close_shift(shift_id: int, user_id: int, data: CloseShiftRequest) -> Cashier
     if shift.status != ShiftStatus.OPEN:
         raise ConflictError("Shift is already closed.")
 
-    # Expected cash in the drawer = opening float + cash taken on this shift's paid bills.
-    shift.expected_cash = shift.opening_float + PaymentRepository().cash_total_for_shift(shift.id)
+    # Expected cash in the drawer = opening float + cash taken on this shift's paid bills
+    # − cash paid out for returns during this shift.
+    shift.expected_cash = (
+        shift.opening_float
+        + PaymentRepository().cash_total_for_shift(shift.id)
+        - ReturnRepository().cash_refunds_for_shift(shift.id)
+    )
     shift.actual_cash = data.actual_cash
     shift.status = ShiftStatus.CLOSED
     shift.closed_at = datetime.now(timezone.utc)

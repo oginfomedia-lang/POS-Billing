@@ -2,6 +2,7 @@
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { registerConfigHandlers } from './ipc/configHandlers';
+import { registerPrinterHandlers } from './ipc/printerHandlers';
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -20,7 +21,8 @@ function createWindow(): void {
 
   win.once('ready-to-show', () => {
     win.maximize();
-    win.webContents.openDevTools();
+    // DevTools only while developing, never in the installed app at the counter.
+    if (process.env.ELECTRON_RENDERER_URL) win.webContents.openDevTools();
     win.show();
   });
 
@@ -50,6 +52,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     registerConfigHandlers();
+    registerPrinterHandlers();
     createWindow();
   });
 

@@ -1,4 +1,6 @@
 """Sale, SaleItem (historical name/price snapshot) and BillSequence models."""
+from decimal import Decimal
+
 from app.extensions import db
 from app.models.base import TimestampMixin
 from app.models.enums import SaleStatus
@@ -24,6 +26,7 @@ class Sale(TimestampMixin, db.Model):
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     note = db.Column(db.String(255), nullable=True)  # hold note
+    customer_mobile = db.Column(db.String(10), nullable=True, index=True)  # optional, 10-digit Indian mobile
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     items = db.relationship(
@@ -35,6 +38,11 @@ class Sale(TimestampMixin, db.Model):
     store = db.relationship("Store")
     counter = db.relationship("Counter")
     cashier = db.relationship("User")
+
+    @property
+    def total_saving(self) -> Decimal:
+        """"You saved" on the bill: MRP vs what the customer paid, plus offers on items without an MRP."""
+        return sum((i.saving for i in self.items), Decimal("0.00"))
 
     def __repr__(self) -> str:
         return f"<Sale {self.id} {self.bill_number or 'draft'} ({self.status.value})>"
@@ -50,6 +58,8 @@ class SaleItem(TimestampMixin, db.Model):
     product_name = db.Column(db.String(200), nullable=False)
     unit_price = db.Column(db.Numeric(12, 2), nullable=False)
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
+    mrp = db.Column(db.Numeric(12, 2), nullable=True)  # incl. GST, per unit
+    hsn_code = db.Column(db.String(8), nullable=True)
     qty = db.Column(db.Numeric(12, 3), nullable=False)
     line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before discount and tax
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
@@ -64,6 +74,11 @@ class SaleItem(TimestampMixin, db.Model):
 
     sale = db.relationship("Sale", back_populates="items")
     product = db.relationship("Product")
+
+    @property
+    def saving(self) -> Decimal:
+        from app.services.pricing_service import line_saving
+        return line_saving(self.mrp, self.qty, self.line_total, self.discount_amount, self.tax_amount)
 
     def __repr__(self) -> str:
         return f"<SaleItem {self.product_name} x{self.qty}>"

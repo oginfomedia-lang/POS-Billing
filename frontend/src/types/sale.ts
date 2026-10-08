@@ -20,6 +20,8 @@ export interface SaleItemOut {
   product_name: string;
   unit_price: string;
   tax_rate: string;
+  mrp: string | null; // incl. GST, per unit
+  hsn_code: string | null;
   qty: number;
   line_total: string; // unit_price × qty, before discount
   discount_amount: string; // offer + manual + this line's share of the bill offer
@@ -28,6 +30,17 @@ export interface SaleItemOut {
   manual_discount: string; // counter discount, manager-approved
   manual_discount_reason: string | null;
   tax_amount: string;
+  /** MRP × qty − amount paid (or the discount when there's no MRP). */
+  saving: string;
+}
+
+/** One line of the rate-wise GST table on a receipt / credit note. */
+export interface GstSummaryRow {
+  tax_rate: string;
+  taxable: string;
+  cgst: string;
+  sgst: string;
+  tax: string;
 }
 
 export interface SaleOut {
@@ -44,7 +57,9 @@ export interface SaleOut {
   bill_offer_discount: string;
   tax_amount: string;
   total: string;
+  total_saving: string;
   note: string | null;
+  customer_mobile: string | null;
   items: SaleItemOut[];
   payments: PaymentOut[];
   created_at: string;
@@ -60,6 +75,8 @@ export interface ReceiptOut {
   store_gstin: string | null;
   counter_code: string | null;
   cashier_name: string;
+  /** Masked for printing, e.g. 98XXXXX210. */
+  customer_mobile: string | null;
   completed_at: string;
   items: SaleItemOut[];
   subtotal: string;
@@ -68,6 +85,8 @@ export interface ReceiptOut {
   bill_offer_discount: string;
   tax_amount: string;
   total: string;
+  total_saving: string;
+  gst_summary: GstSummaryRow[];
   payments: PaymentOut[];
   receipt_header: string;
   receipt_footer: string;

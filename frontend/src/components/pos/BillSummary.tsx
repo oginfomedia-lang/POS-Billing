@@ -1,4 +1,4 @@
-// Subtotal, discount, GST, round-off, grand total.
+// Subtotal, discount, GST, grand total, and what the customer saves vs MRP.
 import { useTranslation } from 'react-i18next';
 import type { SaleOut } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
@@ -53,6 +53,12 @@ export function BillSummary({ sale, onPayClick, disabled }: Props) {
           <span className="total-label">{t('pos.grandTotal')}</span>
           <span className="total-amount">{formatRupees(sale?.total ?? 0)}</span>
         </div>
+        {sale && Number(sale.total_saving) > 0 && (
+          <div className="summary-row summary-you-save">
+            <span className="row-label"><IconSparkles size={14} /> {t('pos.youSave')}</span>
+            <span className="row-val">{formatRupees(sale.total_saving)}</span>
+          </div>
+        )}
 
         {onPayClick && (
           <button

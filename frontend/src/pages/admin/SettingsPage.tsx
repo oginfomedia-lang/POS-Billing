@@ -1,16 +1,19 @@
-// Receipt text and store-wide inventory defaults.
+// Receipt text, store-wide inventory defaults, return window, and this counter's printer.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getSettings, saveSettings } from '../../services/api/reportApi';
+import { hasPrinterBridge } from '../../services/hardware/printerService';
 import type { SettingsData } from '../../types/report';
 
 const DEFAULTS: SettingsData = {
   receipt_header: '',
   receipt_footer: 'Thank you! Visit again.',
   low_stock_threshold: '5',
+  return_window_days: 30,
 };
 
 export function SettingsPage() {
@@ -99,6 +102,21 @@ export function SettingsPage() {
               required
             />
           </label>
+          <label className="field-label">
+            {t('settings.returnWindowDays')}
+            <input
+              className="field-input"
+              type="number"
+              min="0"
+              max="365"
+              step="1"
+              value={settings.return_window_days}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('return_window_days', Number(e.target.value))}
+              required
+            />
+            <span className="hint-text">{t('settings.returnWindowHint')}</span>
+          </label>
           {isAdmin ? (
             <div className="modal-buttons">
               <button className="btn-primary" type="submit" disabled={saving}>
@@ -110,6 +128,7 @@ export function SettingsPage() {
           )}
         </form>
       )}
+      {hasPrinterBridge() && <PrinterSettingsCard />}
     </div>
   );
 }

@@ -57,6 +57,8 @@ def make_product(
     barcode: str | None = None,
     sku: str | None = None,
     is_variable_weight: bool = False,
+    mrp: str | None = None,
+    hsn_code: str | None = None,
 ) -> Product:
     unique_sku = sku or f"SKU-{uuid.uuid4().hex[:8]}"
     product = Product(
@@ -65,6 +67,8 @@ def make_product(
         price=Decimal(price),
         tax_rate=Decimal(tax_rate),
         is_variable_weight=is_variable_weight,
+        mrp=Decimal(mrp) if mrp is not None else None,
+        hsn_code=hsn_code,
     )
     product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
     db.session.add(product)
