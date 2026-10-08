@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   createProduct,
@@ -11,11 +12,12 @@ import {
 } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { stockIn } from '../../services/api/inventoryApi';
-import { listStores } from '../../services/api/storeApi';
 import { useAuth } from '../../hooks/useAuth';
-import type { StoreOut } from '../../types/api';
+import { useStoreContext, useStores } from '../../store/storeContext';
+import { formatRupees } from '../../utils/money';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 
 interface BarcodeItem {
   barcode: string;
@@ -30,11 +32,14 @@ function inferBarcodeType(code: string): BarcodeType {
 }
 
 export function ProductsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [products, setProducts] = useState<ProductOut[]>([]);
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  // Active and deactivated products are listed separately.
+  const [view, setView] = useState<StatusView>('active');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -56,7 +61,9 @@ export function ProductsPage() {
 
   // Receive stock straight from the product form (no trip to the Inventory page).
   const { user } = useAuth();
-  const [stores, setStores] = useState<StoreOut[]>([]);
+  const stores = useStores().filter((s) => s.is_active);
+  // The branch picked in the sidebar: the list shows shared products + that branch's own, with its prices.
+  const branchId = useStoreContext((s) => s.selectedId);
   const [stockStoreId, setStockStoreId] = useState('');
   const [stockQty, setStockQty] = useState('');
   const [stockNote, setStockNote] = useState('');
@@ -65,15 +72,12 @@ export function ProductsPage() {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
+  // Default store for received stock: the one picked elsewhere in the admin, else the user's own, else the first.
   useEffect(() => {
-    listStores()
-      .then((list) => {
-        setStores(list);
-        const mine = list.find((s) => s.id === user?.store_id) ?? list[0];
-        if (mine) setStockStoreId(String(mine.id));
-      })
-      .catch((err) => setError(getErrorMessage(err)));
-  }, []);
+    if (!stores.length || stores.some((s) => String(s.id) === stockStoreId)) return;
+    const preferred = useStoreContext.getState().selectedId ?? user?.store_id;
+    setStockStoreId(String((stores.find((s) => s.id === preferred) ?? stores[0]).id));
+  }, [stores.length]);
 
   const stockQtyValid = stockQty.trim() === '' || Number(stockQty) > 0;
 
@@ -85,7 +89,7 @@ export function ProductsPage() {
       setReceived({ productId: product.id, name: product.name, qty: stockQty.trim(), hasBarcode: product.barcodes.length > 0 });
       return true;
     } catch (err) {
-      setError(`"${product.name}" was saved, but the stock was not received: ${getErrorMessage(err)}`);
+      setError(t('products.stockNotReceived', { name: product.name, error: getErrorMessage(err) }));
       return false;
     }
   }
@@ -95,7 +99,7 @@ export function ProductsPage() {
     setError('');
     try {
       const [prod, cats] = await Promise.all([
-        listProducts({ page: p, per_page: 25 }),
+        listProducts({ page: p, per_page: 25, status: view, store_id: branchId ?? undefined }),
         listCategories(),
       ]);
       setProducts(prod.items);
@@ -110,7 +114,7 @@ export function ProductsPage() {
 
   useEffect(() => {
     fetchAll();
-  }, [page]);
+  }, [page, view, branchId]);
 
   useEffect(() => {
     if (modal) {
@@ -118,7 +122,15 @@ export function ProductsPage() {
     }
   }, [modal]);
 
+  /** Received stock goes to the branch picked in the sidebar, else the user's own, else the first. */
+  function defaultStockStore() {
+    const preferred = branchId ?? user?.store_id;
+    const store = stores.find((s) => s.id === preferred) ?? stores[0];
+    if (store) setStockStoreId(String(store.id));
+  }
+
   function openCreate() {
+    defaultStockStore();
     setModal('create');
     setTarget(null);
     setFormSku('');
@@ -137,6 +149,7 @@ export function ProductsPage() {
   }
 
   function openEdit(p: ProductOut) {
+    defaultStockStore();
     setModal('edit');
     setTarget(p);
     setFormSku(p.sku || '');
@@ -169,7 +182,7 @@ export function ProductsPage() {
     if (!code) return;
 
     if (barcodesList.some((b) => b.barcode === code)) {
-      setFormError(`Barcode '${code}' is already added to this item.`);
+      setFormError(t('products.duplicateBarcode', { code }));
       return;
     }
 
@@ -218,7 +231,7 @@ export function ProductsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!stockQtyValid) {
-      setFormError('Stock to receive must be more than 0 (or leave it empty).');
+      setFormError(t('products.stockQtyInvalid'));
       return;
     }
     setSaving(true);
@@ -249,7 +262,7 @@ export function ProductsPage() {
     e.preventDefault();
     if (!target) return;
     if (!stockQtyValid) {
-      setFormError('Stock to receive must be more than 0 (or leave it empty).');
+      setFormError(t('products.stockQtyInvalid'));
       return;
     }
     setSaving(true);
@@ -292,10 +305,10 @@ export function ProductsPage() {
     <div className="admin-page">
       <AdminNav />
       <div className="admin-header">
-        <h2>Products Management</h2>
+        <h2>{t('products.title')}</h2>
         <div className="admin-actions">
           <button className="btn-primary" onClick={openCreate}>
-            + Add Product
+            {t('products.add')}
           </button>
         </div>
       </div>
@@ -303,7 +316,7 @@ export function ProductsPage() {
       {error && <div className="page-error">{error}</div>}
       {received && (
         <div className="notice-bar">
-          Received {received.qty} × {received.name}.
+          {t('common.received', { qty: received.qty, name: received.name })}
           {received.hasBarcode && Number.isInteger(Number(received.qty)) && (
             <button
               className="btn-primary btn-compact"
@@ -312,47 +325,58 @@ export function ProductsPage() {
                 { state: { from: '/admin/products' } },
               )}
             >
-              Print {received.qty} labels
+              {t('common.printLabels', { count: Number(received.qty) })}
             </button>
           )}
-          <button className="btn-sm" onClick={() => setReceived(null)}>Dismiss</button>
+          <button className="btn-sm" onClick={() => setReceived(null)}>{t('common.dismiss')}</button>
         </div>
       )}
-      {loading && <div className="loading-text">Loading products…</div>}
+      <StatusTabs value={view} onChange={(v) => { setView(v); setPage(1); }} />
+      {loading && <div className="loading-text">{t('products.loading')}</div>}
 
       <div className="table-card">
         <table className="data-table">
           <thead>
             <tr>
-              <th>SKU</th>
-              <th>Name</th>
-              <th>Price</th>
-              <th>Tax %</th>
-              <th>Category</th>
-              <th>Type</th>
-              <th>Active</th>
-              <th>Barcodes</th>
-              <th>Actions</th>
+              <th>{t('products.colSku')}</th>
+              <th>{t('products.colName')}</th>
+              <th>{t('products.colPrice')}</th>
+              <th>{t('products.colUom')}</th>
+              <th>{t('products.colTax')}</th>
+              <th>{t('products.colCategory')}</th>
+              <th>{t('products.colType')}</th>
+              <th>{t('products.colBarcodes')}</th>
+              <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
+            {!loading && products.length === 0 && (
+              <tr>
+                <td colSpan={9} className="empty-row">
+                  {view === 'active' ? t('products.emptyActive') : t('products.emptyInactive')}
+                </td>
+              </tr>
+            )}
             {products.map((p) => {
               const cat = categories.find((c) => c.id === p.category_id);
               return (
                 <tr key={p.id}>
                   <td><code>{p.sku}</code></td>
                   <td>{p.name}</td>
-                  <td>₹{Number(p.price).toFixed(2)}</td>
+                  <td title={p.store_price ? t('products.branchPriceTip') : undefined}>
+                    {formatRupees(p.store_price ?? p.price)}
+                    {p.store_price && <span className="status-muted price-hq">{t('products.hqPrice', { price: formatRupees(p.price) })}</span>}
+                  </td>
+                  <td><code>{p.uom || 'pcs'}</code></td>
                   <td>{Number(p.tax_rate).toFixed(1)}%</td>
                   <td>{cat?.name ?? '—'}</td>
                   <td>
                     {p.is_variable_weight ? (
-                      <span className="barcode-badge badge-scale">Scale (Weight)</span>
+                      <span className="barcode-badge badge-scale">{t('products.typeScale')}</span>
                     ) : (
-                      <span className="barcode-badge badge-manufacturer">Standard</span>
+                      <span className="barcode-badge badge-manufacturer">{t('products.typeStandard')}</span>
                     )}
                   </td>
-                  <td>{p.is_active ? '✓' : '—'}</td>
                   <td>
                     <div className="barcode-chips-list">
                       {p.barcodes && p.barcodes.length > 0 ? (
@@ -371,15 +395,15 @@ export function ProductsPage() {
                   </td>
                   <td className="table-actions">
                     <button className="btn-sm" onClick={() => openEdit(p)}>
-                      Edit
+                      {t('common.edit')}
                     </button>
                     <button
                       className="btn-sm"
                       onClick={() => navigate(`/admin/labels?product=${p.id}`, { state: { from: '/admin/products' } })}
                       disabled={p.barcodes.length === 0}
-                      title={p.barcodes.length ? 'Print barcode stickers' : 'Add or generate a barcode first'}
+                      title={p.barcodes.length ? t('products.labelsTitle') : t('products.labelsNeedBarcode')}
                     >
-                      Labels
+                      {t('products.labelsBtn')}
                     </button>
                   </td>
                 </tr>
@@ -391,47 +415,47 @@ export function ProductsPage() {
 
       <div className="pagination">
         <button disabled={page <= 1} onClick={() => setPage(page - 1)}>
-          ← Prev
+          {t('common.prev')}
         </button>
         <span>
-          Page {page} · {total} products
+          {t('common.pageInfo', { page, total })}
         </span>
         <button disabled={products.length < 25} onClick={() => setPage(page + 1)}>
-          Next →
+          {t('common.next')}
         </button>
       </div>
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
-            <h3>{modal === 'create' ? 'Add New Product' : `Edit ${target?.name}`}</h3>
+            <h3>{modal === 'create' ? t('products.addTitle') : t('products.editTitle', { name: target?.name })}</h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={modal === 'create' ? handleCreate : handleEdit} className="modal-form">
               <div className="form-row">
                 <label className="field-label">
-                  Product SKU / Code
+                  {t('products.sku')}
                   <input
                     className="field-input"
                     value={formSku}
                     onChange={(e) => setFormSku(e.target.value)}
-                    placeholder="e.g. SKU-00123"
+                    placeholder={t('products.skuPlaceholder')}
                   />
                 </label>
                 <label className="field-label">
-                  Product Name
+                  {t('products.productName')}
                   <input
                     className="field-input"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     required
-                    placeholder="e.g. DMart Premia Almonds"
+                    placeholder={t('products.namePlaceholder')}
                   />
                 </label>
               </div>
 
-              <div className="form-row form-row-3">
+              <div className="form-row form-row-4">
                 <label className="field-label">
-                  Price (₹)
+                  {t('products.price')}
                   <input
                     className="field-input"
                     type="number"
@@ -443,22 +467,19 @@ export function ProductsPage() {
                   />
                 </label>
                 <label className="field-label">
-                  Unit (UOM)
+                  {t('products.uom')}
                   <select
                     className="field-input"
                     value={formUom}
                     onChange={(e) => setFormUom(e.target.value as any)}
                   >
-                    <option value="pcs">pcs (Pieces)</option>
-                    <option value="kg">kg (Kilograms)</option>
-                    <option value="g">g (Grams)</option>
-                    <option value="ltr">ltr (Liters)</option>
-                    <option value="ml">ml (Milliliters)</option>
-                    <option value="pack">pack (Packets)</option>
+                    {(['pcs', 'kg', 'g', 'ltr', 'ml', 'pack'] as const).map((u) => (
+                      <option key={u} value={u}>{t(`products.uoms.${u}`)}</option>
+                    ))}
                   </select>
                 </label>
                 <label className="field-label">
-                  Tax Rate (%)
+                  {t('products.taxRate')}
                   <input
                     className="field-input"
                     type="number"
@@ -470,13 +491,13 @@ export function ProductsPage() {
                   />
                 </label>
                 <label className="field-label">
-                  Category
+                  {t('products.category')}
                   <select
                     className="field-input"
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                   >
-                    <option value="">— None —</option>
+                    <option value="">{t('common.none')}</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -492,11 +513,11 @@ export function ProductsPage() {
                   checked={formVariableWeight}
                   onChange={(e) => setFormVariableWeight(e.target.checked)}
                 />
-                <strong>Is Variable-Weight Item (Scale Produce / Loose Pack)?</strong>
+                <strong>{t('products.variableWeight')}</strong>
               </label>
 
               <div className="field-label">
-                <span>Associated Barcodes</span>
+                <span>{t('products.barcodes')}</span>
                 <div className="barcode-scanner-box">
                   <input
                     ref={barcodeInputRef}
@@ -505,7 +526,7 @@ export function ProductsPage() {
                     value={barcodeInput}
                     onChange={(e) => setBarcodeInput(e.target.value)}
                     onKeyDown={handleAddBarcodeFromInput}
-                    placeholder="Scan USB scanner or type barcode, then Enter"
+                    placeholder={t('products.barcodePlaceholder')}
                     autoFocus
                   />
                   <button
@@ -513,7 +534,7 @@ export function ProductsPage() {
                     className="btn-secondary"
                     onClick={() => handleAddBarcodeFromInput()}
                   >
-                    + Add
+                    {t('products.addBarcode')}
                   </button>
                   <button
                     type="button"
@@ -521,7 +542,7 @@ export function ProductsPage() {
                     onClick={handleGenerateInHouse}
                     disabled={generating}
                   >
-                    {generating ? 'Generating…' : '⚡ Generate In-House Barcode'}
+                    {generating ? t('products.generating') : t('products.generate')}
                   </button>
                 </div>
 
@@ -536,7 +557,7 @@ export function ProductsPage() {
                         type="button"
                         className="chip-remove-btn"
                         onClick={() => handleRemoveBarcode(b.barcode)}
-                        title="Remove Barcode"
+                        title={t('products.removeBarcode')}
                       >
                         ✕
                       </button>
@@ -544,17 +565,17 @@ export function ProductsPage() {
                   ))}
                   {barcodesList.length === 0 && (
                     <span className="hint-text">
-                      No barcodes mapped yet. Scan or generate one above.
+                      {t('products.noBarcodes')}
                     </span>
                   )}
                 </div>
               </div>
 
               <fieldset className="form-section">
-                <legend>Receive stock (optional)</legend>
+                <legend>{t('products.receiveStock')}</legend>
                 <div className={stores.length > 1 ? 'form-row form-row-3' : 'form-row'}>
                   <label className="field-label">
-                    {modal === 'create' ? 'Opening stock (qty)' : 'Add stock received (qty)'}
+                    {modal === 'create' ? t('products.openingStock') : t('products.addStock')}
                     <input
                       className="field-input"
                       type="number"
@@ -562,29 +583,29 @@ export function ProductsPage() {
                       step="any"
                       value={stockQty}
                       onChange={(e) => setStockQty(e.target.value)}
-                      placeholder="e.g. 24"
+                      placeholder={t('products.qtyPlaceholder')}
                     />
                   </label>
                   {stores.length > 1 && (
                     <label className="field-label">
-                      Store
+                      {t('common.store')}
                       <select className="field-input" value={stockStoreId} onChange={(e) => setStockStoreId(e.target.value)}>
                         {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </label>
                   )}
                   <label className="field-label">
-                    Note
+                    {t('common.note')}
                     <input
                       className="field-input"
                       maxLength={500}
                       value={stockNote}
                       onChange={(e) => setStockNote(e.target.value)}
-                      placeholder="e.g. supplier invoice no."
+                      placeholder={t('products.notePlaceholder')}
                     />
                   </label>
                 </div>
-                <span className="hint-text">Leave empty if no goods arrived. This adds to stock; it never replaces it.</span>
+                <span className="hint-text">{t('products.receiveHint')}</span>
               </fieldset>
 
               {modal === 'edit' && (
@@ -594,16 +615,16 @@ export function ProductsPage() {
                     checked={formActive}
                     onChange={(e) => setFormActive(e.target.checked)}
                   />
-                  Active Product
+                  {t('products.activeProduct')}
                 </label>
               )}
 
               <div className="modal-buttons">
                 <button type="button" className="btn-secondary" onClick={() => setModal(null)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button type="submit" className="btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : modal === 'create' ? 'Create Product' : 'Save Changes'}
+                  {saving ? t('common.saving') : modal === 'create' ? t('products.createBtn') : t('products.saveChanges')}
                 </button>
               </div>
             </form>

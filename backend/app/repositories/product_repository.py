@@ -49,8 +49,11 @@ class ProductRepository(BaseRepository):
         category_id: int | None = None,
         store_id: int | None = None,
         search: str | None = None,
+        is_active: bool | None = None,
     ) -> tuple[list[Product], int]:
         q = db.select(Product)
+        if is_active is not None:
+            q = q.where(Product.is_active.is_(is_active))
         if search:
             # Name / SKU contains the text, or an exact barcode match.
             like = f"%{search}%"

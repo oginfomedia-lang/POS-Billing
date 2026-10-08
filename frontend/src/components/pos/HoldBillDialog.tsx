@@ -1,5 +1,6 @@
 // Confirm holding the current bill.
 import { type FormEvent, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { IconPauseCircle, IconX } from '../common/Icons';
 
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
+  const { t } = useTranslation();
   const [note, setNote] = useState('');
   useKeyboardShortcuts({ Escape: onClose });
 
@@ -25,7 +27,7 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
         <div className="modal-header">
           <div className="title-with-icon">
             <IconPauseCircle size={22} color="#d97706" />
-            <h3 className="modal-title">Hold Current Bill</h3>
+            <h3 className="modal-title">{t('hold.title')}</h3>
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose}>
             <IconX size={18} />
@@ -36,12 +38,12 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
 
         <form onSubmit={handleSubmit} className="modal-form">
           <label className="field-label">
-            <span>Customer / Order Reference Note (optional)</span>
+            <span>{t('hold.noteLabel')}</span>
             <input
               className="field-input"
               value={note}
               maxLength={255}
-              placeholder="e.g. Customer went to pick up additional items from Aisle 4"
+              placeholder={t('hold.notePlaceholder')}
               onChange={(e) => setNote(e.target.value)}
               autoFocus
             />
@@ -49,10 +51,10 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
 
           <div className="modal-buttons">
             <button type="button" className="btn-secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className="btn-primary btn-warning-bg" disabled={busy}>
-              {busy ? 'Holding Bill…' : 'Park & Hold Bill'}
+              {busy ? t('hold.holding') : t('hold.submit')}
             </button>
           </div>
         </form>

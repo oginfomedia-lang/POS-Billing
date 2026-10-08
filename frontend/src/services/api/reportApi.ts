@@ -28,8 +28,9 @@ export async function getShiftReport(f: ReportFilter): Promise<ShiftRow[]> {
   return resp.data;
 }
 
-export async function listDiscounts(): Promise<DiscountOut[]> {
-  const resp = await httpClient.get<DiscountOut[]>('/discounts');
+/** storeId: that branch's offers plus all-branch offers; omit for every offer (head office). */
+export async function listDiscounts(storeId?: number | null): Promise<DiscountOut[]> {
+  const resp = await httpClient.get<DiscountOut[]>('/discounts', { params: { store_id: storeId ?? undefined } });
   return resp.data;
 }
 

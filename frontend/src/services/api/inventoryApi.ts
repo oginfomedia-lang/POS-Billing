@@ -41,6 +41,11 @@ export async function adjustStock(storeId: number, productId: number, newQty: st
   return resp.data;
 }
 
+/** This branch's own selling price (before GST); null = go back to the head-office price. */
+export async function setStorePrice(storeId: number, productId: number, price: string | null): Promise<void> {
+  await httpClient.post('/inventory/price', { store_id: storeId, product_id: productId, price });
+}
+
 /** Per-product low-stock level; null = use the store-wide default from Settings. */
 export async function setThreshold(storeId: number, productId: number, threshold: string | null): Promise<void> {
   await httpClient.post('/inventory/threshold', { store_id: storeId, product_id: productId, threshold });

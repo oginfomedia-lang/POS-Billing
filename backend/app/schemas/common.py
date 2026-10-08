@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,12 @@ T = TypeVar("T")
 class PaginationQuery(BaseModel):
     page: int = Field(1, ge=1)
     per_page: int = Field(25, ge=1, le=100)
+    # ?status=active / ?status=inactive lists only those; omitted lists everything.
+    status: Literal["active", "inactive"] | None = None
+
+    @property
+    def is_active(self) -> bool | None:
+        return None if self.status is None else self.status == "active"
 
 
 class PagedResponse(BaseModel, Generic[T]):

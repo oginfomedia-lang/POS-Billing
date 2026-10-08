@@ -12,8 +12,9 @@ from app.schemas.product_schemas import (
     ProductOut,
     ProductUpdate,
 )
-from app.services import product_service
+from app.services import auth_service, inventory_service, product_service
 from app.utils.permissions import require_permission
+from app.utils.store_scope import require_store_access, scoped_store_id
 
 product_bp = Blueprint("products", __name__)
 
@@ -52,17 +53,26 @@ def list_products():
     q = PaginationQuery.model_validate(request.args)
     active_only = request.args.get("active_only", "false").lower() == "true"
     category_id = request.args.get("category_id", type=int)
-    store_id = request.args.get("store_id", type=int)
+    # Shared catalogue + this store's own products; branch users always see their own store.
+    store_id = scoped_store_id(auth_service.current_user(), request.args.get("store_id", type=int))
     items, total = product_service.list_products(
         page=q.page, per_page=q.per_page,
         active_only=active_only, category_id=category_id, store_id=store_id,
-        search=request.args.get("q"),
+        search=request.args.get("q"), is_active=q.is_active,
     )
-    resp = PagedResponse.build(
-        [ProductOut.model_validate(p).model_dump(mode="json") for p in items],
-        total, q.page, q.per_page,
-    )
+    resp = PagedResponse.build(_with_store_prices(items, store_id), total, q.page, q.per_page)
     return jsonify(resp.model_dump()), 200
+
+
+def _with_store_prices(products: list, store_id: int | None) -> list[dict]:
+    """ProductOut dicts, with store_price filled in when a store is selected."""
+    overrides = inventory_service.store_prices(store_id, [p.id for p in products]) if store_id else {}
+    out = []
+    for p in products:
+        item = ProductOut.model_validate(p)
+        item.store_price = overrides.get(p.id)
+        out.append(item.model_dump(mode="json"))
+    return out
 
 
 @product_bp.post("/products")
@@ -76,13 +86,20 @@ def create_product():
 @product_bp.get("/products/<int:product_id>")
 @require_permission("products.read")
 def get_product(product_id: int):
+    store_id = scoped_store_id(auth_service.current_user(), request.args.get("store_id", type=int))
     product = product_service.get_product(product_id)
-    return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 200
+    if product.store_id is not None and store_id is not None and product.store_id != store_id:
+        require_store_access(auth_service.current_user(), product.store_id)
+    return jsonify(_with_store_prices([product], store_id)[0]), 200
 
 
 @product_bp.put("/products/<int:product_id>")
 @require_permission("products.update")
 def update_product(product_id: int):
+    # Branch managers may edit shared products and their own store's, not another store's.
+    existing = product_service.get_product(product_id)
+    if existing.store_id is not None:
+        require_store_access(auth_service.current_user(), existing.store_id)
     data = ProductUpdate.model_validate(request.get_json(force=True))
     product = product_service.update_product(product_id, data)
     return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 200

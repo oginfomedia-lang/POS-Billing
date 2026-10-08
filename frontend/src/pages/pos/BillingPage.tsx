@@ -1,6 +1,7 @@
 // Main checkout screen: scan, cart, totals, payment.
 import axios from 'axios';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { BarcodeInput } from '../../components/pos/BarcodeInput';
 import { BillSummary } from '../../components/pos/BillSummary';
@@ -24,14 +25,20 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { getProductByBarcode } from '../../services/api/productApi';
 import type { ManualDiscountInput } from '../../services/api/billingApi';
 import { useBillStore } from '../../store/billStore';
+import { useShiftStore } from '../../store/shiftStore';
+import { useStores } from '../../store/storeContext';
 import type { SaleItemOut, TenderMethod } from '../../types/sale';
 import { formatRupees } from '../../utils/money';
 
 type Dialog = 'pay' | 'hold' | null;
 
 export function BillingPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  // The store this till is billing for: the open shift's store (same one printed on the bill).
+  const shiftStoreId = useShiftStore((s) => s.shift?.store_id) ?? user?.store_id;
+  const storeName = useStores().find((s) => s.id === shiftStoreId)?.name ?? t('pos.counterFallback');
   const {
     sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, void: voidBill,
   } = useBillStore();
@@ -84,7 +91,7 @@ export function BillingPage() {
 
   function handleVoid() {
     if (!hasItems || busy) return;
-    if (window.confirm('Void this bill? All items will be removed.')) act(voidBill);
+    if (window.confirm(t('pos.voidConfirm'))) act(voidBill);
   }
 
   async function handleHold(note: string) {
@@ -132,25 +139,25 @@ export function BillingPage() {
       <header className="billing-topbar">
         <div className="pos-brand-tag">
           <IconShoppingCart size={22} color="#4f46e5" />
-          <span className="pos-counter-title">POS Counter</span>
+          <span className="pos-counter-title" title={storeName}>{storeName}</span>
         </div>
         <BarcodeInput onScan={handleScan} active={dialog === null && discountItem === null} />
         <div className="billing-meta">
           <div className="cashier-chip">
             <span className="cashier-name">{user?.full_name || user?.username}</span>
-            <span className="bill-id-badge">{sale ? `#${sale.id}` : 'Starting…'}</span>
+            <span className="bill-id-badge">{sale ? `#${sale.id}` : t('pos.starting')}</span>
           </div>
           {(user?.role === 'admin' || user?.role === 'manager') && (
             <button className="btn-secondary btn-icon" onClick={() => navigate('/admin')}>
               <IconDashboard size={15} />
-              <span>Admin</span>
+              <span>{t('pos.admin')}</span>
             </button>
           )}
           <button className="btn-secondary btn-icon" onClick={() => navigate('/pos/shift/close')}>
             <IconFileText size={15} />
-            <span>Shift</span>
+            <span>{t('pos.shift')}</span>
           </button>
-          <button className="btn-logout-icon" onClick={logout} title="Logout">
+          <button className="btn-logout-icon" onClick={logout} title={t('common.logout')}>
             <IconLogOut size={16} />
           </button>
         </div>
@@ -161,7 +168,7 @@ export function BillingPage() {
           <span>{error}</span>
           {draftFailed && (
             <button className="btn-sm error-retry" onClick={() => { setError(''); setDraftFailed(false); }}>
-              Retry
+              {t('common.retry')}
             </button>
           )}
         </div>
@@ -186,17 +193,17 @@ export function BillingPage() {
 
       <ShortcutBar
         shortcuts={[
-          { key: 'F2', label: 'Hold Bill', icon: IconPauseCircle, variant: 'warning', onClick: shortcuts.F2, disabled: !hasItems },
-          { key: 'F3', label: 'Held Bills', icon: IconFileText, variant: 'default', onClick: shortcuts.F3 },
-          { key: 'F12', label: 'Pay Now', icon: IconCreditCard, variant: 'primary', onClick: shortcuts.F12, disabled: !hasItems },
-          { key: 'Esc', label: 'Void Bill', icon: IconTrash, variant: 'danger', onClick: shortcuts.Escape, disabled: !hasItems },
+          { key: 'F2', label: t('pos.holdBill'), icon: IconPauseCircle, variant: 'warning', onClick: shortcuts.F2, disabled: !hasItems },
+          { key: 'F3', label: t('pos.heldBills'), icon: IconFileText, variant: 'default', onClick: shortcuts.F3 },
+          { key: 'F12', label: t('pos.payNow'), icon: IconCreditCard, variant: 'primary', onClick: shortcuts.F12, disabled: !hasItems },
+          { key: 'Esc', label: t('pos.voidBill'), icon: IconTrash, variant: 'danger', onClick: shortcuts.Escape, disabled: !hasItems },
         ]}
       />
 
       {/* Mobile Sticky Payment Bar */}
       <div className="mobile-checkout-bar">
         <div className="mobile-total-info">
-          <span className="mobile-total-label">Total Amount</span>
+          <span className="mobile-total-label">{t('pos.totalAmount')}</span>
           <span className="mobile-total-val">{formatRupees(sale?.total ?? 0)}</span>
         </div>
         <button
@@ -205,7 +212,7 @@ export function BillingPage() {
           onClick={() => openDialog('pay')}
         >
           <IconCreditCard size={18} />
-          <span>PAY NOW (F12)</span>
+          <span>{t('pos.payNowF12')}</span>
         </button>
       </div>
 

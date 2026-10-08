@@ -60,6 +60,8 @@ class ProductOut(BaseModel):
     is_active: bool
     store_id: int | None
     barcodes: list[BarcodeOut] = []
+    # Only when the request names a store: that store's own selling price (None = sells at `price`).
+    store_price: Decimal | None = None
 
 
 class ProductCreate(BaseModel):

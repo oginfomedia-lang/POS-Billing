@@ -1,6 +1,7 @@
 // Print barcode/price stickers for a product, in any quantity.
 // Open with /admin/labels?product=<id>&barcode=<code>&qty=<n> (all optional).
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { BarcodeLabel } from '../../components/admin/BarcodeLabel';
@@ -8,15 +9,17 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { getProduct, listProducts } from '../../services/api/productApi';
 import type { ProductOut } from '../../types/product';
 import { encodeBarcode } from '../../utils/barcode';
+import { useStoreContext } from '../../store/storeContext';
 import { paiseToString, toPaise } from '../../utils/money';
 
 const MAX_COPIES = 1000;
 const PREVIEW_LIMIT = 24;
 
+// Option text comes from labels.sizes.<key> in the language files.
 const SIZES = {
-  'roll-50x25': { label: '50 × 25 mm label roll (thermal printer)', page: '50mm 25mm', perPage: 1 },
-  'roll-38x25': { label: '38 × 25 mm label roll (thermal printer)', page: '38mm 25mm', perPage: 1 },
-  'a4-24': { label: 'A4 sheet, 24 labels (3 × 8, 70 × 37 mm)', page: 'A4', perPage: 24 },
+  'roll-50x25': { page: '50mm 25mm', perPage: 1 },
+  'roll-38x25': { page: '38mm 25mm', perPage: 1 },
+  'a4-24': { page: 'A4', perPage: 24 },
 } as const;
 type SizeKey = keyof typeof SIZES;
 
@@ -30,9 +33,9 @@ function savedSize(): SizeKey {
   return 'roll-50x25';
 }
 
-/** Selling price is tax-exclusive; the sticker shows what the customer pays. */
+/** Selling price is tax-exclusive; the sticker shows what the customer pays, at this branch's price. */
 function priceWithTax(p: ProductOut): string {
-  return paiseToString(Math.round((toPaise(p.price) * (100 + Number(p.tax_rate))) / 100));
+  return paiseToString(Math.round((toPaise(p.store_price ?? p.price) * (100 + Number(p.tax_rate))) / 100));
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -42,6 +45,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 export function LabelPrintPage() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -50,7 +54,7 @@ export function LabelPrintPage() {
     && (navigationState.from === '/admin/products' || navigationState.from === '/admin/inventory')
     ? navigationState.from
     : '/admin/products';
-  const backLabel = backTo === '/admin/inventory' ? 'Back to Inventory' : 'Back to Products';
+  const backLabel = backTo === '/admin/inventory' ? t('labels.backInventory') : t('labels.backProducts');
 
   const [product, setProduct] = useState<ProductOut | null>(null);
   const [barcode, setBarcode] = useState(params.get('barcode') ?? '');
@@ -61,12 +65,13 @@ export function LabelPrintPage() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<ProductOut[]>([]);
   const [error, setError] = useState('');
+  const branchId = useStoreContext((s) => s.selectedId);
 
   // Preselected product from the URL (from Products / Inventory pages).
   useEffect(() => {
     const id = Number(params.get('product'));
     if (!id) return;
-    getProduct(id).then(choose).catch((err) => setError(getErrorMessage(err)));
+    getProduct(id, branchId).then(choose).catch((err) => setError(getErrorMessage(err)));
   }, []);
 
   // Search as you type (debounced).
@@ -74,7 +79,7 @@ export function LabelPrintPage() {
     const q = search.trim();
     if (!q) { setResults([]); return; }
     const t = window.setTimeout(() => {
-      listProducts({ q, per_page: 10, active_only: true })
+      listProducts({ q, per_page: 10, active_only: true, store_id: branchId ?? undefined })
         .then((r) => setResults(r.items))
         .catch((err) => setError(getErrorMessage(err)));
     }, 250);
@@ -115,14 +120,14 @@ export function LabelPrintPage() {
       <div className="no-print">
         <AdminNav />
         <div className="admin-header">
-          <h2>Print Barcode Labels</h2>
+          <h2>{t('labels.title')}</h2>
           <div className="admin-actions">
             <button className="btn-secondary page-back-button" onClick={() => navigate(backTo)}>
               <span aria-hidden="true">←</span>
               {backLabel}
             </button>
             <button className="btn-primary" disabled={!ready} onClick={() => window.print()}>
-              Print {ready ? `${count} label${count === 1 ? '' : 's'}` : ''}
+              {ready ? t('common.printLabels', { count }) : t('common.print')}
             </button>
           </div>
         </div>
@@ -131,11 +136,11 @@ export function LabelPrintPage() {
 
         <div className="labels-form">
           <label className="field-label">
-            Product
+            {t('labels.product')}
             <div className="product-picker">
               <input
                 className="field-input"
-                placeholder={product ? product.name : 'Search name, SKU or scan barcode'}
+                placeholder={product ? product.name : t('labels.searchPlaceholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus={!params.get('product')}
@@ -155,19 +160,19 @@ export function LabelPrintPage() {
           </label>
 
           <label className="field-label">
-            Barcode
+            {t('labels.barcode')}
             <select className="field-input" value={barcode} onChange={(e) => setBarcode(e.target.value)} disabled={!product}>
-              {!product?.barcodes.length && <option value="">— no barcodes —</option>}
+              {!product?.barcodes.length && <option value="">{t('labels.noBarcodes')}</option>}
               {product?.barcodes.map((b) => (
                 <option key={b.barcode} value={b.barcode}>
-                  {b.barcode} ({b.barcode_type === 'IN_HOUSE' ? 'in-house' : b.barcode_type.toLowerCase()})
+                  {b.barcode} ({b.barcode_type === 'IN_HOUSE' ? t('labels.inHouse') : b.barcode_type.toLowerCase()})
                 </option>
               ))}
             </select>
           </label>
 
           <label className="field-label">
-            Copies
+            {t('labels.copies')}
             <input
               className="field-input"
               type="number"
@@ -180,35 +185,35 @@ export function LabelPrintPage() {
           </label>
 
           <label className="field-label">
-            Label size
+            {t('labels.size')}
             <select className="field-input" value={size} onChange={(e) => changeSize(e.target.value as SizeKey)}>
-              {Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              {(Object.keys(SIZES) as SizeKey[]).map((k) => <option key={k} value={k}>{t(`labels.sizes.${k}`)}</option>)}
             </select>
           </label>
 
           <label className="field-label checkbox-label">
             <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} />
-            Show price
+            {t('labels.showPrice')}
           </label>
         </div>
 
         {product && product.barcodes.length === 0 && (
           <div className="page-error">
-            This product has no barcode. Open it on the Products page and click "Generate In-House Barcode" first.
+            {t('labels.noBarcodeError')}
           </div>
         )}
         {barcode && !pattern && (
           <div className="page-error">
-            "{barcode}" isn't a valid EAN-13 or EAN-8 code, so it can't be printed. Use the product's in-house barcode.
+            {t('labels.invalidBarcode', { code: barcode })}
           </div>
         )}
-        {!countValid && <div className="page-error">Copies must be a whole number from 1 to {MAX_COPIES}.</div>}
+        {!countValid && <div className="page-error">{t('labels.copiesInvalid', { max: MAX_COPIES })}</div>}
 
         {ready && (
           <>
             <p className="hint-text">
-              Preview{count > PREVIEW_LIMIT ? ` (first ${PREVIEW_LIMIT} of ${count}; all will print)` : ''}. In the print
-              dialog choose your label printer, set paper size to match, and scale to 100% / "Actual size".
+              {count > PREVIEW_LIMIT ? t('labels.previewLimited', { limit: PREVIEW_LIMIT, count }) : t('labels.preview')}.{' '}
+              {t('labels.printHint')}
             </p>
             <div className={`label-preview size-${size}`}>
               {labels.slice(0, PREVIEW_LIMIT).map((i) => (

@@ -59,11 +59,12 @@ def list_products(
     category_id: int | None = None,
     store_id: int | None = None,
     search: str | None = None,
+    is_active: bool | None = None,
 ) -> tuple[list[Product], int]:
     return ProductRepository().list(
         page=page, per_page=per_page,
         active_only=active_only, category_id=category_id, store_id=store_id,
-        search=search.strip() if search else None,
+        search=search.strip() if search else None, is_active=is_active,
     )
 
 
