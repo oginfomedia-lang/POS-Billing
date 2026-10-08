@@ -61,4 +61,10 @@ class UOMType(str, enum.Enum):
     ML = "ml"
     PACK = "pack"
 
+class PaymentIntentStatus(str, enum.Enum):
+    PENDING = "pending"      # QR shown / amount pushed to card machine, waiting for customer
+    PAID = "paid"            # Razorpay confirmed the money; sale completed
+    FAILED = "failed"        # card declined / machine error
+    CANCELLED = "cancelled"  # cashier cancelled, or QR expired
+
 

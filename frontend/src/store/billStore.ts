@@ -18,6 +18,8 @@ interface BillState {
   resume: (saleId: number) => Promise<void>;
   /** Returns the paid sale; the store is cleared so the next bill can start. */
   complete: (method: TenderMethod, cashTendered?: string, reference?: string) => Promise<SaleOut>;
+  /** Card/UPI: Razorpay confirmed and the backend already completed the bill — just clear it. */
+  markPaid: () => void;
   void: () => Promise<void>;
   reset: () => void;
 }
@@ -74,6 +76,8 @@ export const useBillStore = create<BillState>((set, get) => {
         set({ sale: null });
         return paid;
       }),
+
+    markPaid: () => set({ sale: null }),
 
     void: () =>
       run(async () => {

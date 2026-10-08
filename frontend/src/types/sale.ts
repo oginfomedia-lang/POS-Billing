@@ -75,3 +75,21 @@ export interface ReceiptOut {
 
 /** Methods the complete-sale endpoint accepts. */
 export type TenderMethod = Exclude<PaymentMethod, 'split'>;
+
+/** Card/UPI go through Razorpay; cash is completed directly. */
+export type DigitalMethod = Exclude<TenderMethod, 'cash'>;
+
+export type PaymentIntentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
+
+/** One Razorpay attempt: a UPI QR for the exact total, or the total pushed to the card machine. */
+export interface PaymentIntentOut {
+  id: number;
+  sale_id: number;
+  method: DigitalMethod;
+  amount: string;
+  status: PaymentIntentStatus;
+  qr_image_url: string | null; // UPI only
+  failure_reason: string | null;
+  created_at: string;
+  sale?: SaleOut | null; // set by the poll endpoint once Razorpay confirms and the bill is completed
+}

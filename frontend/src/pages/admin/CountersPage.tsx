@@ -29,7 +29,7 @@ export function CountersPage() {
   const [error, setError] = useState('');
 
   const [modal, setModal] = useState<Modal>(null);
-  const [form, setForm] = useState({ name: '', address: '', phone: '', gstin: '', code: '', label: '', active: true });
+  const [form, setForm] = useState({ name: '', address: '', phone: '', gstin: '', code: '', label: '', edc: '', active: true });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -75,7 +75,13 @@ export function CountersPage() {
   }
 
   function openCounter(counter: CounterOut | null) {
-    setForm({ ...form, code: counter?.code ?? '', label: counter?.label ?? '', active: counter?.is_active ?? true });
+    setForm({
+      ...form,
+      code: counter?.code ?? '',
+      label: counter?.label ?? '',
+      edc: counter?.edc_device_id ?? '',
+      active: counter?.is_active ?? true,
+    });
     setFormError('');
     setModal({ kind: 'counter', counter });
   }
@@ -99,9 +105,13 @@ export function CountersPage() {
         await fetchStores(saved.id);
       } else if (selected) {
         if (modal.counter) {
-          await updateCounter(selected.id, modal.counter.id, { label: form.label.trim(), is_active: form.active });
+          await updateCounter(selected.id, modal.counter.id, {
+            label: form.label.trim(),
+            is_active: form.active,
+            edc_device_id: form.edc.trim(), // "" = no card machine
+          });
         } else {
-          await createCounter(selected.id, form.code.trim().toUpperCase(), form.label.trim());
+          await createCounter(selected.id, form.code.trim().toUpperCase(), form.label.trim(), form.edc.trim());
         }
         await fetchCounters(selected.id);
       }
@@ -176,16 +186,17 @@ export function CountersPage() {
           <div className="table-card">
             <table className="data-table">
               <thead>
-                <tr><th>Code</th><th>Label</th><th>Active</th><th /></tr>
+                <tr><th>Code</th><th>Label</th><th>Card machine</th><th>Active</th><th /></tr>
               </thead>
               <tbody>
                 {counters.length === 0 && (
-                  <tr><td colSpan={4} className="empty-row">No counters in this store.</td></tr>
+                  <tr><td colSpan={5} className="empty-row">No counters in this store.</td></tr>
                 )}
                 {counters.map((c) => (
                   <tr key={c.id}>
                     <td><strong>{c.code}</strong></td>
                     <td>{c.label}</td>
+                    <td>{c.edc_device_id ?? '—'}</td>
                     <td>{c.is_active ? '✓' : '—'}</td>
                     <td className="table-actions">
                       {isAdmin && <button className="btn-sm" onClick={() => openCounter(c)}>Edit</button>}
@@ -240,6 +251,15 @@ export function CountersPage() {
                   </label>
                   <label className="field-label">Label
                     <input className="field-input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required maxLength={100} placeholder="e.g. Counter 2 (near entrance)" />
+                  </label>
+                  <label className="field-label">Card machine ID (Razorpay POS)
+                    <input
+                      className="field-input"
+                      value={form.edc}
+                      onChange={(e) => setForm({ ...form, edc: e.target.value })}
+                      maxLength={100}
+                      placeholder="e.g. 1490123456|ezetap_android — leave empty if no card machine"
+                    />
                   </label>
                 </>
               )}

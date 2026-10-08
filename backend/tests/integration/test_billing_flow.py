@@ -4,14 +4,14 @@ import pytest
 from app.extensions import db
 from app.models.enums import InventoryTxnType
 from app.models.inventory import Inventory, InventoryTransaction
-from tests.factories import make_counter, make_product, make_shift, make_store
+from tests.factories import make_counter, make_product, make_shift, make_store, pay_by_razorpay
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 def counter(store):
-    return make_counter(store, code="C01")
+    return make_counter(store, code="C01", edc_device_id="TEST01|ezetap_android")
 
 
 @pytest.fixture
@@ -96,8 +96,8 @@ def test_bill_numbers_increment(client, cashier_headers, shift, product):
     for _ in range(2):
         sid = _draft(client, cashier_headers)["id"]
         client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id}, headers=cashier_headers)
-        resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "upi", "reference": "UPI1"}, headers=cashier_headers)
-        numbers.append(resp.get_json()["bill_number"])
+        resp = pay_by_razorpay(client, cashier_headers, sid, "upi")
+        numbers.append(resp.get_json()["sale"]["bill_number"])
     assert numbers[0].endswith("-0001")
     assert numbers[1].endswith("-0002")
 
@@ -108,7 +108,7 @@ def test_insufficient_stock_is_400_and_nothing_deducted(client, cashier_headers,
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id, "qty": 11}, headers=cashier_headers)
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": other.id, "qty": 1}, headers=cashier_headers)
 
-    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    resp = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "cash", "cash_tendered": "1000"}, headers=cashier_headers)
     body = resp.get_json()
     assert resp.status_code == 400
     assert body["error"]["code"] == "INSUFFICIENT_STOCK"
@@ -190,7 +190,7 @@ def test_receipt_for_open_sale_is_409(client, cashier_headers, shift):
 def test_sale_writes_ledger_row(client, cashier_headers, shift, store, product):
     sid = _draft(client, cashier_headers)["id"]
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id, "qty": 2}, headers=cashier_headers)
-    client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers)
+    assert pay_by_razorpay(client, cashier_headers, sid, "card").status_code == 200
     txn = db.session.scalar(db.select(InventoryTransaction).where(InventoryTransaction.reference_id == sid))
     assert txn.txn_type is InventoryTxnType.SALE
     assert txn.qty == -2
@@ -201,7 +201,7 @@ def test_shift_without_counter_uses_c00(client, cashier_user, cashier_headers, s
     make_shift(cashier_user)
     sid = _draft(client, cashier_headers)["id"]
     client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id}, headers=cashier_headers)
-    data = client.post(f"/api/v1/sales/{sid}/complete", json={"method": "card"}, headers=cashier_headers).get_json()
+    data = pay_by_razorpay(client, cashier_headers, sid, "upi").get_json()["sale"]  # no counter = no card machine
     assert data["bill_number"].startswith(f"ST{store.id:02d}-C00-")
     receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
     assert receipt["counter_code"] is None
