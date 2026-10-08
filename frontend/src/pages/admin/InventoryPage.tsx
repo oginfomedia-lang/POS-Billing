@@ -14,6 +14,13 @@ type Tab = 'stock' | 'expiry';
 type Kind = 'in' | 'adjust' | 'threshold' | 'price' | 'history';
 type Modal = { kind: Kind; row: StockLevelOut } | null;
 
+const TXN_LABEL: Record<string, string> = {
+  purchase: 'Stock in',
+  sale: 'Sale',
+  return: 'Return',
+  adjustment: 'Adjustment',
+};
+
 function qtyText(qty: string): string {
   return String(Number(qty));
 }
