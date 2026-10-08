@@ -80,3 +80,11 @@ def ledger():
     product_id = request.args.get("product_id", type=int)
     txns = inventory_service.ledger(_store_id_arg(), product_id)
     return jsonify([InventoryTxnOut.model_validate(t).model_dump(mode="json") for t in txns]), 200
+
+
+@inventory_bp.get("/inventory/expiring")
+@require_permission("inventory.read")
+def expiring():
+    days = request.args.get("days", 30, type=int)
+    results = inventory_service.expiring_soon(_store_id_arg(), days)
+    return jsonify([r.model_dump(mode="json") for r in results]), 200

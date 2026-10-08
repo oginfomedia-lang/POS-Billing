@@ -205,6 +205,25 @@ export function DiscountsPage() {
     return () => window.clearTimeout(t);
   }, [productSearch]);
 
+  useEffect(() => {
+    if (loading) return;
+    const params = new URLSearchParams(location.search);
+    const pid = params.get('product_id');
+    if (!pid) return;
+    const endsAt = params.get('ends_at') ?? '';
+    const productName = params.get('product_name') ?? '';
+    setEditingId(null);
+    setForm({
+      ...EMPTY,
+      scope: 'product',
+      product_id: pid,
+      name: productName ? `Expiry offer – ${productName}` : '',
+      ends_at: endsAt ? `${endsAt}T23:59` : '',
+    });
+    setError('');
+    setModal(true);
+  }, [loading, location.search]);
+
   function openCreate() {
     setEditingId(null);
     setForm({ ...EMPTY, store_id: branchId === null ? '' : String(branchId) });

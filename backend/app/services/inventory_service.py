@@ -111,6 +111,25 @@ def stock_in(data: StockInRequest, actor: User) -> Inventory:
     return row
 
 
+def expiring_soon(store_id: int, days: int = 30) -> list[ExpiringBatchOut]:
+    """Products with batches expiring within `days` that still have stock."""
+    _get_store_or_404(store_id)
+    today = date.today()
+    out = []
+    for product, inv, nearest_expiry in InventoryRepository().expiring_batches(store_id, days):
+        primary = next((b for b in product.barcodes if b.is_primary), None) or next(iter(product.barcodes), None)
+        out.append(ExpiringBatchOut(
+            product_id=product.id,
+            product_name=product.name,
+            barcode=primary.barcode if primary else None,
+            qty_on_hand=inv.qty_on_hand,
+            uom=product.uom,
+            nearest_expiry=nearest_expiry,
+            days_to_expiry=(nearest_expiry - today).days,
+        ))
+    return out
+
+
 def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
     """Stock-take correction: sets the counted qty and writes an ADJUSTMENT row for the difference."""
     _check_store_product(data.store_id, data.product_id)

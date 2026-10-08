@@ -1,6 +1,7 @@
 """Inventory queries; lock_rows() uses SELECT FOR UPDATE for safe stock decrements."""
 from datetime import date, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.extensions import db
@@ -102,6 +103,30 @@ class InventoryRepository(BaseRepository):
         return txn
 
     def expiring_batches(self, store_id: int, days: int = 30) -> list[tuple]:
+        """Products with at least one purchase batch expiring within `days` and qty_on_hand > 0."""
+        today = date.today()
+        cutoff = today + timedelta(days=days)
+        q = (
+            db.select(
+                Product,
+                Inventory,
+                func.min(InventoryTransaction.expiry_date).label("nearest_expiry"),
+            )
+            .join(Inventory, (Inventory.product_id == Product.id) & (Inventory.store_id == store_id))
+            .join(
+                InventoryTransaction,
+                (InventoryTransaction.product_id == Product.id)
+                & (InventoryTransaction.store_id == store_id)
+                & (InventoryTransaction.txn_type == InventoryTxnType.PURCHASE)
+                & (InventoryTransaction.expiry_date.isnot(None))
+                & (InventoryTransaction.expiry_date >= today)
+                & (InventoryTransaction.expiry_date <= cutoff),
+            )
+            .where(Inventory.qty_on_hand > 0)
+            .group_by(Product.id, Inventory.id)
+            .order_by(func.min(InventoryTransaction.expiry_date))
+        )
+        return list(db.session.execute(q).all())
         """Return one row per product with any purchase batch expiring within `days` days.
 
         Filters to products that still have qty_on_hand > 0.
