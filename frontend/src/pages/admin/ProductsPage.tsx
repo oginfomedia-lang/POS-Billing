@@ -453,7 +453,7 @@ export function ProductsPage() {
                 </label>
               </div>
 
-              <div className="form-row form-row-4">
+              <div className="form-row form-row-3">
                 <label className="field-label">
                   {t('products.price')}
                   <input
