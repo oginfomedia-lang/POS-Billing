@@ -26,7 +26,14 @@ from app.schemas.return_schemas import (
     ReturnOut,
 )
 from app.schemas.sale_schemas import GstSummaryRow
-from app.services import audit_service, billing_service, inventory_service, pricing_service, settings_service
+from app.services import (
+    audit_service,
+    billing_service,
+    inventory_service,
+    loyalty_service,
+    pricing_service,
+    settings_service,
+)
 from app.services.shift_service import require_active_shift
 from app.utils.dates import IST, now_ist
 from app.utils.money import round_money
@@ -169,6 +176,7 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
             ret.id,
             f"Return {ret.return_number} of bill {sale.bill_number}",
         )
+        loyalty_service.reverse_for_return(sale, ret, actor)  # take back points earned on the refunded money
         audit_service.log(
             actor, "sale.return", "sale", sale.id, None,
             {

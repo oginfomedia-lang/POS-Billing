@@ -13,8 +13,10 @@ interface Props {
 export function BillSummary({ sale, onPayClick, disabled }: Props) {
   const { t } = useTranslation();
   const itemCount = sale?.items.reduce((n, i) => n + i.qty, 0) ?? 0;
-  // Item offers + manual discounts = total discount minus the bill offer. Paise avoids float errors.
-  const itemSavingsPaise = sale ? toPaise(sale.discount_amount) - toPaise(sale.bill_offer_discount) : 0;
+  // Item offers + manual discounts = total discount minus the bill offer and reward points. Paise avoids float errors.
+  const itemSavingsPaise = sale
+    ? toPaise(sale.discount_amount) - toPaise(sale.bill_offer_discount) - toPaise(sale.reward_discount)
+    : 0;
   const hasBillOffer = sale !== null && sale.bill_offer_name !== null && Number(sale.bill_offer_discount) > 0;
   const hasItems = itemCount > 0;
 
@@ -40,6 +42,12 @@ export function BillSummary({ sale, onPayClick, disabled }: Props) {
           <div className="summary-row summary-discount-row">
             <span className="row-label"><IconSparkles size={14} /> {sale.bill_offer_name}</span>
             <span className="row-val discount-val">− {formatRupees(sale.bill_offer_discount)}</span>
+          </div>
+        )}
+        {sale && Number(sale.reward_discount) > 0 && (
+          <div className="summary-row summary-discount-row">
+            <span className="row-label"><IconSparkles size={14} /> {t('rewards.summaryRow', { points: sale.points_redeemed })}</span>
+            <span className="row-val discount-val">− {formatRupees(sale.reward_discount)}</span>
           </div>
         )}
         <div className="summary-row">

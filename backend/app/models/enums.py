@@ -1,4 +1,4 @@
-"""Enums: UserRole, SaleStatus, PaymentMethod, InventoryTxnType, ShiftStatus, DiscountType."""
+"""Enums: UserRole, SaleStatus, PaymentMethod, InventoryTxnType, ShiftStatus, DiscountType, RewardTxnType."""
 import enum
 
 
@@ -68,3 +68,8 @@ class PaymentIntentStatus(str, enum.Enum):
     CANCELLED = "cancelled"  # cashier cancelled, or QR expired
 
 
+class RewardTxnType(str, enum.Enum):
+    EARN = "earn"        # points given for a paid bill
+    REDEEM = "redeem"    # points used as a discount
+    REVERSE = "reverse"  # earned points taken back when goods are returned
+    ADJUST = "adjust"    # manual correction by an admin (future)

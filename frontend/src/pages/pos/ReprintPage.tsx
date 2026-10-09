@@ -43,7 +43,9 @@ export function ReprintPage() {
   }, [receipt]);
 
   // Item offers + manual discounts (everything except the bill offer).
-  const itemSavingsPaise = receipt ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) : 0;
+  const itemSavingsPaise = receipt
+    ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) - toPaise(receipt.reward_discount)
+    : 0;
 
   return (
     <div className="reprint-page">
@@ -132,6 +134,9 @@ export function ReprintPage() {
           {Number(receipt.bill_offer_discount) > 0 && (
             <div className="receipt-row"><span>{receipt.bill_offer_name ?? t('receipt.billOffer')}</span><span>− {formatRupees(receipt.bill_offer_discount)}</span></div>
           )}
+          {Number(receipt.reward_discount) > 0 && (
+            <div className="receipt-row"><span>{t('receipt.pointsUsed', { points: receipt.points_redeemed })}</span><span>− {formatRupees(receipt.reward_discount)}</span></div>
+          )}
           <div className="receipt-row"><span>{t('receipt.gst')}</span><span>{formatRupees(receipt.tax_amount)}</span></div>
           <div className="receipt-row receipt-total"><span>{t('receipt.total')}</span><span>{formatRupees(receipt.total)}</span></div>
           {Number(receipt.total_saving) > 0 && (
@@ -139,6 +144,11 @@ export function ReprintPage() {
               {receipt.items.some((i) => i.mrp !== null)
                 ? t('receipt.youSavedOnMrp', { amount: formatRupees(receipt.total_saving) })
                 : t('receipt.youSavedBanner', { amount: formatRupees(receipt.total_saving) })}
+            </div>
+          )}
+          {receipt.points_balance !== null && (
+            <div className="receipt-center">
+              {t('receipt.pointsLine', { earned: receipt.points_earned, balance: receipt.points_balance })}
             </div>
           )}
           <hr />

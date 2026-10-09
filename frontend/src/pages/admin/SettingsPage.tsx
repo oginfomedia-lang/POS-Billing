@@ -14,6 +14,10 @@ const DEFAULTS: SettingsData = {
   receipt_footer: 'Thank you! Visit again.',
   low_stock_threshold: '5',
   return_window_days: 30,
+  rewards_enabled: false,
+  reward_rupees_per_point: '100',
+  reward_block_points: 100,
+  reward_block_value: '100',
 };
 
 export function SettingsPage() {
@@ -116,6 +120,56 @@ export function SettingsPage() {
               required
             />
             <span className="hint-text">{t('settings.returnWindowHint')}</span>
+          </label>
+          <h3 className="section-title">{t('settings.rewards.title')}</h3>
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.rewards_enabled}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('rewards_enabled', e.target.checked)}
+            />
+            {t('settings.rewards.enabled')}
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.rupeesPerPoint')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_rupees_per_point}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_rupees_per_point', e.target.value)}
+              required
+            />
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.blockPoints')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_block_points}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_block_points', Number(e.target.value))}
+              required
+            />
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.blockValue')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_block_value}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_block_value', e.target.value)}
+              required
+            />
+            <span className="hint-text">{t('settings.rewards.hint')}</span>
           </label>
           {isAdmin ? (
             <div className="modal-buttons">
