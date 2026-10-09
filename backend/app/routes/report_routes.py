@@ -30,3 +30,11 @@ def shift_report():
     q = ReportQuery.model_validate(request.args.to_dict())
     q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
     return jsonify([r.model_dump(mode="json") for r in report_service.shift_report(q)]), 200
+
+
+@report_bp.get("/reports/collection")
+@require_permission("reports.read")
+def collection_report():
+    q = ReportQuery.model_validate(request.args.to_dict())
+    q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
+    return jsonify(report_service.collection_report(q).model_dump(mode="json")), 200
