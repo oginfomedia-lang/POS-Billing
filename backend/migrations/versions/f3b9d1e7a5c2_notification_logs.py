@@ -1,7 +1,7 @@
 """notification_logs for the nightly WhatsApp collection summary
 
 Revision ID: f3b9d1e7a5c2
-Revises: e7f9a1c3b5d2
+Revises: e7f9a1c3b5d2, 17b2cccb514b (also merges the two migration heads)
 Create Date: 2026-10-09
 """
 from alembic import op
@@ -9,7 +9,7 @@ import sqlalchemy as sa
 
 
 revision = "f3b9d1e7a5c2"
-down_revision = "e7f9a1c3b5d2"
+down_revision = ("e7f9a1c3b5d2", "17b2cccb514b")
 branch_labels = None
 depends_on = None
 
