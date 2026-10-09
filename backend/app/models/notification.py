@@ -1,0 +1,32 @@
+"""NotificationLog: one outgoing message (e.g. the nightly WhatsApp collection summary) per day/store/recipient."""
+from app.extensions import db
+from app.models.base import TimestampMixin
+from app.models.enums import NotificationStatus
+
+
+class NotificationLog(TimestampMixin, db.Model):
+    __tablename__ = "notification_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(30), nullable=False)  # "daily_collection"
+    report_date = db.Column(db.Date, nullable=False)  # the IST business day the message is about
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
+    recipient = db.Column(db.String(15), nullable=False)  # 10-digit Indian mobile
+    status = db.Column(
+        db.Enum(NotificationStatus, name="notification_status"), nullable=False, default=NotificationStatus.PENDING
+    )
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    provider_message_id = db.Column(db.String(100), nullable=True)  # WhatsApp "wamid..."
+    error = db.Column(db.Text, nullable=True)  # last failure, shown on the settings screen
+    body = db.Column(db.Text, nullable=True)  # readable copy of what was sent
+    sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    store = db.relationship("Store")
+
+    # The same day's report never goes to the same number twice.
+    __table_args__ = (
+        db.UniqueConstraint("kind", "report_date", "store_id", "recipient", name="uq_notification_once"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<NotificationLog {self.kind} {self.report_date} -> {self.recipient} ({self.status.value})>"

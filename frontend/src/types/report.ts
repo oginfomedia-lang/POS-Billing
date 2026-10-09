@@ -89,6 +89,32 @@ export interface ShiftRow {
   difference: string | null;
 }
 
+/** What one cashier collected on one counter (GET /reports/collection). */
+export interface CollectionRow {
+  cashier_id: number;
+  cashier_name: string;
+  counter_code: string | null;
+  bills: number;
+  cash: string;
+  card: string;
+  upi: string;
+  total: string;
+  refunds: string;
+  /** total − refunds */
+  net: string;
+  /** counted − expected on shifts closed in the period; negative = short. null = no closed shift. */
+  cash_difference: string | null;
+  shift_open: boolean;
+}
+
+export interface CollectionReportOut {
+  store_id: number | null;
+  date_from: string;
+  date_to: string;
+  rows: CollectionRow[];
+  totals: Pick<CollectionRow, 'bills' | 'cash' | 'card' | 'upi' | 'total' | 'refunds' | 'net'>;
+}
+
 export interface RecentSale {
   id: number;
   bill_number: string;
@@ -139,4 +165,34 @@ export interface SettingsData {
   low_stock_threshold: string;
   /** Bills older than this many days can't be returned. */
   return_window_days: number;
+  /** Nightly WhatsApp collection summary to the owner. */
+  daily_report_enabled: boolean;
+  /** IST "HH:MM"; sent at the first check after this time. */
+  daily_report_time: string;
+  /** Comma-separated 10-digit mobiles. */
+  daily_report_mobiles: string;
+}
+
+export type NotificationStatus = 'pending' | 'sent' | 'failed';
+
+export interface DailyReportSendResult {
+  store_name: string;
+  recipient: string;
+  status: NotificationStatus;
+  error: string | null;
+}
+
+export interface DailyReportLog {
+  id: number;
+  /** daily_collection = nightly automatic send; daily_collection_manual = "Send now". */
+  kind: 'daily_collection' | 'daily_collection_manual';
+  report_date: string;
+  store_name: string;
+  recipient: string;
+  status: NotificationStatus;
+  attempts: number;
+  error: string | null;
+  body: string | null;
+  sent_at: string | null;
+  updated_at: string;
 }

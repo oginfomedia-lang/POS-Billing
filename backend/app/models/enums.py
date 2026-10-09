@@ -1,4 +1,4 @@
-"""Enums: UserRole, SaleStatus, PaymentMethod, InventoryTxnType, ShiftStatus, DiscountType."""
+"""Enums: UserRole, SaleStatus, PaymentMethod, InventoryTxnType, ShiftStatus, DiscountType, NotificationStatus."""
 import enum
 
 
@@ -68,3 +68,9 @@ class PaymentIntentStatus(str, enum.Enum):
     CANCELLED = "cancelled"  # cashier cancelled, or QR expired
 
 
+
+
+class NotificationStatus(str, enum.Enum):
+    PENDING = "pending"  # row claimed, message not confirmed yet (or the run crashed mid-send)
+    SENT = "sent"
+    FAILED = "failed"

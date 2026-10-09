@@ -81,6 +81,7 @@ def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_hea
     s = client.get("/api/v1/settings", headers=admin_headers).get_json()
     assert s == {
         "receipt_header": "", "receipt_footer": "Thank you! Visit again.", "low_stock_threshold": "5", "return_window_days": 30,
+        "daily_report_enabled": False, "daily_report_time": "22:30", "daily_report_mobiles": "",
     }
 
     resp = client.put("/api/v1/settings", json={**s, "receipt_footer": "No returns after 7 days", "low_stock_threshold": "2"}, headers=admin_headers)
