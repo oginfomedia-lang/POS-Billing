@@ -39,6 +39,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
     links: [
       { to: '/admin', label: 'nav.dashboard', icon: IconDashboard },
       { to: '/admin/reports', label: 'nav.reports', icon: IconBarChart },
+      { to: '/admin/customers', label: 'nav.customers', icon: IconUsers },
     ],
   },
   {

@@ -1,6 +1,6 @@
 // Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself.
 import type { ParseKeys } from 'i18next';
-import React, { type FormEvent, useState } from 'react';
+import React, { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -9,6 +9,7 @@ import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { normalizeMobile } from '../../utils/phone';
 import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
 import { DigitalPaymentPanel } from './DigitalPaymentPanel';
+import { RewardsStrip } from './RewardsStrip';
 
 const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
   { value: 'cash', label: 'methods.cash', icon: IconCash },
@@ -25,6 +26,11 @@ interface Props {
   customerMobile: string | null;
   /** Saves the optional mobile on the open bill; throws with the server's message on failure. */
   onSaveMobile: (mobile: string | null) => Promise<void>;
+  /** Reward points reserved on the bill. */
+  pointsRedeemed: number;
+  /** Bill amount before GST that a reward can still come off. */
+  roomForReward: number;
+  onRedeem: (blocks: number) => Promise<void>;
   busy: boolean;
   error: string;
   /** Cash only: card/UPI are confirmed by Razorpay and reported through onDigitalPaid. */
@@ -34,7 +40,7 @@ interface Props {
 }
 
 export function PaymentDialog({
-  saleId, total, customerMobile, onSaveMobile, busy, error, onConfirm, onDigitalPaid, onClose,
+  saleId, total, customerMobile, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
 }: Props) {
   const { t } = useTranslation();
   const [method, setMethod] = useState<TenderMethod>('cash');
@@ -43,6 +49,8 @@ export function PaymentDialog({
   const [mobileError, setMobileError] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
   useKeyboardShortcuts({ Escape: onClose });
+  // Redeeming points changes the total: keep the cash box in step.
+  useEffect(() => { setTendered(total); }, [total]);
 
   const totalPaise = toPaise(total);
   const tenderedPaise = toPaise(tendered);
@@ -138,6 +146,13 @@ export function PaymentDialog({
           )}
           {mobileError && <span className="mobile-bad">{mobileError}</span>}
         </label>
+        <RewardsStrip
+          mobile={customerMobile}
+          pointsRedeemed={pointsRedeemed}
+          roomForReward={roomForReward}
+          onRedeem={onRedeem}
+          disabled={busy || savingMobile}
+        />
 
         <form onSubmit={handleSubmit} className="modal-form">
           {method === 'cash' ? (

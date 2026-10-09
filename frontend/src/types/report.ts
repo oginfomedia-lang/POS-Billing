@@ -165,6 +165,14 @@ export interface SettingsData {
   low_stock_threshold: string;
   /** Bills older than this many days can't be returned. */
   return_window_days: number;
+  /** Reward points for customers identified by mobile number. */
+  rewards_enabled: boolean;
+  /** ₹ paid for 1 point. */
+  reward_rupees_per_point: string;
+  /** Points are redeemed in blocks of this many… */
+  reward_block_points: number;
+  /** …each worth this many ₹ off (before GST). */
+  reward_block_value: string;
   /** Nightly WhatsApp collection summary to the owner. */
   daily_report_enabled: boolean;
   /** IST "HH:MM"; sent at the first check after this time. */

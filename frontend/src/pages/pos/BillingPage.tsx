@@ -44,7 +44,7 @@ export function BillingPage() {
   const shiftStoreId = useShiftStore((s) => s.shift?.store_id) ?? user?.store_id;
   const storeName = useStores().find((s) => s.id === shiftStoreId)?.name ?? t('pos.counterFallback');
   const {
-    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, markPaid, setCustomerMobile,
+    sale, busy, createDraft, addItem, updateItem, removeItem, setManualDiscount, hold, complete, markPaid, setCustomerMobile, redeemPoints,
     void: voidBill,
   } = useBillStore();
 
@@ -247,6 +247,9 @@ export function BillingPage() {
           total={sale.total}
           customerMobile={sale.customer_mobile}
           onSaveMobile={setCustomerMobile}
+          pointsRedeemed={sale.points_redeemed}
+          roomForReward={Number(sale.subtotal) - Number(sale.discount_amount) + Number(sale.reward_discount)}
+          onRedeem={redeemPoints}
           busy={busy}
           error={dialogError}
           onConfirm={handlePay}

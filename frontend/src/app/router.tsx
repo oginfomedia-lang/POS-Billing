@@ -5,6 +5,7 @@ import { PosLayout } from '../components/layout/PosLayout';
 import { AuditLogsPage } from '../pages/admin/AuditLogsPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { CountersPage } from '../pages/admin/CountersPage';
+import { CustomersPage } from '../pages/admin/CustomersPage';
 import { DashboardPage } from '../pages/admin/DashboardPage';
 import { DiscountsPage } from '../pages/admin/DiscountsPage';
 import { InventoryPage } from '../pages/admin/InventoryPage';
@@ -60,6 +61,7 @@ export const router = createHashRouter([
           { path: '/admin/labels', element: <LabelPrintPage /> },
           { path: '/admin/discounts', element: <DiscountsPage /> },
           { path: '/admin/reports', element: <ReportsPage /> },
+          { path: '/admin/customers', element: <CustomersPage /> },
           { path: '/admin/settings', element: <SettingsPage /> },
         ],
       },

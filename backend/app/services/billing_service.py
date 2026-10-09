@@ -26,8 +26,10 @@ from app.services import (
     bill_number_service,
     discount_service,
     inventory_service,
+    loyalty_service,
     payment_service,
     pricing_service,
+    settings_service,
 )
 from app.services.shift_service import require_active_shift
 from app.utils.dates import now_ist
@@ -148,12 +150,46 @@ def _verify_approver(username: str, pin: str, what: str = "a discount") -> User:
 
 
 def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
-    """Optional customer mobile on an OPEN bill. The amount doesn't change, so a live QR / card payment is kept."""
+    """Optional customer mobile on an OPEN bill. The amount doesn't change, so a live QR / card payment is kept —
+    unless points were redeemed for the old number: they belong to that customer, so the redemption is dropped."""
     number = normalize_mobile(mobile)
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
+        if number != sale.customer_mobile and sale.points_redeemed:
+            _cancel_live_payments(sale.id)  # the amount is about to change
+            sale.points_redeemed = 0
+            _recalculate(sale)
         sale.customer_mobile = number
+    return sale
+
+
+def redeem_points(sale_id: int, blocks: int, actor: User) -> Sale:
+    """Cashier's Redeem button: use blocks × reward_block_points of the customer's points on this bill.
+    0 removes it. The points are only reserved here; settle_sale() takes them when the bill is paid."""
+    s = settings_service.get_settings()
+    wanted = blocks * s.reward_block_points
+    with transaction():
+        sale = _lock_owned_sale(sale_id, actor)
+        _require_status(sale, SaleStatus.OPEN)
+        old = sale.points_redeemed
+        if blocks:
+            if not s.rewards_enabled:
+                raise AppError("Reward points are switched off.")
+            if not sale.customer_mobile:
+                raise AppError("Enter the customer's mobile number first.")
+            info = loyalty_service.rewards_for_mobile(sale.customer_mobile)
+            if blocks > info.max_blocks:
+                raise AppError(f"The customer has only {info.points_balance} points.")
+        _cancel_live_payments(sale.id)  # the bill amount changes: a QR / card push for the old amount must go
+        sale.points_redeemed = wanted
+        _recalculate(sale)
+        if sale.points_redeemed < wanted:
+            raise AppError(f"The bill is too small to use {wanted} points.")
+        audit_service.log(
+            actor, "sale.redeem_points", "sale", sale.id,
+            {"points": old}, {"points": sale.points_redeemed, "discount": str(sale.reward_discount)},
+        )
     return sale
 
 
@@ -225,6 +261,7 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         sale.bill_number = bill_number_service.next_bill_number(sale.store_id, sale.counter.code if sale.counter else None)
         sale.status = SaleStatus.PAID
         sale.completed_at = now_ist()
+        loyalty_service.settle_sale(sale, actor)  # same transaction: points and sale commit or fail together
         audit_service.log(
             actor, "sale.complete", "sale", sale.id, None,
             {"bill_number": sale.bill_number, "total": str(sale.total), "method": data.method},
@@ -295,13 +332,17 @@ def _recalculate(sale: Sale) -> None:
     sale.bill_offer_name = offer.name if chosen.is_bill_offer else None
     sale.bill_offer_discount = offer.amount if chosen.is_bill_offer else pricing_service.ZERO
 
+    # Reward points come last: on what's left after manual discounts and the automatic offer.
+    rewards = loyalty_service.reward_lines(sale, items, [r - off for r, off in zip(room, chosen.line_amounts)])
+
     lines = []
-    for item, off in zip(items, chosen.line_amounts):
+    for item, off, reward in zip(items, chosen.line_amounts, rewards):
         on_line = not chosen.is_bill_offer and off > 0
         item.offer_id = offer.discount_id if on_line else None
         item.offer_name = offer.name if on_line else None
         item.offer_discount = off if on_line else pricing_service.ZERO
-        item.discount_amount = item.manual_discount + off
+        item.reward_discount = reward
+        item.discount_amount = item.manual_discount + off + reward
         item.line_total, item.tax_amount = pricing_service.line_amounts(
             item.unit_price, item.qty, item.tax_rate, item.discount_amount
         )
