@@ -1,8 +1,8 @@
 // Marathi (मराठी) UI text. Must have exactly the same keys as en.ts — TypeScript reports any missing key.
 // Common shop terms (GST, UPI, PIN, SKU, POS, pcs/kg) are kept as staff use them day to day.
-import type { Messages } from './en';
+import { en } from './en';
 
-export const mr: Messages = {
+export const mr: typeof en = {
   app: {
     portal: 'व्यवस्थापन पोर्टल',
     language: 'भाषा',
@@ -564,6 +564,7 @@ export const mr: Messages = {
       blockPoints: 'वापरण्यासाठी लागणारे पॉइंट्स',
       blockValue: 'त्या पॉइंट्सवर सूट (₹)',
       hint: 'उदा.: 100 पॉइंट्स = ₹100 सूट. बिल ऑफरप्रमाणे ही सूट GST आधी दिली जाते.',
+    },
     dailyReport: {
       title: 'WhatsApp दैनिक कलेक्शन अहवाल',
       hint: 'दररोज रात्री प्रत्येक कॅशियरचे कलेक्शन (रोख, UPI, कार्ड, परतावा व निव्वळ) या मोबाईल नंबरवर WhatsApp ने पाठवले जाते. पाठवण्याच्या वेळी सर्व्हर PC चालू व इंटरनेटशी जोडलेला ठेवा.',

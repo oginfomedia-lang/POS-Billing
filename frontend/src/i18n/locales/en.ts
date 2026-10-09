@@ -564,6 +564,7 @@ export const en = {
       blockPoints: 'Points needed to redeem',
       blockValue: '₹ off for those points',
       hint: 'Example: 100 points = ₹100 off. The discount is taken before GST, like a bill offer.',
+    },
     dailyReport: {
       title: 'WhatsApp daily collection report',
       hint: "Every night, each cashier's collection (cash, UPI, card, returns and net) is sent to these mobiles on WhatsApp. Keep the server PC on and online at the send time.",
@@ -781,7 +782,12 @@ export const en = {
     colPointsChange: 'Points',
     colBalance: 'Balance',
     noTxns: 'No points yet.',
-    types: { earn: 'Earned', redeem: 'Redeemed', reverse: 'Taken back (return)', adjust: 'Adjusted' },
+    types: {
+      earn: 'Earned',
+      redeem: 'Redeemed',
+      reverse: 'Taken back (return)',
+      adjust: 'Adjusted',
+    },
   },
 };
 

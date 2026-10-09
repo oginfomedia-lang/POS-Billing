@@ -2,8 +2,6 @@
    Sections: tokens · base · layout · admin navigation · page chrome · forms · buttons ·
    tables & badges · modals · POS billing · payment · dashboard & reports · settings ·
    labels · receipt · shift pages · login · responsive · print. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
-
 /* ───────────────────────── Tokens ───────────────────────── */
 :root {
   --brand: #4f46e5;
@@ -64,8 +62,9 @@
   --radius-lg: 16px;
   --radius-xl: 22px;
 
-  --font-sans: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', 'Nirmala UI', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  --font-sans: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Noto Sans Devanagari Variable', 'Noto Sans Devanagari', 'Nirmala UI', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans Devanagari Variable', 'Cascadia Mono', Consolas, monospace;
+
 
   --sidebar-w: 264px;
   --content-pad: clamp(14px, 2.2vw, 28px);
@@ -2685,7 +2684,7 @@ button.stat-tile:hover {
   color: #000;
   background: #fff;
   border: 1px solid #d1d5db;
-  font-family: Arial, 'Nirmala UI', 'Noto Sans Devanagari', sans-serif;
+  font-family: Arial, 'Noto Sans Devanagari Variable', 'Nirmala UI', sans-serif;
   text-align: center;
 }
 
@@ -2792,7 +2791,7 @@ button.stat-tile:hover {
   padding: 14px 12px;
   background: #fff;
   color: #000;
-  font-family: 'Consolas', 'Courier New', 'Nirmala UI', 'Noto Sans Devanagari', monospace;
+  font-family: 'Consolas', 'Courier New', 'Noto Sans Devanagari Variable', 'Nirmala UI', monospace;
   font-size: 12px;
   line-height: 1.45;
   border: 1px solid var(--border);
