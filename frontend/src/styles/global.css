@@ -2920,8 +2920,11 @@ button.stat-tile:hover {
 .btn-refund { min-height: 46px; font-size: 15px; }
 
 /* ───────────────────────── Printer settings ───────────────────────── */
-.printer-card { margin-top: 20px; }
-.printer-card h3 { margin: 0; font-size: 16px; }
+.printer-card,
+.daily-report-card { margin-top: 20px; }
+.printer-card h3,
+.daily-report-card h3 { margin: 0; font-size: 16px; }
+.daily-report-card .section-title { margin-top: 20px; }
 
 /* ───────────────────────── Shift pages ───────────────────────── */
 .shift-panel {

@@ -1,17 +1,17 @@
-// Sales, GST and shift reports.
+// Sales, GST, shift and per-cashier collection reports.
 import type { ParseKeys } from 'i18next';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { getSalesReport, getShiftReport } from '../../services/api/reportApi';
-import type { SalesReportOut, ShiftRow } from '../../types/report';
+import { getCollectionReport, getSalesReport, getShiftReport } from '../../services/api/reportApi';
+import type { CollectionReportOut, SalesReportOut, ShiftRow } from '../../types/report';
 import { downloadCsv } from '../../utils/csv';
 import { formatDateTime, isoDateIst, monthStartIst } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 import { useStoreContext, useStoreDisplayName } from '../../store/storeContext';
 
-type Tab = 'sales' | 'gst' | 'shifts';
+type Tab = 'sales' | 'gst' | 'shifts' | 'collection';
 const QUICK_RANGES: { label: ParseKeys; from: () => string; to: () => string }[] = [
   { label: 'reports.today', from: () => isoDateIst(), to: () => isoDateIst() },
   { label: 'reports.yesterday', from: () => isoDateIst(1), to: () => isoDateIst(1) },
@@ -29,6 +29,7 @@ export function ReportsPage() {
 
   const [sales, setSales] = useState<SalesReportOut | null>(null);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
+  const [collection, setCollection] = useState<CollectionReportOut | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -38,8 +39,8 @@ export function ReportsPage() {
     let cancelled = false;
     setLoading(true);
     setError('');
-    Promise.all([getSalesReport(filter), getShiftReport(filter)])
-      .then(([s, sh]) => { if (!cancelled) { setSales(s); setShifts(sh); } })
+    Promise.all([getSalesReport(filter), getShiftReport(filter), getCollectionReport(filter)])
+      .then(([s, sh, c]) => { if (!cancelled) { setSales(s); setShifts(sh); setCollection(c); } })
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -59,6 +60,15 @@ export function ReportsPage() {
           ...sales.gst.map((g) => ['All', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
           ...sales.gst_hsn.map((g) => [g.hsn_code ?? 'No HSN', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
         ],
+      );
+    } else if (tab === 'collection') {
+      if (!collection) return;
+      downloadCsv(
+        `collection_${range}.csv`,
+        ['Cashier', 'Counter', 'Bills', 'Cash', 'UPI', 'Card', 'Total', 'Refunds', 'Net', 'Cash short/over', 'Shift open'],
+        collection.rows.map((r) => [
+          r.cashier_name, r.counter_code, r.bills, r.cash, r.upi, r.card, r.total, r.refunds, r.net, r.cash_difference, r.shift_open ? 'Yes' : 'No',
+        ]),
       );
     } else {
       downloadCsv(
@@ -99,7 +109,7 @@ export function ReportsPage() {
       </div>
 
       <div className="tab-bar no-print" role="tablist">
-        {(['sales', 'gst', 'shifts'] as Tab[]).map((tabKey) => (
+        {(['sales', 'gst', 'shifts', 'collection'] as Tab[]).map((tabKey) => (
           <button key={tabKey} role="tab" aria-selected={tab === tabKey} className={`tab${tab === tabKey ? ' active' : ''}`} onClick={() => setTab(tabKey)}>
             {t(`reports.tabs.${tabKey}`)}
           </button>
@@ -252,6 +262,66 @@ export function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {collection && tab === 'collection' && !loading && (
+        <>
+          <p className="hint-text">{t('reports.collectionHint')}</p>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('reports.colCashier')}</th><th>{t('reports.colCounter')}</th><th className="num">{t('reports.bills')}</th>
+                  <th className="num">{t('methods.cash')}</th><th className="num">{t('methods.upi')}</th><th className="num">{t('methods.card')}</th>
+                  <th className="num">{t('reports.colTotal')}</th><th className="num">{t('reports.returns')}</th><th className="num">{t('reports.colNet')}</th>
+                  <th className="num">{t('reports.colDifference')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {collection.rows.length === 0 && <tr><td colSpan={10} className="empty-row">{t('reports.noSales')}</td></tr>}
+                {collection.rows.map((r) => {
+                  const diff = r.cash_difference === null ? null : Number(r.cash_difference);
+                  return (
+                    <tr key={`${r.cashier_id}-${r.counter_code ?? '-'}`}>
+                      <td>{r.cashier_name}</td>
+                      <td>{r.counter_code ?? '—'}</td>
+                      <td className="num">{r.bills}</td>
+                      <td className="num">{formatRupees(r.cash)}</td>
+                      <td className="num">{formatRupees(r.upi)}</td>
+                      <td className="num">{formatRupees(r.card)}</td>
+                      <td className="num">{formatRupees(r.total)}</td>
+                      <td className="num">{Number(r.refunds) > 0 ? `− ${formatRupees(r.refunds)}` : '—'}</td>
+                      <td className="num"><strong>{formatRupees(r.net)}</strong></td>
+                      <td className="num">
+                        {r.shift_open ? <span className="stock-badge stock-low">{t('reports.shiftOpen')}</span>
+                          : diff === null ? '—' : diff === 0 ? t('reports.ok') : (
+                            <span className={`stock-badge ${diff < 0 ? 'stock-out' : 'stock-low'}`}>
+                              {t(diff < 0 ? 'reports.short' : 'reports.over', { amount: formatRupees(Math.abs(diff)) })}
+                            </span>
+                          )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {collection.rows.length > 0 && (
+                <tfoot>
+                  <tr className="total-row">
+                    <td colSpan={2}>{t('reports.colTotal')}</td>
+                    <td className="num">{collection.totals.bills}</td>
+                    <td className="num">{formatRupees(collection.totals.cash)}</td>
+                    <td className="num">{formatRupees(collection.totals.upi)}</td>
+                    <td className="num">{formatRupees(collection.totals.card)}</td>
+                    <td className="num">{formatRupees(collection.totals.total)}</td>
+                    <td className="num">{Number(collection.totals.refunds) > 0 ? `− ${formatRupees(collection.totals.refunds)}` : '—'}</td>
+                    <td className="num">{formatRupees(collection.totals.net)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </>

@@ -114,6 +114,41 @@ class ShiftRow(BaseModel):
     difference: Decimal | None  # actual - expected; negative = cash short
 
 
+class CollectionRow(BaseModel):
+    """What one cashier collected on one counter."""
+
+    cashier_id: int
+    cashier_name: str
+    counter_code: str | None
+    bills: int = 0
+    cash: Decimal = Decimal("0.00")
+    card: Decimal = Decimal("0.00")
+    upi: Decimal = Decimal("0.00")
+    total: Decimal = Decimal("0.00")  # cash + card + upi
+    refunds: Decimal = Decimal("0.00")  # cash given back for returns
+    net: Decimal = Decimal("0.00")  # total - refunds
+    cash_difference: Decimal | None = None  # counted - expected on shifts closed in the period; negative = short
+    shift_open: bool = False  # a shift is still open, so the numbers may still change
+
+
+class CollectionTotals(BaseModel):
+    bills: int
+    cash: Decimal
+    card: Decimal
+    upi: Decimal
+    total: Decimal
+    refunds: Decimal
+    net: Decimal
+
+
+class CollectionReportOut(BaseModel):
+    store_id: int | None
+    date_from: date
+    date_to: date
+    rows: list[CollectionRow]
+    totals: CollectionTotals
+
+
 class RecentSale(BaseModel):
     id: int
     bill_number: str

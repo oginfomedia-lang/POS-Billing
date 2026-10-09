@@ -239,6 +239,57 @@ class ReportRepository:
             q = q.where(CashierShift.store_id == store_id)
         return db.session.execute(q).all()
 
+    def collection_by_cashier(self, store_id: int | None, start: datetime, end: datetime):
+        """(cashier_id, counter_id, bills, cash, card, upi, total) for paid bills, per cashier and counter."""
+        f = db.func
+
+        def by(method: PaymentMethod):
+            return f.coalesce(f.sum(Payment.amount).filter(Payment.method == method), 0)
+
+        q = (
+            db.select(
+                Sale.cashier_id,
+                Sale.counter_id,
+                f.count(db.distinct(Sale.id)),
+                by(PaymentMethod.CASH),
+                by(PaymentMethod.CARD),
+                by(PaymentMethod.UPI),
+                f.coalesce(f.sum(Payment.amount), 0),
+            )
+            .outerjoin(Payment, Payment.sale_id == Sale.id)
+            .where(*self._paid(store_id, start, end))
+            .group_by(Sale.cashier_id, Sale.counter_id)
+        )
+        return db.session.execute(q).all()
+
+    def refunds_by_cashier(self, store_id: int | None, start: datetime, end: datetime):
+        """(cashier_id, counter_id, refunded): cash given back, on the counter of the shift that paid it out."""
+        q = (
+            db.select(SaleReturn.cashier_id, CashierShift.counter_id, db.func.sum(SaleReturn.refund_amount))
+            .join(CashierShift, CashierShift.id == SaleReturn.shift_id)
+            .where(*self._returned(store_id, start, end))
+            .group_by(SaleReturn.cashier_id, CashierShift.counter_id)
+        )
+        return db.session.execute(q).all()
+
+    def shifts_for_collection(self, store_id: int | None, start: datetime, end: datetime) -> list[CashierShift]:
+        """Shifts closed in the range (for cash short/over) and shifts still open (numbers may still change)."""
+        q = db.select(CashierShift).where(
+            db.or_(
+                db.and_(CashierShift.closed_at >= start, CashierShift.closed_at < end),
+                db.and_(CashierShift.status == ShiftStatus.OPEN, CashierShift.opened_at < end),
+            )
+        )
+        if store_id is not None:
+            q = q.where(CashierShift.store_id == store_id)
+        return list(db.session.scalars(q).all())
+
+    def names(self, user_ids: set[int], counter_ids: set[int]) -> tuple[dict[int, str], dict[int, str]]:
+        """({user_id: full_name}, {counter_id: code})."""
+        users = dict(db.session.execute(db.select(User.id, User.full_name).where(User.id.in_(user_ids))).all()) if user_ids else {}
+        counters = dict(db.session.execute(db.select(Counter.id, Counter.code).where(Counter.id.in_(counter_ids))).all()) if counter_ids else {}
+        return users, counters
+
     def open_shift_count(self, store_id: int | None) -> int:
         q = db.select(db.func.count(CashierShift.id)).where(CashierShift.status == ShiftStatus.OPEN)
         if store_id is not None:
