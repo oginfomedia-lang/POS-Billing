@@ -25,6 +25,7 @@ from app.services import (
     audit_service,
     bill_number_service,
     discount_service,
+    ebill_service,
     inventory_service,
     loyalty_service,
     payment_service,
@@ -262,10 +263,14 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         sale.status = SaleStatus.PAID
         sale.completed_at = now_ist()
         loyalty_service.settle_sale(sale, actor)  # same transaction: points and sale commit or fail together
+        ebill_queued = ebill_service.queue(sale)  # same transaction: a paid bill always has its e-bill on record
         audit_service.log(
             actor, "sale.complete", "sale", sale.id, None,
             {"bill_number": sale.bill_number, "total": str(sale.total), "method": data.method},
         )
+    if ebill_queued:
+        # After the commit, and whether or not the receipt prints: WhatsApp is sent from the server.
+        ebill_service.send_in_background(sale.id, sale.customer_mobile)
     return sale
 
 

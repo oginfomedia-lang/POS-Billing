@@ -1,4 +1,4 @@
-"""Thin WhatsApp Business Cloud API client: send one approved template message.
+"""Thin WhatsApp Business Cloud API client: send one approved template message, optionally with a PDF.
 
 With WHATSAPP_MOCK=1 nothing leaves the machine: the message is written to the log and a fake id returned.
 """
@@ -14,6 +14,7 @@ from app.errors.exceptions import AppError
 
 GRAPH_API = "https://graph.facebook.com/v21.0"
 TIMEOUT = 15  # seconds
+UPLOAD_TIMEOUT = 30  # seconds, for the PDF
 MAX_PARAM_LEN = 1024  # Meta's limit for one template variable
 
 
@@ -26,34 +27,74 @@ def clean_param(text: str) -> str:
     return re.sub(r"\s{2,}", " ", re.sub(r"[\r\n\t]+", " ", text)).strip()[:MAX_PARAM_LEN]
 
 
-def send_template(mobile: str, params: list[str]) -> str:
-    """Sends the configured template to a 10-digit Indian mobile. Returns WhatsApp's message id."""
-    params = [clean_param(p) for p in params]
-    if _cfg("WHATSAPP_MOCK"):
-        current_app.logger.info("WhatsApp (mock) to %s: %s", mobile, params)
-        return f"wamid.mock_{uuid.uuid4().hex[:12]}"
+def _require_setup() -> None:
     if not _cfg("WHATSAPP_TOKEN") or not _cfg("WHATSAPP_PHONE_NUMBER_ID"):
         raise AppError("WhatsApp is not set up. Add WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID to backend/.env.")
-    body = {
-        "messaging_product": "whatsapp",
-        "to": f"91{mobile}",
-        "type": "template",
-        "template": {
-            "name": _cfg("WHATSAPP_TEMPLATE_NAME"),
-            "language": {"code": _cfg("WHATSAPP_TEMPLATE_LANG")},
-            "components": [{"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}],
-        },
-    }
+
+
+def _post(path: str, timeout: int, **kwargs) -> dict:
     try:
         r = requests.post(
-            f"{GRAPH_API}/{_cfg('WHATSAPP_PHONE_NUMBER_ID')}/messages",
-            json=body,
+            f"{GRAPH_API}/{_cfg('WHATSAPP_PHONE_NUMBER_ID')}/{path}",
             headers={"Authorization": f"Bearer {_cfg('WHATSAPP_TOKEN')}"},
-            timeout=TIMEOUT,
+            timeout=timeout,
+            **kwargs,
         )
         data = r.json()
     except (requests.RequestException, ValueError) as exc:
         raise AppError("Cannot reach WhatsApp. Check the internet connection.") from exc
     if r.status_code >= 400:
         raise AppError(f"WhatsApp error: {data.get('error', {}).get('message') or r.reason}")
-    return data["messages"][0]["id"]
+    return data
+
+
+def upload_media(data: bytes, filename: str, mime: str = "application/pdf") -> str:
+    """Uploads a file to WhatsApp (kept there for 30 days). Returns the media id to send it with."""
+    if _cfg("WHATSAPP_MOCK"):
+        current_app.logger.info("WhatsApp (mock) upload %s (%d bytes)", filename, len(data))
+        return f"media.mock_{uuid.uuid4().hex[:12]}"
+    _require_setup()
+    return _post(
+        "media", UPLOAD_TIMEOUT,
+        data={"messaging_product": "whatsapp", "type": mime},
+        files={"file": (filename, data, mime)},
+    )["id"]
+
+
+def send_template(
+    mobile: str,
+    params: list[str],
+    template: str | None = None,
+    document: tuple[str, str] | None = None,
+) -> str:
+    """Sends an approved template to a 10-digit Indian mobile. Returns WhatsApp's message id.
+
+    template defaults to WHATSAPP_TEMPLATE_NAME (the daily report). document = (media_id, filename) for a
+    template whose header is a document.
+    """
+    params = [clean_param(p) for p in params]
+    template = template or _cfg("WHATSAPP_TEMPLATE_NAME")
+    if _cfg("WHATSAPP_MOCK"):
+        current_app.logger.info(
+            "WhatsApp (mock) %s to %s: %s%s", template, mobile, params, f" + {document[1]}" if document else ""
+        )
+        return f"wamid.mock_{uuid.uuid4().hex[:12]}"
+    _require_setup()
+    components = [{"type": "body", "parameters": [{"type": "text", "text": p} for p in params]}]
+    if document:
+        media_id, filename = document
+        components.insert(0, {
+            "type": "header",
+            "parameters": [{"type": "document", "document": {"id": media_id, "filename": filename}}],
+        })
+    body = {
+        "messaging_product": "whatsapp",
+        "to": f"91{mobile}",
+        "type": "template",
+        "template": {
+            "name": template,
+            "language": {"code": _cfg("WHATSAPP_TEMPLATE_LANG")},
+            "components": components,
+        },
+    }
+    return _post("messages", TIMEOUT, json=body)["messages"][0]["id"]

@@ -6,9 +6,16 @@
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\setup\register_daily_report_task.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\setup\register_daily_report_task.ps1 -Remove
+#
+# The same script registers the WhatsApp e-bill retry task (e-bills that failed when the bill was paid,
+# e.g. internet down, are sent again; 3 tries):
+#
+#   powershell -ExecutionPolicy Bypass -File scripts\setup\register_daily_report_task.ps1 -Command send-ebills -TaskName "POS E-bill Retry" -EveryMinutes 5
 param(
     [string]$TaskName = "POS Daily Collection",
     [int]$EveryMinutes = 15,
+    [ValidateSet("send-daily-collection", "send-ebills")]
+    [string]$Command = "send-daily-collection",
     [switch]$Remove
 )
 
@@ -25,10 +32,11 @@ $flask = Join-Path $backend ".venv\Scripts\flask.exe"
 if (-not (Test-Path $flask)) { throw "Not found: $flask. Create the backend virtualenv first." }
 $logDir = Join-Path $backend "logs"
 New-Item -ItemType Directory -Force $logDir | Out-Null
+$logFile = Join-Path $logDir $(if ($Command -eq "send-ebills") { "ebills.log" } else { "daily_report.log" })
 
 # cmd /c so the output is appended to a log file; the working directory lets flask find .flaskenv and .env.
 $action = New-ScheduledTaskAction -Execute "cmd.exe" `
-    -Argument "/c `"`"$flask`" send-daily-collection >> `"$logDir\daily_report.log`" 2>&1`"" `
+    -Argument "/c `"`"$flask`" $Command >> `"$logFile`" 2>&1`"" `
     -WorkingDirectory $backend
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
     -RepetitionInterval (New-TimeSpan -Minutes $EveryMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
@@ -39,4 +47,4 @@ $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccou
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
     -Principal $principal -Force | Out-Null
-Write-Host "Registered '$TaskName' (every $EveryMinutes min). Log: $logDir\daily_report.log"
+Write-Host "Registered '$TaskName' (flask $Command, every $EveryMinutes min). Log: $logFile"

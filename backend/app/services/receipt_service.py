@@ -4,8 +4,8 @@ from __future__ import annotations
 from app.errors.exceptions import ConflictError
 from app.models.enums import SaleStatus
 from app.schemas.payment_schemas import PaymentOut
-from app.schemas.sale_schemas import GstSummaryRow, ReceiptOut, SaleItemOut
-from app.services import pricing_service, settings_service
+from app.schemas.sale_schemas import EbillStatusOut, GstSummaryRow, ReceiptOut, SaleItemOut
+from app.services import ebill_service, pricing_service, settings_service
 from app.utils.phone import mask_mobile
 from app.services.billing_service import get_sale
 
@@ -43,4 +43,5 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         payments=[PaymentOut.model_validate(p) for p in sale.payments],
         receipt_header=settings.receipt_header,
         receipt_footer=settings.receipt_footer,
+        ebill=EbillStatusOut(**ebill) if (ebill := ebill_service.status_for_sale(sale.id)) else None,
     )

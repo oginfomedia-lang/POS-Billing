@@ -22,6 +22,7 @@ const DEFAULTS: SettingsData = {
   daily_report_enabled: false,
   daily_report_time: '22:30',
   daily_report_mobiles: '',
+  ebill_enabled: false,
 };
 
 export function SettingsPage() {
@@ -177,6 +178,17 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.rewards.hint')}</span>
           </label>
+          <h3 className="section-title">{t('settings.ebill.title')}</h3>
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.ebill_enabled}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('ebill_enabled', e.target.checked)}
+            />
+            {t('settings.ebill.enabled')}
+          </label>
+          <p className="hint-text">{t('settings.ebill.hint')}</p>
           {isAdmin ? (
             <div className="modal-buttons">
               <button className="btn-primary" type="submit" disabled={saving}>

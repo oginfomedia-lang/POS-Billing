@@ -47,6 +47,7 @@ class BaseConfig:
     # A UPI QR closes itself after this many seconds (Razorpay minimum is 120)
     UPI_QR_EXPIRY_SECONDS = int(os.environ.get("UPI_QR_EXPIRY_SECONDS") or "300")  # empty in .env = default
 
+    # --- WhatsApp Business Cloud API (nightly collection summary to the owner, e-bill to the customer) ---
     # Directory where pg_dump files are stored.  Defaults to <project_root>/backups/daily.
     BACKUP_DIR = os.environ.get("BACKUP_DIR") or None
     # Full path to the PostgreSQL bin directory (e.g. C:\Program Files\PostgreSQL\16\bin).
@@ -56,6 +57,7 @@ class BaseConfig:
     WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_TEMPLATE_NAME = os.environ.get("WHATSAPP_TEMPLATE_NAME") or "daily_collection"
+    WHATSAPP_EBILL_TEMPLATE_NAME = os.environ.get("WHATSAPP_EBILL_TEMPLATE_NAME") or "ebill"
     WHATSAPP_TEMPLATE_LANG = os.environ.get("WHATSAPP_TEMPLATE_LANG") or "en"
     # 1 = don't call WhatsApp, just log the message (development/tests)
     WHATSAPP_MOCK = os.environ.get("WHATSAPP_MOCK", "0") == "1"
