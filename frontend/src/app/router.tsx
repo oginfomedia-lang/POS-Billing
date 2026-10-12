@@ -3,6 +3,9 @@
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { PosLayout } from '../components/layout/PosLayout';
 import { AuditLogsPage } from '../pages/admin/AuditLogsPage';
+import { BackupPage } from '../pages/admin/BackupPage';
+import { SuppliersPage } from '../pages/admin/SuppliersPage';
+import { PurchasesPage } from '../pages/admin/PurchasesPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { CountersPage } from '../pages/admin/CountersPage';
 import { DashboardPage } from '../pages/admin/DashboardPage';
@@ -61,6 +64,9 @@ export const router = createHashRouter([
           { path: '/admin/discounts', element: <DiscountsPage /> },
           { path: '/admin/reports', element: <ReportsPage /> },
           { path: '/admin/settings', element: <SettingsPage /> },
+          { path: '/admin/backups', element: <BackupPage /> },
+          { path: '/admin/suppliers', element: <SuppliersPage /> },
+          { path: '/admin/purchases', element: <PurchasesPage /> },
         ],
       },
 

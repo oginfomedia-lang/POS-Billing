@@ -8,7 +8,9 @@ import { useAuth } from '../../hooks/useAuth';
 import {
   IconBarChart,
   IconBoxes,
+  IconClipboardList,
   IconDashboard,
+  IconDatabase,
   IconFileText,
   IconFolder,
   IconLogOut,
@@ -19,6 +21,7 @@ import {
   IconShoppingCart,
   IconStore,
   IconTag,
+  IconTruck,
   IconUsers,
   IconX,
 } from '../common/Icons';
@@ -49,6 +52,13 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
       { to: '/admin/inventory', label: 'nav.inventory', icon: IconBoxes },
       { to: '/admin/labels', label: 'nav.labels', icon: IconTag },
       { to: '/admin/discounts', label: 'nav.discounts', icon: IconPercent },
+      { to: '/admin/suppliers', label: 'nav.suppliers', icon: IconTruck },
+    ],
+  },
+  {
+    title: 'nav.purchasing',
+    links: [
+      { to: '/admin/purchases', label: 'nav.purchases', icon: IconClipboardList },
     ],
   },
   {
@@ -58,6 +68,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
       { to: '/admin/users', label: 'nav.users', icon: IconUsers },
       { to: '/admin/settings', label: 'nav.settings', icon: IconSettings },
       { to: '/admin/audit-logs', label: 'nav.auditLogs', icon: IconFileText, adminOnly: true },
+      { to: '/admin/backups', label: 'nav.backups', icon: IconDatabase, adminOnly: true },
     ],
   },
 ];

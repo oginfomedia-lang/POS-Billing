@@ -61,6 +61,21 @@ class UOMType(str, enum.Enum):
     ML = "ml"
     PACK = "pack"
 
+class PaymentTerms(str, enum.Enum):
+    IMMEDIATE = "immediate"
+    NET_7 = "net_7"
+    NET_15 = "net_15"
+    NET_30 = "net_30"
+
+
+class PurchaseStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ORDERED = "ordered"
+    PARTIALLY_RECEIVED = "partially_received"
+    RECEIVED = "received"
+    CANCELLED = "cancelled"
+
+
 class PaymentIntentStatus(str, enum.Enum):
     PENDING = "pending"      # QR shown / amount pushed to card machine, waiting for customer
     PAID = "paid"            # Razorpay confirmed the money; sale completed
