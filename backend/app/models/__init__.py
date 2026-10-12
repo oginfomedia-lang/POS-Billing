@@ -14,3 +14,6 @@ from app.models.shift import CashierShift  # noqa: F401
 from app.models.store import Counter, Store  # noqa: F401
 from app.models.system import SystemSetting  # noqa: F401
 from app.models.user import User  # noqa: F401
+from app.models.backup import BackupRun  # noqa: F401
+from app.models.supplier import Supplier  # noqa: F401
+from app.models.purchase import PurchaseOrder, PurchaseOrderItem, GoodsReceipt, GoodsReceiptItem  # noqa: F401

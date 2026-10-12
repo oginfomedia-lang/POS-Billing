@@ -1,0 +1,83 @@
+import type {
+  GoodsReceiptOut,
+  PagedResponse,
+  PurchaseDashboard,
+  PurchaseOrderOut,
+  PurchaseStatus,
+} from '../../types/api';
+import { httpClient } from './httpClient';
+
+export interface PurchaseOrderItemPayload {
+  product_id: number;
+  ordered_qty: number;
+  unit_price: number;
+  discount_percent?: number;
+  tax_rate?: number;
+}
+
+export interface PurchaseOrderCreatePayload {
+  supplier_id: number;
+  store_id?: number | null;
+  purchase_date: string;
+  expected_delivery_date?: string | null;
+  reference_number?: string | null;
+  notes?: string | null;
+  internal_remarks?: string | null;
+  items: PurchaseOrderItemPayload[];
+}
+
+export type PurchaseOrderUpdatePayload = Partial<Omit<PurchaseOrderCreatePayload, 'items'>> & {
+  items?: PurchaseOrderItemPayload[];
+};
+
+export interface GoodsReceiptItemPayload {
+  purchase_order_item_id: number;
+  qty_received: number;
+  expiry_date?: string | null;
+}
+
+export interface GoodsReceiptCreatePayload {
+  received_at?: string | null;
+  notes?: string | null;
+  items: GoodsReceiptItemPayload[];
+}
+
+export interface PurchaseListParams {
+  page?: number;
+  per_page?: number;
+  status?: PurchaseStatus | '';
+  supplier_id?: number | null;
+  q?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+export const purchaseApi = {
+  dashboard() {
+    return httpClient.get<PurchaseDashboard>('/purchases/dashboard');
+  },
+  list(params?: PurchaseListParams) {
+    return httpClient.get<PagedResponse<PurchaseOrderOut>>('/purchases', { params });
+  },
+  get(id: number) {
+    return httpClient.get<PurchaseOrderOut>(`/purchases/${id}`);
+  },
+  create(data: PurchaseOrderCreatePayload) {
+    return httpClient.post<PurchaseOrderOut>('/purchases', data);
+  },
+  update(id: number, data: PurchaseOrderUpdatePayload) {
+    return httpClient.put<PurchaseOrderOut>(`/purchases/${id}`, data);
+  },
+  placeOrder(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/place`, {});
+  },
+  cancelOrder(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/cancel`, {});
+  },
+  receiveGoods(id: number, data: GoodsReceiptCreatePayload) {
+    return httpClient.post<GoodsReceiptOut>(`/purchases/${id}/receipts`, data);
+  },
+  listReceipts(id: number) {
+    return httpClient.get<GoodsReceiptOut[]>(`/purchases/${id}/receipts`);
+  },
+};

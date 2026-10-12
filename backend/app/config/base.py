@@ -48,6 +48,12 @@ class BaseConfig:
     UPI_QR_EXPIRY_SECONDS = int(os.environ.get("UPI_QR_EXPIRY_SECONDS") or "300")  # empty in .env = default
 
     # --- WhatsApp Business Cloud API (nightly collection summary to the owner, e-bill to the customer) ---
+    # Directory where pg_dump files are stored.  Defaults to <project_root>/backups/daily.
+    BACKUP_DIR = os.environ.get("BACKUP_DIR") or None
+    # Full path to the PostgreSQL bin directory (e.g. C:\Program Files\PostgreSQL\16\bin).
+    # Leave empty when pg_dump / pg_restore are already on PATH.
+    PGBIN = os.environ.get("PGBIN") or None
+    # --- WhatsApp Business Cloud API (nightly collection summary to the owner) ---
     WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_TEMPLATE_NAME = os.environ.get("WHATSAPP_TEMPLATE_NAME") or "daily_collection"

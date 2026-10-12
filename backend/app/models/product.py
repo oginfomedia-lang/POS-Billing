@@ -31,9 +31,11 @@ class Product(TimestampMixin, db.Model):
     is_variable_weight = db.Column(db.Boolean, nullable=False, default=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
+    supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=True)
 
     category = db.relationship("Category", back_populates="products")
     store = db.relationship("Store")
+    supplier = db.relationship("Supplier", back_populates="products", foreign_keys=[supplier_id])
     barcodes = db.relationship("ProductBarcode", back_populates="product", cascade="all, delete-orphan")
     inventory = db.relationship("Inventory", back_populates="product", uselist=False)
 
