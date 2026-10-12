@@ -37,15 +37,15 @@ class SendResult:
     error: str | None = None
 
 
-def inr(value) -> str:
-    """Indian digit grouping: 1234567.5 -> '₹12,34,567.50'; whole rupees drop the paise."""
+def inr(value, keep_paise: bool = False) -> str:
+    """Indian digit grouping: 1234567.5 -> '₹12,34,567.50'; whole rupees drop the paise unless keep_paise."""
     v = round_money(value)
     whole, paise = f"{abs(v):.2f}".split(".")
     head, groups = whole[:-3], [whole[-3:]]
     while head:
         groups.insert(0, head[-2:])
         head = head[:-2]
-    text = ",".join(groups) + ("" if paise == "00" else f".{paise}")
+    text = ",".join(groups) + ("" if paise == "00" and not keep_paise else f".{paise}")
     return f"{'-' if v < 0 else ''}₹{text}"
 
 

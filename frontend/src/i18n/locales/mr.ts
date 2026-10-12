@@ -238,6 +238,14 @@ export const mr: typeof en = {
     youSavedOnMrp: 'MRP वर तुम्ही {{amount}} वाचवले!',
     youSavedBanner: 'तुम्ही {{amount}} वाचवले!',
     customer: 'ग्राहक',
+    ebillSent: 'ई-बिल {{mobile}} वर WhatsApp ने पाठवले',
+    ebillPending: 'ई-बिल {{mobile}} वर WhatsApp ने पाठवत आहे…',
+    ebillFailed: 'ई-बिल {{mobile}} वर गेले नाही: {{error}}',
+    ebillSend: 'WhatsApp वर पाठवा',
+    ebillResend: 'पुन्हा पाठवा',
+    ebillSending: 'पाठवत आहे…',
+    ebillMobile: 'ग्राहकाचा WhatsApp नंबर',
+    ebillPrinterDown: 'प्रिंटर चालत नाही? बिल WhatsApp वर पाठवा.',
   },
   dashboard: {
     pretitle: 'थेट आढावा',
@@ -564,6 +572,11 @@ export const mr: typeof en = {
       blockPoints: 'वापरण्यासाठी लागणारे पॉइंट्स',
       blockValue: 'त्या पॉइंट्सवर सूट (₹)',
       hint: 'उदा.: 100 पॉइंट्स = ₹100 सूट. बिल ऑफरप्रमाणे ही सूट GST आधी दिली जाते.',
+    },
+    ebill: {
+      title: 'WhatsApp ई-बिल',
+      enabled: 'प्रत्येक बिल PDF स्वरूपात ग्राहकाच्या मोबाईलवर WhatsApp ने पाठवा',
+      hint: 'बिल भरल्यावर लगेच सर्व्हरवरून पाठवले जाते, पावती प्रिंट झाली नाही तरीही. फक्त ग्राहकाचा मोबाईल नंबर असलेली बिले. न गेलेली बिले दर 5 मिनिटांनी पुन्हा पाठवली जातात (3 प्रयत्न).',
     },
     dailyReport: {
       title: 'WhatsApp दैनिक कलेक्शन अहवाल',

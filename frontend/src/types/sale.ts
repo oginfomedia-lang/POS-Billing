@@ -103,6 +103,17 @@ export interface ReceiptOut {
   payments: PaymentOut[];
   receipt_header: string;
   receipt_footer: string;
+  /** Latest WhatsApp e-bill for this bill; null = none sent or queued. */
+  ebill: EbillStatus | null;
+}
+
+/** WhatsApp e-bill (PDF of the bill) — shown on the bill screen, never printed. */
+export interface EbillStatus {
+  status: 'pending' | 'sent' | 'failed';
+  /** Masked, e.g. 98XXXXX210. */
+  recipient: string;
+  error: string | null;
+  sent_at: string | null;
 }
 
 /** Methods the complete-sale endpoint accepts. */

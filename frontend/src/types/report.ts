@@ -179,6 +179,8 @@ export interface SettingsData {
   daily_report_time: string;
   /** Comma-separated 10-digit mobiles. */
   daily_report_mobiles: string;
+  /** PDF of every paid bill sent on WhatsApp to the customer's mobile. */
+  ebill_enabled: boolean;
 }
 
 export type NotificationStatus = 'pending' | 'sent' | 'failed';

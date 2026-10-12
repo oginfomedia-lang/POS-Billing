@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ReceiptGstTable } from '../../components/pos/ReceiptGstTable';
+import { EbillBar } from '../../components/pos/EbillBar';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getReceipt } from '../../services/api/billingApi';
@@ -63,6 +63,7 @@ export function ReprintPage() {
 
       {error && <div className="page-error">{error}</div>}
       {printError && <div className="page-error no-print">{t('receipt.printFailed', { error: printError })}</div>}
+      {receipt && <EbillBar receipt={receipt} printFailed={!!printError} />}
       {!receipt && !error && <div className="loading-text">{t('common.loading')}</div>}
 
       {receipt && (
@@ -137,7 +138,6 @@ export function ReprintPage() {
           {Number(receipt.reward_discount) > 0 && (
             <div className="receipt-row"><span>{t('receipt.pointsUsed', { points: receipt.points_redeemed })}</span><span>− {formatRupees(receipt.reward_discount)}</span></div>
           )}
-          <div className="receipt-row"><span>{t('receipt.gst')}</span><span>{formatRupees(receipt.tax_amount)}</span></div>
           <div className="receipt-row receipt-total"><span>{t('receipt.total')}</span><span>{formatRupees(receipt.total)}</span></div>
           {Number(receipt.total_saving) > 0 && (
             <div className="receipt-saved-box">
@@ -152,8 +152,6 @@ export function ReprintPage() {
             </div>
           )}
           <hr />
-          <ReceiptGstTable rows={receipt.gst_summary} />
-          {receipt.gst_summary.length > 0 && <hr />}
 
           {receipt.payments.map((p) => (
             <div key={p.id}>

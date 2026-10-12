@@ -124,6 +124,21 @@ class GstSummaryRow(BaseModel):
     tax: Decimal
 
 
+class EbillStatusOut(BaseModel):
+    """Latest WhatsApp e-bill for a bill (shown on the bill screen, never printed)."""
+
+    status: str  # pending / sent / failed
+    recipient: str  # masked, e.g. 98XXXXX210
+    error: str | None = None
+    sent_at: datetime | None = None
+
+
+class EbillSendRequest(BaseModel):
+    """Send on WhatsApp: to this number, or the bill's customer mobile when empty."""
+
+    mobile: str | None = Field(None, max_length=20)
+
+
 class ReceiptOut(BaseModel):
     sale_id: int
     bill_number: str
@@ -151,3 +166,4 @@ class ReceiptOut(BaseModel):
     payments: list[PaymentOut]
     receipt_header: str
     receipt_footer: str
+    ebill: EbillStatusOut | None = None

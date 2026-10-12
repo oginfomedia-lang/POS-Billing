@@ -1,5 +1,5 @@
 // Sale draft, items, hold, resume, complete API calls.
-import type { DigitalMethod, PaymentIntentOut, ReceiptOut, RewardInfo, SaleOut, TenderMethod } from '../../types/sale';
+import type { DigitalMethod, EbillStatus, PaymentIntentOut, ReceiptOut, RewardInfo, SaleOut, TenderMethod } from '../../types/sale';
 import { httpClient } from './httpClient';
 
 /** Returns the cashier's open bill, creating one if needed. 409 = no open shift. */
@@ -107,5 +107,11 @@ export async function listHeld(): Promise<SaleOut[]> {
 
 export async function getReceipt(saleId: number): Promise<ReceiptOut> {
   const resp = await httpClient.get<ReceiptOut>(`/sales/${saleId}/receipt`);
+  return resp.data;
+}
+
+/** Sends the bill as a PDF on WhatsApp — to `mobile`, or the bill's customer mobile when omitted. */
+export async function sendEbill(saleId: number, mobile?: string): Promise<EbillStatus> {
+  const resp = await httpClient.post<EbillStatus>(`/sales/${saleId}/ebill`, { mobile: mobile || null });
   return resp.data;
 }

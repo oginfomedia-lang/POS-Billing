@@ -238,6 +238,14 @@ export const en = {
     youSavedOnMrp: 'You saved {{amount}} on MRP!',
     youSavedBanner: 'You saved {{amount}}!',
     customer: 'Customer',
+    ebillSent: 'E-bill sent on WhatsApp to {{mobile}}',
+    ebillPending: 'Sending e-bill on WhatsApp to {{mobile}}…',
+    ebillFailed: 'E-bill to {{mobile}} not sent: {{error}}',
+    ebillSend: 'Send on WhatsApp',
+    ebillResend: 'Send again',
+    ebillSending: 'Sending…',
+    ebillMobile: "Customer's WhatsApp number",
+    ebillPrinterDown: 'Printer not working? Send the bill on WhatsApp instead.',
   },
   dashboard: {
     pretitle: 'Real-Time Overview',
@@ -564,6 +572,11 @@ export const en = {
       blockPoints: 'Points needed to redeem',
       blockValue: '₹ off for those points',
       hint: 'Example: 100 points = ₹100 off. The discount is taken before GST, like a bill offer.',
+    },
+    ebill: {
+      title: 'WhatsApp e-bill',
+      enabled: "Send every bill as a PDF on WhatsApp to the customer's mobile",
+      hint: "Sent from the server as soon as the bill is paid, even if the receipt doesn't print. Only bills with a customer mobile. Failed sends are retried every 5 minutes (3 tries).",
     },
     dailyReport: {
       title: 'WhatsApp daily collection report',

@@ -10,3 +10,6 @@ pydantic>=2.9,<3
 python-dotenv>=1.0,<2
 waitress>=3.0,<4
 requests>=2.32,<3
+# PDF e-bill sent on WhatsApp; uharfbuzz shapes Marathi (Devanagari) text.
+fpdf2>=2.8,<3
+uharfbuzz>=0.39

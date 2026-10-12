@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ReceiptGstTable } from '../../components/pos/ReceiptGstTable';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -103,13 +102,10 @@ export function ReturnReceiptPage() {
           {Number(ret.discount_amount) > 0 && (
             <div className="receipt-row"><span>{t('returns.lessDiscount')}</span><span>− {formatRupees(ret.discount_amount)}</span></div>
           )}
-          <div className="receipt-row"><span>{t('receipt.gst')}</span><span>{formatRupees(ret.tax_amount)}</span></div>
           <div className="receipt-row receipt-total">
             <span>{t('returns.cashRefunded')}</span><span>{formatRupees(ret.refund_amount)}</span>
           </div>
           <hr />
-          <ReceiptGstTable rows={ret.gst_summary} />
-          {ret.gst_summary.length > 0 && <hr />}
 
           <div className="receipt-row"><span>{t('returns.reason')}</span><span>{ret.reason}</span></div>
           <div className="receipt-row"><span>{t('returns.approvedBy')}</span><span>{ret.approved_by_name}</span></div>

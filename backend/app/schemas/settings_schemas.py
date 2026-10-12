@@ -22,6 +22,8 @@ class SettingsData(BaseModel):
     daily_report_enabled: bool = False
     daily_report_time: str = Field("22:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")  # IST, HH:MM
     daily_report_mobiles: str = Field("", max_length=200)  # comma-separated 10-digit mobiles
+    # PDF copy of every paid bill sent on WhatsApp to the customer's mobile (when one is on the bill).
+    ebill_enabled: bool = False
 
     @field_validator("daily_report_mobiles")
     @classmethod

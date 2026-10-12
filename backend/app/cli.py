@@ -1,4 +1,4 @@
-"""Flask CLI commands: flask create-admin, flask send-daily-collection.
+"""Flask CLI commands: flask create-admin, flask send-daily-collection, flask send-ebills.
 
 First-time setup on a fresh server (run from backend/, after `flask db upgrade`):
 
@@ -10,6 +10,11 @@ counters and every other user from the admin screens.
 The nightly WhatsApp collection summary is sent by Windows Task Scheduler running, every 15 minutes:
 
     flask send-daily-collection
+
+E-bills go out on WhatsApp as soon as a bill is paid; failed ones are retried by Task Scheduler running,
+every 5 minutes:
+
+    flask send-ebills
 """
 from datetime import datetime
 
@@ -21,7 +26,7 @@ from app.errors.exceptions import AppError
 from app.models.enums import UserRole
 from app.repositories.store_repository import StoreRepository
 from app.schemas.user_schemas import UserCreate
-from app.services import daily_report_service, settings_service, user_service
+from app.services import daily_report_service, ebill_service, settings_service, user_service
 
 
 @click.command("create-admin")
@@ -72,6 +77,17 @@ def send_daily_collection(day: datetime | None, force: bool) -> None:
         click.echo(f"{r.store_name} -> {r.recipient}: {r.status}{f' ({r.error})' if r.error else ''}")
 
 
+@click.command("send-ebills")
+def send_ebills() -> None:
+    """Retry WhatsApp e-bills that failed or weren't sent (run every 5 min by Task Scheduler)."""
+    results = ebill_service.retry_due()
+    if not results:
+        click.echo("No e-bills waiting.")
+    for r in results:
+        click.echo(f"{r.store_name} -> {r.recipient}: {r.status}{f' ({r.error})' if r.error else ''}")
+
+
 def register_cli(app: Flask) -> None:
     app.cli.add_command(create_admin)
     app.cli.add_command(send_daily_collection)
+    app.cli.add_command(send_ebills)
