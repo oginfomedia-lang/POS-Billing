@@ -27,6 +27,7 @@ class SaleItemOut(BaseModel):
     offer_discount: Decimal = Decimal("0")
     manual_discount: Decimal = Decimal("0")
     manual_discount_reason: str | None = None
+    reward_discount: Decimal = Decimal("0")  # this line's share of the reward points discount
     tax_amount: Decimal
     saving: Decimal = Decimal("0")  # MRP × qty − paid (or the discount when there is no MRP)
 
@@ -61,6 +62,9 @@ class SaleOut(BaseModel):
     total_saving: Decimal = Decimal("0")
     note: str | None
     customer_mobile: str | None = None
+    points_redeemed: int = 0  # reserved while the bill is open, used once it's paid
+    reward_discount: Decimal = Decimal("0")  # ₹ off for those points (before GST, inside discount_amount)
+    points_earned: int = 0
     items: list[SaleItemOut]
     payments: list[PaymentOut]
     created_at: datetime
@@ -139,6 +143,10 @@ class ReceiptOut(BaseModel):
     tax_amount: Decimal
     total: Decimal
     total_saving: Decimal = Decimal("0")
+    points_redeemed: int = 0
+    reward_discount: Decimal = Decimal("0")
+    points_earned: int = 0
+    points_balance: int | None = None  # customer's balance now (None = no customer on the bill)
     gst_summary: list[GstSummaryRow] = []
     payments: list[PaymentOut]
     receipt_header: str

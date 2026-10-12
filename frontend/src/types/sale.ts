@@ -29,6 +29,8 @@ export interface SaleItemOut {
   offer_discount: string; // item offer only
   manual_discount: string; // counter discount, manager-approved
   manual_discount_reason: string | null;
+  /** This line's share of the reward points discount (before GST, inside discount_amount). */
+  reward_discount: string;
   tax_amount: string;
   /** MRP × qty − amount paid (or the discount when there's no MRP). */
   saving: string;
@@ -60,6 +62,12 @@ export interface SaleOut {
   total_saving: string;
   note: string | null;
   customer_mobile: string | null;
+  /** Points reserved on this open bill / used on this paid bill. */
+  points_redeemed: number;
+  /** ₹ off for those points (before GST, already inside discount_amount). */
+  reward_discount: string;
+  /** Points this paid bill gave the customer. */
+  points_earned: number;
   items: SaleItemOut[];
   payments: PaymentOut[];
   created_at: string;
@@ -86,6 +94,11 @@ export interface ReceiptOut {
   tax_amount: string;
   total: string;
   total_saving: string;
+  points_redeemed: number;
+  reward_discount: string;
+  points_earned: number;
+  /** Customer's points balance now; null = no customer on the bill. */
+  points_balance: number | null;
   gst_summary: GstSummaryRow[];
   payments: PaymentOut[];
   receipt_header: string;
@@ -111,4 +124,17 @@ export interface PaymentIntentOut {
   failure_reason: string | null;
   created_at: string;
   sale?: SaleOut | null; // set by the poll endpoint once Razorpay confirms and the bill is completed
+}
+
+/** Customer's points for the payment screen (GET /customers/{mobile}/rewards). */
+export interface RewardInfo {
+  mobile: string;
+  /** false = first visit; the customer is created when this bill is paid. */
+  registered: boolean;
+  enabled: boolean;
+  points_balance: number;
+  block_points: number;
+  block_value: string;
+  /** Blocks the balance allows (the bill amount may allow fewer). */
+  max_blocks: number;
 }

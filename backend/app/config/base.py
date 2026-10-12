@@ -52,6 +52,13 @@ class BaseConfig:
     # Full path to the PostgreSQL bin directory (e.g. C:\Program Files\PostgreSQL\16\bin).
     # Leave empty when pg_dump / pg_restore are already on PATH.
     PGBIN = os.environ.get("PGBIN") or None
+    # --- WhatsApp Business Cloud API (nightly collection summary to the owner) ---
+    WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
+    WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")
+    WHATSAPP_TEMPLATE_NAME = os.environ.get("WHATSAPP_TEMPLATE_NAME") or "daily_collection"
+    WHATSAPP_TEMPLATE_LANG = os.environ.get("WHATSAPP_TEMPLATE_LANG") or "en"
+    # 1 = don't call WhatsApp, just log the message (development/tests)
+    WHATSAPP_MOCK = os.environ.get("WHATSAPP_MOCK", "0") == "1"
 
     @classmethod
     def validate(cls) -> None:

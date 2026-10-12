@@ -1,7 +1,8 @@
-// Receipt text, store-wide inventory defaults, return window, and this counter's printer.
+// Receipt text, store-wide inventory defaults, return window, WhatsApp daily report, and this counter's printer.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { DailyReportCard } from '../../components/admin/DailyReportCard';
 import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -14,12 +15,20 @@ const DEFAULTS: SettingsData = {
   receipt_footer: 'Thank you! Visit again.',
   low_stock_threshold: '5',
   return_window_days: 30,
+  rewards_enabled: false,
+  reward_rupees_per_point: '100',
+  reward_block_points: 100,
+  reward_block_value: '100',
+  daily_report_enabled: false,
+  daily_report_time: '22:30',
+  daily_report_mobiles: '',
 };
 
 export function SettingsPage() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
   const [settings, setSettings] = useState<SettingsData>(DEFAULTS);
+  const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -28,20 +37,21 @@ export function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     getSettings()
-      .then((data) => { if (!cancelled) setSettings(data); })
+      .then((data) => { if (!cancelled) { setSettings(data); setSavedSettings(data); } })
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(event?: FormEvent) {
+    event?.preventDefault();
     setSaving(true);
     setError('');
     setNotice('');
     try {
       const saved = await saveSettings(settings);
       setSettings(saved);
+      setSavedSettings(saved);
       setNotice(t('settings.saved'));
     } catch (err) {
       setError(getErrorMessage(err));
@@ -117,6 +127,56 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.returnWindowHint')}</span>
           </label>
+          <h3 className="section-title">{t('settings.rewards.title')}</h3>
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.rewards_enabled}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('rewards_enabled', e.target.checked)}
+            />
+            {t('settings.rewards.enabled')}
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.rupeesPerPoint')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_rupees_per_point}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_rupees_per_point', e.target.value)}
+              required
+            />
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.blockPoints')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_block_points}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_block_points', Number(e.target.value))}
+              required
+            />
+          </label>
+          <label className="field-label">
+            {t('settings.rewards.blockValue')}
+            <input
+              className="field-input"
+              type="number"
+              min="1"
+              step="1"
+              value={settings.reward_block_value}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('reward_block_value', e.target.value)}
+              required
+            />
+            <span className="hint-text">{t('settings.rewards.hint')}</span>
+          </label>
           {isAdmin ? (
             <div className="modal-buttons">
               <button className="btn-primary" type="submit" disabled={saving}>
@@ -127,6 +187,16 @@ export function SettingsPage() {
             <p className="hint-text">{t('settings.adminOnly')}</p>
           )}
         </form>
+      )}
+      {!loading && (
+        <DailyReportCard
+          value={settings}
+          onChange={update}
+          dirty={(['daily_report_enabled', 'daily_report_time', 'daily_report_mobiles'] as const).some((k) => settings[k] !== savedSettings[k])}
+          onSave={() => void submit()}
+          canEdit={isAdmin}
+          disabled={saving}
+        />
       )}
       {hasPrinterBridge() && <PrinterSettingsCard />}
     </div>

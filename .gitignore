@@ -29,3 +29,6 @@ backups/**/*
 .idea/
 Thumbs.db
 .DS_Store
+
+# Logs written by scheduled tasks
+backend/logs/

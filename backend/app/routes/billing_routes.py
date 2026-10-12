@@ -1,6 +1,7 @@
 """Sales: create draft, add/update/remove items, hold, resume, void, complete, card/UPI payments."""
 from flask import Blueprint, jsonify, request
 
+from app.schemas.customer_schemas import RedeemPointsRequest
 from app.schemas.payment_schemas import PaymentIntentOut, StartPaymentRequest
 from app.schemas.sale_schemas import (
     AddItemRequest,
@@ -107,6 +108,15 @@ def complete_sale(sale_id: int):
 def set_customer_mobile(sale_id: int):
     data = CustomerMobileRequest.model_validate(request.get_json(force=True))
     sale = billing_service.set_customer_mobile(sale_id, data.mobile, auth_service.current_user())
+    return jsonify(_sale_json(sale)), 200
+
+
+@billing_bp.post("/sales/<int:sale_id>/redeem-points")
+@require_permission("sales.create")
+def redeem_points(sale_id: int):
+    """Cashier's Redeem button: blocks of reward points off this open bill (0 removes)."""
+    data = RedeemPointsRequest.model_validate(request.get_json(force=True))
+    sale = billing_service.redeem_points(sale_id, data.blocks, auth_service.current_user())
     return jsonify(_sale_json(sale)), 200
 
 

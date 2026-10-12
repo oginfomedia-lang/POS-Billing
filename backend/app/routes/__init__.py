@@ -5,6 +5,7 @@ from app.routes.audit_routes import audit_bp
 from app.routes.backup_routes import backup_bp
 from app.routes.auth_routes import auth_bp
 from app.routes.billing_routes import billing_bp
+from app.routes.customer_routes import customer_bp
 from app.routes.discount_routes import discount_bp
 from app.routes.health_routes import health_bp
 from app.routes.inventory_routes import inventory_bp
@@ -39,3 +40,4 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(backup_bp, url_prefix=prefix)
     app.register_blueprint(supplier_bp, url_prefix=prefix)
     app.register_blueprint(purchase_bp, url_prefix=prefix)
+    app.register_blueprint(customer_bp, url_prefix=prefix)

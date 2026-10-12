@@ -4,9 +4,13 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
+from app.models.enums import ShiftStatus
 from app.repositories.report_repository import ReportRepository
 from app.repositories.store_repository import StoreRepository
 from app.schemas.report_schemas import (
+    CollectionReportOut,
+    CollectionRow,
+    CollectionTotals,
     DailyRow,
     DashboardOut,
     GstHsnRow,
@@ -129,6 +133,53 @@ def shift_report(q: ReportQuery) -> list[ShiftRow]:
             difference=diff,
         ))
     return rows
+
+
+def collection_report(q: ReportQuery) -> CollectionReportOut:
+    """Money collected per (cashier, counter): payment split, refunds, net, and cash short/over."""
+    repo = ReportRepository()
+    d_from, d_to, start, end = _range(q)
+    rows: dict[tuple[int, int | None], dict] = {}
+
+    def row(cashier_id: int, counter_id: int | None) -> dict:
+        return rows.setdefault((cashier_id, counter_id), {"bills": 0})
+
+    for cashier_id, counter_id, bills, cash, card, upi, total in repo.collection_by_cashier(q.store_id, start, end):
+        row(cashier_id, counter_id).update(
+            bills=bills, cash=round_money(cash), card=round_money(card), upi=round_money(upi), total=round_money(total)
+        )
+    for cashier_id, counter_id, refunded in repo.refunds_by_cashier(q.store_id, start, end):
+        row(cashier_id, counter_id)["refunds"] = round_money(refunded)
+    for shift in repo.shifts_for_collection(q.store_id, start, end):
+        r = row(shift.user_id, shift.counter_id)
+        if shift.status == ShiftStatus.OPEN:
+            r["shift_open"] = True
+        elif shift.expected_cash is not None and shift.actual_cash is not None:
+            r["cash_difference"] = r.get("cash_difference", Decimal("0")) + shift.actual_cash - shift.expected_cash
+
+    users, counters = repo.names({k[0] for k in rows}, {k[1] for k in rows if k[1] is not None})
+    out = []
+    for (cashier_id, counter_id), r in rows.items():
+        item = CollectionRow(
+            cashier_id=cashier_id, cashier_name=users.get(cashier_id, "?"), counter_code=counters.get(counter_id), **r
+        )
+        item.net = item.total - item.refunds
+        out.append(item)
+    out.sort(key=lambda r: (-r.net, r.cashier_name))
+
+    def total(field: str):
+        return sum((getattr(r, field) for r in out), Decimal("0.00"))
+
+    return CollectionReportOut(
+        store_id=q.store_id,
+        date_from=d_from,
+        date_to=d_to,
+        rows=out,
+        totals=CollectionTotals(
+            bills=sum(r.bills for r in out),
+            **{f: total(f) for f in ("cash", "card", "upi", "total", "refunds", "net")},
+        ),
+    )
 
 
 def dashboard(store_id: int | None) -> DashboardOut:

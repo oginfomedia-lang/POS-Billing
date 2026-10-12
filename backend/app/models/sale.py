@@ -27,6 +27,10 @@ class Sale(TimestampMixin, db.Model):
     total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     note = db.Column(db.String(255), nullable=True)  # hold note
     customer_mobile = db.Column(db.String(10), nullable=True, index=True)  # optional, 10-digit Indian mobile
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id"), nullable=True, index=True)  # set when paid
+    points_redeemed = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    reward_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
+    points_earned = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     items = db.relationship(
@@ -35,6 +39,7 @@ class Sale(TimestampMixin, db.Model):
     payments = db.relationship(
         "Payment", back_populates="sale", cascade="all, delete-orphan", order_by="Payment.id"
     )
+    customer = db.relationship("Customer")
     store = db.relationship("Store")
     counter = db.relationship("Counter")
     cashier = db.relationship("User")
@@ -63,8 +68,9 @@ class SaleItem(TimestampMixin, db.Model):
     qty = db.Column(db.Numeric(12, 3), nullable=False)
     line_total = db.Column(db.Numeric(12, 2), nullable=False)  # unit_price * qty, before discount and tax
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
-    # discount_amount = offer_discount + manual_discount + this line's share of the bill offer.
+    # discount_amount = offer_discount + manual_discount + reward_discount + this line's share of the bill offer.
     offer_id = db.Column(db.Integer, db.ForeignKey("discounts.id"), nullable=True)
+    reward_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     offer_name = db.Column(db.String(100), nullable=True)  # snapshot for cart/receipt/reports
     offer_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     manual_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")

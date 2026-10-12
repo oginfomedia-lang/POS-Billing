@@ -22,6 +22,8 @@ interface BillState {
   markPaid: () => void;
   /** Saves the optional customer mobile on the open bill. Throws on failure (e.g. invalid number). */
   setCustomerMobile: (mobile: string | null) => Promise<void>;
+  /** Redeems reward points on the open bill (0 removes). Throws on failure. */
+  redeemPoints: (blocks: number) => Promise<void>;
   void: () => Promise<void>;
   reset: () => void;
 }
@@ -84,6 +86,11 @@ export const useBillStore = create<BillState>((set, get) => {
     // Not wrapped in run(): it mustn't flip `busy` and disable the payment screen while a QR is showing.
     setCustomerMobile: async (mobile) => {
       set({ sale: await billingApi.setCustomerMobile(currentSale().id, mobile) });
+    },
+
+    // Not wrapped in run() either: the payment screen stays usable while it re-prices.
+    redeemPoints: async (blocks) => {
+      set({ sale: await billingApi.redeemPoints(currentSale().id, blocks) });
     },
 
     void: () =>

@@ -1,5 +1,7 @@
 // Report, discount and settings API calls (admin / manager screens).
-import type { DashboardOut, DiscountIn, DiscountOut, SalesReportOut, SettingsData, ShiftRow } from '../../types/report';
+import type {
+  CollectionReportOut, DailyReportLog, DailyReportSendResult, DashboardOut, DiscountIn, DiscountOut, SalesReportOut, SettingsData, ShiftRow,
+} from '../../types/report';
 import { httpClient } from './httpClient';
 
 export interface ReportFilter {
@@ -28,6 +30,11 @@ export async function getShiftReport(f: ReportFilter): Promise<ShiftRow[]> {
   return resp.data;
 }
 
+export async function getCollectionReport(f: ReportFilter): Promise<CollectionReportOut> {
+  const resp = await httpClient.get<CollectionReportOut>('/reports/collection', { params: params(f) });
+  return resp.data;
+}
+
 /** storeId: that branch's offers plus all-branch offers; omit for every offer (head office). */
 export async function listDiscounts(storeId?: number | null): Promise<DiscountOut[]> {
   const resp = await httpClient.get<DiscountOut[]>('/discounts', { params: { store_id: storeId ?? undefined } });
@@ -48,5 +55,16 @@ export async function getSettings(): Promise<SettingsData> {
 
 export async function saveSettings(data: SettingsData): Promise<SettingsData> {
   const resp = await httpClient.put<SettingsData>('/settings', data);
+  return resp.data;
+}
+
+/** Sends today's collection summary on WhatsApp right now (admin). */
+export async function sendDailyReportNow(): Promise<DailyReportSendResult[]> {
+  const resp = await httpClient.post<DailyReportSendResult[]>('/settings/daily-report/send');
+  return resp.data;
+}
+
+export async function getDailyReportLogs(): Promise<DailyReportLog[]> {
+  const resp = await httpClient.get<DailyReportLog[]>('/settings/daily-report/logs');
   return resp.data;
 }

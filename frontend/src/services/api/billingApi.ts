@@ -1,5 +1,5 @@
 // Sale draft, items, hold, resume, complete API calls.
-import type { DigitalMethod, PaymentIntentOut, ReceiptOut, SaleOut, TenderMethod } from '../../types/sale';
+import type { DigitalMethod, PaymentIntentOut, ReceiptOut, RewardInfo, SaleOut, TenderMethod } from '../../types/sale';
 import { httpClient } from './httpClient';
 
 /** Returns the cashier's open bill, creating one if needed. 409 = no open shift. */
@@ -39,6 +39,18 @@ export async function setManualDiscount(saleId: number, itemId: number, data: Ma
 /** Optional customer mobile on the open bill (null / '' clears it). Doesn't touch a live QR / card payment. */
 export async function setCustomerMobile(saleId: number, mobile: string | null): Promise<SaleOut> {
   const resp = await httpClient.put<SaleOut>(`/sales/${saleId}/customer-mobile`, { mobile: mobile || null });
+  return resp.data;
+}
+
+/** Customer's points balance for the payment screen (doesn't register anyone). */
+export async function getRewards(mobile: string): Promise<RewardInfo> {
+  const resp = await httpClient.get<RewardInfo>(`/customers/${mobile}/rewards`);
+  return resp.data;
+}
+
+/** Use blocks × block_points of the customer's points on the open bill (0 removes). Re-prices the bill. */
+export async function redeemPoints(saleId: number, blocks: number): Promise<SaleOut> {
+  const resp = await httpClient.post<SaleOut>(`/sales/${saleId}/redeem-points`, { blocks });
   return resp.data;
 }
 

@@ -1,8 +1,8 @@
 // Marathi (मराठी) UI text. Must have exactly the same keys as en.ts — TypeScript reports any missing key.
 // Common shop terms (GST, UPI, PIN, SKU, POS, pcs/kg) are kept as staff use them day to day.
-import type { Messages } from './en';
+import { en } from './en';
 
-export const mr: Messages = {
+export const mr: typeof en = {
   app: {
     portal: 'व्यवस्थापन पोर्टल',
     language: 'भाषा',
@@ -46,6 +46,7 @@ export const mr: Messages = {
     administration: 'प्रशासन',
     dashboard: 'डॅशबोर्ड',
     reports: 'अहवाल',
+    customers: 'ग्राहक',
     products: 'उत्पादने',
     categories: 'श्रेणी',
     inventory: 'स्टॉक / इन्व्हेंटरी',
@@ -203,6 +204,8 @@ export const mr: Messages = {
     open: 'शिफ्ट सुरू करा',
   },
   receipt: {
+    pointsUsed: 'रिवॉर्ड पॉइंट्स ({{points}} पॉइंट्स)',
+    pointsLine: 'मिळालेले पॉइंट्स {{earned}} · शिल्लक {{balance}}',
     invalidId: 'चुकीचा बिल क्रमांक.',
     title: 'पावती',
     docTitle: '{{store}} — बिल {{bill}}',
@@ -558,6 +561,36 @@ export const mr: Messages = {
     adminOnly: 'फक्त प्रशासक सेटिंग्ज बदलू शकतो.',
     returnWindowDays: 'परताव्याची मुदत (दिवस)',
     returnWindowHint: 'यापेक्षा जुनी बिले परत घेता येणार नाहीत. 0 = फक्त त्याच दिवशी.',
+    rewards: {
+      title: 'रिवॉर्ड पॉइंट्स',
+      enabled: 'ग्राहकांना रिवॉर्ड पॉइंट्स द्या (मोबाईल नंबरनुसार)',
+      rupeesPerPoint: '1 पॉइंटसाठी खर्च (₹)',
+      blockPoints: 'वापरण्यासाठी लागणारे पॉइंट्स',
+      blockValue: 'त्या पॉइंट्सवर सूट (₹)',
+      hint: 'उदा.: 100 पॉइंट्स = ₹100 सूट. बिल ऑफरप्रमाणे ही सूट GST आधी दिली जाते.',
+    },
+    dailyReport: {
+      title: 'WhatsApp दैनिक कलेक्शन अहवाल',
+      hint: 'दररोज रात्री प्रत्येक कॅशियरचे कलेक्शन (रोख, UPI, कार्ड, परतावा व निव्वळ) या मोबाईल नंबरवर WhatsApp ने पाठवले जाते. पाठवण्याच्या वेळी सर्व्हर PC चालू व इंटरनेटशी जोडलेला ठेवा.',
+      enabled: 'दैनिक अहवाल WhatsApp वर पाठवा',
+      time: 'पाठवण्याची वेळ (IST)',
+      mobiles: 'मालकाचे मोबाईल नंबर',
+      mobilesPlaceholder: '9876543210, 9123456789',
+      mobilesHint: 'एकापेक्षा जास्त नंबर स्वल्पविरामाने वेगळे करा.',
+      sendNow: 'आजचा अहवाल आत्ता पाठवा',
+      sending: 'पाठवत आहे…',
+      sendResult: '{{total}} पैकी {{sent}} संदेश पाठवले.',
+      saveFirst: 'आधी सेटिंग्ज जतन करा, मग पाठवा.',
+      logTitle: 'अलीकडील संदेश',
+      noLogs: 'अजून कोणताही संदेश पाठवलेला नाही.',
+      colDate: 'अहवालाची तारीख',
+      colTo: 'कोणाला',
+      colStatus: 'स्थिती',
+      colTries: 'प्रयत्न',
+      colUpdated: 'शेवटचा प्रयत्न',
+      manual: 'स्वतः पाठवलेला',
+      status: { pending: 'पाठवत आहे', sent: 'पाठवला', failed: 'अयशस्वी' },
+    },
   },
   audit: {
     title: 'ऑडिट लॉग्ज',
@@ -579,8 +612,8 @@ export const mr: Messages = {
     yesterday: 'काल',
     last7: 'मागील 7 दिवस',
     thisMonth: 'हा महिना',
-    tabs: { sales: 'विक्री', gst: 'GST सारांश', shifts: 'शिफ्ट व रोख' },
-    printTitles: { sales: 'विक्री अहवाल', gst: 'GST सारांश', shifts: 'शिफ्ट व रोख' },
+    tabs: { sales: 'विक्री', gst: 'GST सारांश', shifts: 'शिफ्ट व रोख', collection: 'दैनिक कलेक्शन' },
+    printTitles: { sales: 'विक्री अहवाल', gst: 'GST सारांश', shifts: 'शिफ्ट व रोख', collection: 'कॅशियरनुसार दैनिक कलेक्शन' },
     range: '{{from}} ते {{to}}',
     netSales: 'निव्वळ विक्री (GST सह)',
     bills: 'बिले',
@@ -636,6 +669,10 @@ export const mr: Messages = {
     colHsn: 'HSN',
     noHsn: 'HSN नाही',
     colCashRefunds: 'रोख परतावा',
+    colNet: 'निव्वळ',
+    shiftOpen: 'शिफ्ट सुरू',
+    collectionHint:
+      'प्रत्येक कॅशियरने प्रत्येक काउंटरवर जमा केलेली रक्कम, पेमेंट पद्धतीनुसार. निव्वळ = एकूण − रोख परतावा. हाच सारांश मालकाला WhatsApp वर पाठवला जातो.',
   },
   returns: {
     title: 'परतावा',
@@ -883,5 +920,31 @@ export const mr: Messages = {
     approvalRole: 'फक्त व्यवस्थापक किंवा प्रशासक सवलत मंजूर करू शकतो.',
     permissionDenied: 'ही क्रिया करण्याची तुम्हाला परवानगी नाही.',
     ownStoreOnly: 'तुम्ही फक्त तुमच्या शाखेचा डेटा पाहू शकता.',
+  },
+  rewards: {
+    balance: '{{points}} रिवॉर्ड पॉइंट्स',
+    newCustomer: 'नवीन ग्राहक: या बिलापासून पॉइंट्स सुरू',
+    canRedeem: '{{points}} पॉइंट्स वापरा = {{amount}} सूट',
+    using: '{{points}} पॉइंट्स वापरले ({{amount}} सूट)',
+    redeem: 'वापरा',
+    summaryRow: 'रिवॉर्ड पॉइंट्स ({{points}} पॉइंट्स)',
+  },
+  customers: {
+    title: 'ग्राहक',
+    searchPlaceholder: 'मोबाईल नंबर किंवा नाव',
+    colMobile: 'मोबाईल',
+    colPoints: 'पॉइंट्स',
+    colVisits: 'भेटी',
+    colSpent: 'एकूण खरेदी',
+    colLastVisit: 'शेवटची भेट',
+    empty: 'अजून ग्राहक नाहीत. मोबाईल नंबरसह बिल भरल्यावर ते जोडले जातात.',
+    passbook: 'पॉइंट्सचा इतिहास: {{mobile}}',
+    colDate: 'तारीख',
+    colType: 'प्रकार',
+    colNote: 'बिल / परतावा',
+    colPointsChange: 'पॉइंट्स',
+    colBalance: 'शिल्लक',
+    noTxns: 'अजून पॉइंट्स नाहीत.',
+    types: { earn: 'मिळाले', redeem: 'वापरले', reverse: 'परत घेतले (परतावा)', adjust: 'दुरुस्ती' },
   },
 };

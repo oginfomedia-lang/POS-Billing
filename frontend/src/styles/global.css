@@ -2,8 +2,6 @@
    Sections: tokens · base · layout · admin navigation · page chrome · forms · buttons ·
    tables & badges · modals · POS billing · payment · dashboard & reports · settings ·
    labels · receipt · shift pages · login · responsive · print. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
-
 /* ───────────────────────── Tokens ───────────────────────── */
 :root {
   --brand: #4f46e5;
@@ -64,8 +62,9 @@
   --radius-lg: 16px;
   --radius-xl: 22px;
 
-  --font-sans: 'Plus Jakarta Sans', 'Inter', 'Segoe UI', 'Nirmala UI', 'Noto Sans Devanagari', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  --font-sans: 'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'Noto Sans Devanagari Variable', 'Noto Sans Devanagari', 'Nirmala UI', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans Devanagari Variable', 'Cascadia Mono', Consolas, monospace;
+
 
   --sidebar-w: 264px;
   --content-pad: clamp(14px, 2.2vw, 28px);
@@ -2685,7 +2684,7 @@ button.stat-tile:hover {
   color: #000;
   background: #fff;
   border: 1px solid #d1d5db;
-  font-family: Arial, 'Nirmala UI', 'Noto Sans Devanagari', sans-serif;
+  font-family: Arial, 'Noto Sans Devanagari Variable', 'Nirmala UI', sans-serif;
   text-align: center;
 }
 
@@ -2792,7 +2791,7 @@ button.stat-tile:hover {
   padding: 14px 12px;
   background: #fff;
   color: #000;
-  font-family: 'Consolas', 'Courier New', 'Nirmala UI', 'Noto Sans Devanagari', monospace;
+  font-family: 'Consolas', 'Courier New', 'Noto Sans Devanagari Variable', 'Nirmala UI', monospace;
   font-size: 12px;
   line-height: 1.45;
   border: 1px solid var(--border);
@@ -2858,6 +2857,28 @@ button.stat-tile:hover {
 .mobile-field { margin-bottom: 14px; }
 .mobile-ok { font-size: 12.5px; color: var(--ok-text); }
 .mobile-bad { font-size: 12.5px; color: var(--danger-text); }
+
+/* Reward points strip under the customer mobile */
+.rewards-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: -6px 0 14px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--info-bg);
+  color: var(--info-text);
+  font-size: 13px;
+}
+.rewards-balance { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.rewards-redeem { display: inline-flex; align-items: center; gap: 8px; }
+.rewards-strip .form-error { flex-basis: 100%; margin: 0; }
+
+/* Customers page */
+.clickable-row { cursor: pointer; }
+.row-selected td { background: var(--info-bg); }
 .returns-mobile-bills { max-width: 760px; margin-bottom: 14px; }
 
 /* ───────────────────────── Returns ───────────────────────── */
@@ -2898,8 +2919,11 @@ button.stat-tile:hover {
 .btn-refund { min-height: 46px; font-size: 15px; }
 
 /* ───────────────────────── Printer settings ───────────────────────── */
-.printer-card { margin-top: 20px; }
-.printer-card h3 { margin: 0; font-size: 16px; }
+.printer-card,
+.daily-report-card { margin-top: 20px; }
+.printer-card h3,
+.daily-report-card h3 { margin: 0; font-size: 16px; }
+.daily-report-card .section-title { margin-top: 20px; }
 
 /* ───────────────────────── Shift pages ───────────────────────── */
 .shift-panel {
