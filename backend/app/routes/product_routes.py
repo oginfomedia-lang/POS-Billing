@@ -1,6 +1,9 @@
 """Product and barcode management API routes."""
-from flask import Blueprint, jsonify, request
+import io
 
+from flask import Blueprint, jsonify, request, send_file
+
+from app.errors.exceptions import BadRequestError
 from app.schemas.common import PagedResponse, PaginationQuery
 from app.schemas.product_schemas import (
     BarcodeOut,
@@ -12,7 +15,8 @@ from app.schemas.product_schemas import (
     ProductOut,
     ProductUpdate,
 )
-from app.services import auth_service, inventory_service, product_service
+from app.schemas.product_import_schemas import ImportOptions
+from app.services import auth_service, inventory_service, product_import_service, product_service
 from app.utils.permissions import require_permission
 from app.utils.store_scope import require_store_access, scoped_store_id
 
@@ -83,6 +87,61 @@ def create_product():
     return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 201
 
 
+# ── Bulk import (CSV / Excel) ────────────────────────────────────────────────
+
+@product_bp.get("/products/import/template")
+@require_permission("products.create")
+def import_template():
+    return send_file(
+        io.BytesIO(product_import_service.template_xlsx()),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="product-import-template.xlsx",
+    )
+
+
+def _import_request():
+    """The uploaded file (multipart 'file') and the import-screen options (form fields)."""
+    upload = request.files.get("file")
+    if upload is None:
+        raise BadRequestError("Choose a .csv or .xlsx file.")
+    form = request.form
+    options = ImportOptions(
+        store_id=form.get("store_id", type=int),
+        sold_in=form.get("sold_in") or "all",
+        generate_barcodes=(form.get("generate_barcodes", "true").lower() == "true"),
+    )
+    rows, warnings = product_import_service.read_rows(upload.filename or "", upload.read())
+    return upload.filename or "", rows, warnings, options
+
+
+@product_bp.post("/products/import/preview")
+@require_permission("products.create")
+def import_preview():
+    """Checks every row of the file and says what would happen. Saves nothing."""
+    _, rows, warnings, options = _import_request()
+    preview, _ = product_import_service.analyse(rows, options, auth_service.current_user())
+    preview.warnings = warnings + preview.warnings
+    return jsonify(preview.model_dump(mode="json")), 200
+
+
+@product_bp.post("/products/import")
+@require_permission("products.create")
+def import_products():
+    """Saves the file only if no row has an error (all or nothing); otherwise 400 with the preview."""
+    filename, rows, warnings, options = _import_request()
+    actor = auth_service.current_user()
+    preview, parsed = product_import_service.analyse(rows, options, actor)
+    if preview.errors:
+        preview.warnings = warnings + preview.warnings
+        return jsonify({
+            "error": {"code": "IMPORT_HAS_ERRORS", "message": f"{preview.errors} row(s) have errors. Nothing was imported."},
+            "preview": preview.model_dump(mode="json"),
+        }), 400
+    result = product_import_service.apply(parsed, options, actor, filename)
+    return jsonify(result.model_dump(mode="json")), 201
+
+
 @product_bp.get("/products/<int:product_id>")
 @require_permission("products.read")
 def get_product(product_id: int):
@@ -144,7 +203,8 @@ def generate_inhouse_barcode_route(id: int):
 @require_permission("products.read")
 def pos_scan_barcode():
     scanned_val = request.args.get("barcode") or request.args.get("code") or ""
-    res = product_service.scan_barcode(scanned_val)
+    # store_id = the bill's store: loose-item stickers in price mode use that store's own price.
+    res = product_service.scan_barcode(scanned_val, request.args.get("store_id", type=int))
     resp = ProductBarcodeOut(
         product=ProductOut.model_validate(res["product"]),
         scanned_barcode=res["scanned_barcode"],
@@ -161,7 +221,7 @@ def pos_scan_barcode():
 @product_bp.get("/products/barcode/<string:barcode>")
 @require_permission("products.read")
 def get_by_barcode(barcode: str):
-    res = product_service.scan_barcode(barcode)
+    res = product_service.scan_barcode(barcode, request.args.get("store_id", type=int))
     resp = ProductBarcodeOut(
         product=ProductOut.model_validate(res["product"]),
         scanned_barcode=res["scanned_barcode"],

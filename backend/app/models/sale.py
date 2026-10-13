@@ -86,6 +86,15 @@ class SaleItem(TimestampMixin, db.Model):
         from app.services.pricing_service import line_saving
         return line_saving(self.mrp, self.qty, self.line_total, self.discount_amount, self.tax_amount)
 
+    @property
+    def is_variable_weight(self) -> bool:
+        """Loose item sold by weight (qty is kg)."""
+        return bool(self.product and self.product.is_variable_weight)
+
+    @property
+    def uom(self) -> str:
+        return self.product.uom.value if self.product and self.product.uom else "pcs"
+
     def __repr__(self) -> str:
         return f"<SaleItem {self.product_name} x{self.qty}>"
 

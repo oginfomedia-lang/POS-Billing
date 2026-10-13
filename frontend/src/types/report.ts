@@ -181,6 +181,12 @@ export interface SettingsData {
   daily_report_mobiles: string;
   /** PDF of every paid bill sent on WhatsApp to the customer's mobile. */
   ebill_enabled: boolean;
+  /** Weighing-scale sticker: first 2 digits (20-28). */
+  scale_prefix: string;
+  /** How many digits the scale's item code has (4-6). */
+  scale_plu_digits: number;
+  /** What the rest of the sticker holds: weight in grams or price in paise. */
+  scale_value: 'weight' | 'price';
 }
 
 export type NotificationStatus = 'pending' | 'sent' | 'failed';

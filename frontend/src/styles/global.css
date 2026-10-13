@@ -1379,6 +1379,46 @@ select.field-input {
 .badge-manufacturer { background: #dbeafe; color: #1e40af; }
 .badge-inhouse { background: #d1fae5; color: #065f46; }
 .badge-scale { background: #fef3c7; color: #92400e; }
+.badge-error { background: var(--danger-bg); color: var(--danger-text); }
+
+/* Bulk product import dialog */
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-summary .barcode-badge {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.import-table {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.import-error {
+  color: var(--danger-text);
+  font-size: 12.5px;
+}
+
+.import-warning {
+  color: var(--warn-text);
+  font-size: 12.5px;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 .chip-remove-btn {
   display: inline-flex;
@@ -1836,6 +1876,18 @@ select.field-input {
   font-variant-numeric: tabular-nums;
   color: var(--text);
   -moz-appearance: textfield;
+}
+
+/* Loose items: room for a weight like 12.345 (kg). */
+.qty-input-weight {
+  width: 68px;
+}
+
+.qty-unit {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .qty-input:focus {

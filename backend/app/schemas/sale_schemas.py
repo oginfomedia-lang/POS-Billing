@@ -30,6 +30,8 @@ class SaleItemOut(BaseModel):
     reward_discount: Decimal = Decimal("0")  # this line's share of the reward points discount
     tax_amount: Decimal
     saving: Decimal = Decimal("0")  # MRP × qty − paid (or the discount when there is no MRP)
+    is_variable_weight: bool = False  # loose item: qty is a weight (kg)
+    uom: str = "pcs"
 
     model_config = {"from_attributes": True}
 

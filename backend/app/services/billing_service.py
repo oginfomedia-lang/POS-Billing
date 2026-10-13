@@ -63,6 +63,7 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
         # store_id NULL = product sold in every store.
         if product is None or not product.is_active or product.store_id not in (None, sale.store_id):
             raise NotFoundError(f"Product {data.product_id} not found.")
+        _check_whole_qty(product, data.qty)
 
         item = SaleRepository().find_item(sale.id, product.id)
         if item is not None:
@@ -89,6 +90,7 @@ def update_item(sale_id: int, item_id: int, data: UpdateItemRequest, actor: User
         _require_status(sale, SaleStatus.OPEN)
         _cancel_live_payments(sale.id)
         item = _get_item_or_404(sale, item_id)
+        _check_whole_qty(item.product, data.qty)
         item.qty = data.qty
         _recalculate(sale)
     return sale
@@ -288,6 +290,12 @@ def _lock_owned_sale(sale_id: int, actor: User) -> Sale:
     if sale.cashier_id != actor.id:
         raise PermissionDeniedError("This bill belongs to another cashier.")
     return sale
+
+
+def _check_whole_qty(product, qty) -> None:
+    """Only loose (weighed) items are sold in fractions: 1.250 kg of sugar, not 1.5 packets of biscuits."""
+    if product is not None and not product.is_variable_weight and qty != qty.to_integral_value():
+        raise AppError("Only loose items can have a decimal quantity.")
 
 
 def _require_status(sale: Sale, *allowed: SaleStatus) -> None:

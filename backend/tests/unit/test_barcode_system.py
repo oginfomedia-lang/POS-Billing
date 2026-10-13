@@ -8,6 +8,7 @@ from app.services import product_service
 from app.utils.barcode_utils import (
     calculate_ean13_checksum,
     generate_inhouse_barcode,
+    parse_scale_barcode,
     parse_variable_weight_barcode,
     validate_ean13,
 )
@@ -37,6 +38,20 @@ def test_variable_weight_barcode_parsing():
     assert parsed.sku == "00123"
     assert parsed.weight_grams == 1500
     assert parsed.weight_kg == 1.5
+
+
+@pytest.mark.parametrize("code, prefix, digits, expected", [
+    ("2000123012505", "20", 5, ("123", 1250)),   # 20 + 00123 + 01250 + check
+    ("2101230012504", "21", 4, ("123", 1250)),   # 21 + 0123 + 001250 + check
+    ("2000012301255", "20", 6, ("123", 125)),    # 20 + 000123 + 0125 + check
+    ("2000000012505", "20", 5, ("0", 1250)),
+    ("2100123012505", "20", 5, None),            # other prefix
+    ("200012301250", "20", 5, None),             # 12 digits
+    ("20001230125A5", "20", 5, None),            # not all digits
+])
+def test_parse_scale_barcode(code, prefix, digits, expected):
+    parsed = parse_scale_barcode(code, prefix, digits)
+    assert (tuple(parsed) if parsed else None) == expected
 
 
 def test_barcode_services_crud(app):

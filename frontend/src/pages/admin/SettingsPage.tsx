@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { DailyReportCard } from '../../components/admin/DailyReportCard';
 import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
+import { ScaleTestBox } from '../../components/admin/ScaleTestBox';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getSettings, saveSettings } from '../../services/api/reportApi';
@@ -23,6 +24,9 @@ const DEFAULTS: SettingsData = {
   daily_report_time: '22:30',
   daily_report_mobiles: '',
   ebill_enabled: false,
+  scale_prefix: '20',
+  scale_plu_digits: 5,
+  scale_value: 'weight',
 };
 
 export function SettingsPage() {
@@ -189,6 +193,55 @@ export function SettingsPage() {
             {t('settings.ebill.enabled')}
           </label>
           <p className="hint-text">{t('settings.ebill.hint')}</p>
+          <h3 className="section-title">{t('settings.scale.title')}</h3>
+          <p className="hint-text">{t('settings.scale.hint')}</p>
+          <div className="form-row-3">
+            <label className="field-label">
+              {t('settings.scale.prefix')}
+              <select
+                className="field-input"
+                value={settings.scale_prefix}
+                disabled={!isAdmin || saving}
+                onChange={(e) => update('scale_prefix', e.target.value)}
+              >
+                {['20', '21', '22', '23', '24', '25', '26', '27', '28'].map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </label>
+            <label className="field-label">
+              {t('settings.scale.pluDigits')}
+              <select
+                className="field-input"
+                value={settings.scale_plu_digits}
+                disabled={!isAdmin || saving}
+                onChange={(e) => update('scale_plu_digits', Number(e.target.value))}
+              >
+                {[4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <label className="field-label">
+              {t('settings.scale.value')}
+              <select
+                className="field-input"
+                value={settings.scale_value}
+                disabled={!isAdmin || saving}
+                onChange={(e) => update('scale_value', e.target.value as SettingsData['scale_value'])}
+              >
+                <option value="weight">{t('settings.scale.valueWeight')}</option>
+                <option value="price">{t('settings.scale.valuePrice')}</option>
+              </select>
+            </label>
+          </div>
+          <p className="hint-text">
+            {t('settings.scale.example', {
+              prefix: settings.scale_prefix,
+              plu: '123'.padStart(settings.scale_plu_digits, '0'),
+              value: (settings.scale_value === 'price' ? '5250' : '1250').padStart(10 - settings.scale_plu_digits, '0'),
+              meaning: settings.scale_value === 'price' ? t('settings.scale.meaningPrice') : t('settings.scale.meaningWeight'),
+            })}
+          </p>
+          <ScaleTestBox
+            unsaved={(['scale_prefix', 'scale_plu_digits', 'scale_value'] as const).some((k) => settings[k] !== savedSettings[k])}
+          />
           {isAdmin ? (
             <div className="modal-buttons">
               <button className="btn-primary" type="submit" disabled={saving}>

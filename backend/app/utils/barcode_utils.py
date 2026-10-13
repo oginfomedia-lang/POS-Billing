@@ -51,6 +51,32 @@ def generate_inhouse_barcode(product_id_or_sku: int | str, prefix: str = "290") 
     return f"{payload_12}{checksum}"
 
 
+class ScaleBarcode(NamedTuple):
+    plu: str  # scale item code, leading zeros removed ('00123' -> '123')
+    value: int  # grams (weight mode) or paise (price mode)
+
+
+def parse_scale_barcode(barcode: str, prefix: str = "20", plu_digits: int = 5) -> ScaleBarcode | None:
+    """Label from a weighing scale: prefix (2) + item code (plu_digits) + value (the rest) + check digit.
+
+    The value is grams or paise depending on how the scale is set up; the caller decides.
+    None = not a scale barcode in this format.
+    """
+    barcode = barcode.strip()
+    if len(barcode) != 13 or not barcode.isdigit() or not barcode.startswith(prefix):
+        return None
+    plu_raw = barcode[2:2 + plu_digits]
+    value_raw = barcode[2 + plu_digits:12]
+    if not plu_raw or not value_raw:
+        return None
+    return ScaleBarcode(plu=normalize_plu(plu_raw), value=int(value_raw))
+
+
+def normalize_plu(code: str) -> str:
+    """'00123' -> '123', so the scale's zero-padded code and what was typed in the product form match."""
+    return str(int(code))
+
+
 def parse_variable_weight_barcode(barcode: str) -> VariableWeightData | None:
     """Parse 13-digit variable-weight scale-embedded barcode starting with prefix '20'.
 

@@ -15,6 +15,15 @@ class ProductRepository(BaseRepository):
             .where(Product.is_active.is_(True))
         )
 
+    def find_by_plu(self, plu: str) -> Product | None:
+        """Active loose item with this weighing-scale code (stored without leading zeros)."""
+        return db.session.scalar(
+            db.select(Product)
+            .where(Product.plu_code == plu)
+            .where(Product.is_variable_weight.is_(True))
+            .where(Product.is_active.is_(True))
+        )
+
     def find_by_sku(self, sku: str) -> Product | None:
         sku = str(sku).strip()
         if not sku:

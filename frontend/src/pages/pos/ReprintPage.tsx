@@ -96,7 +96,7 @@ export function ReprintPage() {
                 <Fragment key={i.id}>
                   <tr>
                     <td>{i.product_name}</td>
-                    <td className="num">{i.qty}</td>
+                    <td className="num">{i.is_variable_weight ? `${i.qty} ${i.uom}` : i.qty}</td>
                     <td className="num">{i.unit_price}</td>
                     <td className="num">{i.line_total}</td>
                   </tr>

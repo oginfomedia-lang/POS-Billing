@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -24,6 +25,11 @@ class SettingsData(BaseModel):
     daily_report_mobiles: str = Field("", max_length=200)  # comma-separated 10-digit mobiles
     # PDF copy of every paid bill sent on WhatsApp to the customer's mobile (when one is on the bill).
     ebill_enabled: bool = False
+    # Weighing-scale stickers for loose items: prefix + item code + weight (grams) or price (paise) + check digit.
+    # 29 is taken by our own in-house barcodes (290...).
+    scale_prefix: str = Field("20", pattern=r"^2[0-8]$")
+    scale_plu_digits: int = Field(5, ge=4, le=6)
+    scale_value: Literal["weight", "price"] = "weight"
 
     @field_validator("daily_report_mobiles")
     @classmethod
