@@ -33,6 +33,10 @@ def create_app(config_name: str | None = None) -> Flask:
     register_error_handlers(app)
     register_cli(app)
 
+    if not app.config.get("TESTING"):
+        from app.scheduler.setup import init_scheduler
+        init_scheduler(app)
+
     app.logger.info("POS backend started (%s)", config_class.ENV_NAME)
     return app
 

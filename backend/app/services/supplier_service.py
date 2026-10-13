@@ -1,16 +1,29 @@
-"""Supplier CRUD and dashboard statistics."""
+"""Supplier CRUD, product mapping, financial summary and ledger."""
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 
-from app.errors.exceptions import ConflictError, NotFoundError
+from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.extensions import db
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_payment import SupplierPayment
+from app.models.supplier_product import SupplierProduct
 from app.models.user import User
-from app.schemas.supplier_schemas import SupplierCreate, SupplierDashboard, SupplierUpdate
+from app.schemas.supplier_schemas import (
+    SupplierCreate,
+    SupplierDashboard,
+    SupplierLedgerEntry,
+    SupplierProductCreate,
+    SupplierProductOut,
+    SupplierProductUpdate,
+    SupplierSummary,
+    SupplierUpdate,
+)
 from app.services import audit_service
 from app.utils.transactions import transaction
 
@@ -133,6 +146,252 @@ def create_supplier(data: SupplierCreate, actor: User | None) -> Supplier:
             new_values={"code": supplier.supplier_code, "name": supplier.company_name},
         )
     return supplier
+
+
+# ── Supplier-Product Mapping ──────────────────────────────────────────────────
+
+def get_supplier_products(supplier_id: int) -> list[SupplierProductOut]:
+    get_supplier(supplier_id)
+    rows = list(
+        db.session.scalars(
+            select(SupplierProduct)
+            .where(SupplierProduct.supplier_id == supplier_id)
+            .order_by(SupplierProduct.id)
+        ).all()
+    )
+    out = []
+    for sp in rows:
+        item = SupplierProductOut.model_validate(sp)
+        if sp.product:
+            item.product_name = sp.product.name
+            item.product_sku = sp.product.sku
+        out.append(item)
+    return out
+
+
+def add_supplier_product(supplier_id: int, data: SupplierProductCreate, actor: User | None) -> SupplierProductOut:
+    get_supplier(supplier_id)
+    product = db.session.get(Product, data.product_id)
+    if product is None:
+        raise NotFoundError(f"Product {data.product_id} not found.")
+    existing = db.session.scalar(
+        select(SupplierProduct).where(
+            SupplierProduct.supplier_id == supplier_id,
+            SupplierProduct.product_id == data.product_id,
+        )
+    )
+    if existing:
+        raise ConflictError(f"Product '{product.name}' is already mapped to this supplier.")
+    with transaction():
+        sp = SupplierProduct(
+            supplier_id=supplier_id,
+            product_id=data.product_id,
+            supplier_product_code=data.supplier_product_code,
+            purchase_price=data.purchase_price,
+            min_order_qty=data.min_order_qty,
+            lead_time_days=data.lead_time_days,
+            is_preferred=data.is_preferred,
+            notes=data.notes,
+            is_active=data.is_active,
+        )
+        db.session.add(sp)
+        db.session.flush()
+        audit_service.log(actor, "supplier_product.add", "supplier_product", sp.id,
+                          new_values={"supplier_id": supplier_id, "product_id": data.product_id})
+    item = SupplierProductOut.model_validate(sp)
+    item.product_name = product.name
+    item.product_sku = product.sku
+    return item
+
+
+def update_supplier_product(
+    supplier_id: int, sp_id: int, data: SupplierProductUpdate, actor: User | None
+) -> SupplierProductOut:
+    sp = db.session.scalar(
+        select(SupplierProduct).where(
+            SupplierProduct.id == sp_id,
+            SupplierProduct.supplier_id == supplier_id,
+        )
+    )
+    if sp is None:
+        raise NotFoundError(f"Supplier product mapping {sp_id} not found.")
+    old_price = sp.purchase_price
+    with transaction():
+        for field, val in data.model_dump(exclude_unset=True).items():
+            setattr(sp, field, val)
+        if data.purchase_price is not None and data.purchase_price != old_price:
+            sp.last_purchase_price = old_price
+        audit_service.log(actor, "supplier_product.update", "supplier_product", sp.id, None, None)
+    item = SupplierProductOut.model_validate(sp)
+    if sp.product:
+        item.product_name = sp.product.name
+        item.product_sku = sp.product.sku
+    return item
+
+
+def remove_supplier_product(supplier_id: int, sp_id: int, actor: User | None) -> None:
+    sp = db.session.scalar(
+        select(SupplierProduct).where(
+            SupplierProduct.id == sp_id,
+            SupplierProduct.supplier_id == supplier_id,
+        )
+    )
+    if sp is None:
+        raise NotFoundError(f"Supplier product mapping {sp_id} not found.")
+    with transaction():
+        audit_service.log(actor, "supplier_product.remove", "supplier_product", sp.id, None, None)
+        db.session.delete(sp)
+
+
+def get_products_for_po(supplier_id: int) -> list[dict]:
+    """Return active mapped products with purchase prices for the PO form."""
+    rows = db.session.execute(
+        select(SupplierProduct, Product)
+        .join(Product, SupplierProduct.product_id == Product.id)
+        .where(SupplierProduct.supplier_id == supplier_id)
+        .where(SupplierProduct.is_active.is_(True))
+        .where(Product.is_active.is_(True))
+        .order_by(Product.name)
+    ).all()
+    return [
+        {
+            "id": p.id,
+            "name": p.name,
+            "sku": p.sku,
+            "purchase_price": float(sp.purchase_price) if sp.purchase_price else float(p.price),
+            "tax_rate": float(p.tax_rate),
+            "supplier_product_code": sp.supplier_product_code,
+            "min_order_qty": float(sp.min_order_qty) if sp.min_order_qty else 1,
+            "is_preferred": sp.is_preferred,
+        }
+        for sp, p in rows
+    ]
+
+
+# ── Financial summary ─────────────────────────────────────────────────────────
+
+def get_supplier_summary(supplier_id: int) -> SupplierSummary:
+    get_supplier(supplier_id)
+    from app.models.purchase import PurchaseOrder
+    from app.models.enums import PurchaseStatus, SupplierInvoiceStatus, SupplierPaymentType
+
+    total_po = db.session.scalar(
+        select(func.coalesce(func.sum(PurchaseOrder.grand_total), 0))
+        .where(PurchaseOrder.supplier_id == supplier_id)
+        .where(PurchaseOrder.status != PurchaseStatus.CANCELLED)
+    ) or Decimal("0")
+
+    total_invoiced = db.session.scalar(
+        select(func.coalesce(func.sum(SupplierInvoice.grand_total), 0))
+        .where(SupplierInvoice.supplier_id == supplier_id)
+        .where(SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED)
+    ) or Decimal("0")
+
+    total_paid_row = db.session.scalar(
+        select(func.coalesce(func.sum(SupplierPayment.amount), 0))
+        .where(SupplierPayment.supplier_id == supplier_id)
+        .where(SupplierPayment.is_voided.is_(False))
+        .where(SupplierPayment.payment_type == SupplierPaymentType.PAYMENT)
+    ) or Decimal("0")
+
+    advance_balance = db.session.scalar(
+        select(func.coalesce(func.sum(SupplierPayment.amount), 0))
+        .where(SupplierPayment.supplier_id == supplier_id)
+        .where(SupplierPayment.is_voided.is_(False))
+        .where(SupplierPayment.payment_type == SupplierPaymentType.ADVANCE)
+    ) or Decimal("0")
+
+    from datetime import date
+    from app.models.enums import SupplierInvoiceStatus as SIS
+    overdue = db.session.scalar(
+        select(func.coalesce(func.sum(SupplierInvoice.grand_total - SupplierInvoice.amount_paid), 0))
+        .where(SupplierInvoice.supplier_id == supplier_id)
+        .where(SupplierInvoice.payment_status.in_([SIS.UNPAID, SIS.PARTIALLY_PAID]))
+        .where(SupplierInvoice.due_date < date.today())
+    ) or Decimal("0")
+
+    invoice_count = db.session.scalar(
+        select(func.count(SupplierInvoice.id)).where(SupplierInvoice.supplier_id == supplier_id)
+    ) or 0
+    payment_count = db.session.scalar(
+        select(func.count(SupplierPayment.id))
+        .where(SupplierPayment.supplier_id == supplier_id)
+        .where(SupplierPayment.is_voided.is_(False))
+    ) or 0
+
+    supplier = get_supplier(supplier_id)
+    opening = Decimal(str(supplier.opening_balance))
+    outstanding = opening + Decimal(str(total_invoiced)) - Decimal(str(total_paid_row)) - advance_balance
+
+    return SupplierSummary(
+        supplier_id=supplier_id,
+        total_po_value=float(total_po),
+        total_received_value=float(total_po),
+        total_invoiced=float(total_invoiced),
+        total_paid=float(total_paid_row),
+        outstanding_balance=float(outstanding),
+        advance_balance=float(advance_balance),
+        overdue_amount=float(overdue),
+        invoice_count=invoice_count,
+        payment_count=payment_count,
+    )
+
+
+def get_supplier_ledger(supplier_id: int, date_from: str | None = None, date_to: str | None = None) -> list[SupplierLedgerEntry]:
+    """Build a running ledger from invoices and payments."""
+    from app.models.enums import SupplierInvoiceStatus, SupplierPaymentType
+    entries: list[dict] = []
+
+    inv_q = select(SupplierInvoice).where(SupplierInvoice.supplier_id == supplier_id)
+    if date_from:
+        inv_q = inv_q.where(SupplierInvoice.invoice_date >= date_from)
+    if date_to:
+        inv_q = inv_q.where(SupplierInvoice.invoice_date <= date_to)
+    for inv in db.session.scalars(inv_q).all():
+        entries.append({
+            "date": str(inv.invoice_date),
+            "entry_type": "invoice",
+            "reference": inv.invoice_number,
+            "description": f"Invoice {inv.invoice_number}",
+            "debit": float(inv.grand_total),
+            "credit": 0.0,
+        })
+
+    pay_q = select(SupplierPayment).where(
+        SupplierPayment.supplier_id == supplier_id,
+        SupplierPayment.is_voided.is_(False),
+    )
+    if date_from:
+        pay_q = pay_q.where(SupplierPayment.payment_date >= date_from)
+    if date_to:
+        pay_q = pay_q.where(SupplierPayment.payment_date <= date_to)
+    for pay in db.session.scalars(pay_q).all():
+        entries.append({
+            "date": str(pay.payment_date),
+            "entry_type": pay.payment_type.value,
+            "reference": pay.reference_number or f"PAY-{pay.id}",
+            "description": f"Payment {pay.payment_type.value}",
+            "debit": 0.0,
+            "credit": float(pay.amount),
+        })
+
+    entries.sort(key=lambda x: x["date"])
+
+    supplier = get_supplier(supplier_id)
+    balance = float(supplier.opening_balance)
+    result: list[SupplierLedgerEntry] = []
+    for e in entries:
+        balance += e["debit"] - e["credit"]
+        result.append(SupplierLedgerEntry(
+            date=e["date"],
+            entry_type=e["entry_type"],
+            reference=e["reference"],
+            description=e["description"],
+            debit=e["debit"],
+            credit=e["credit"],
+            balance=round(balance, 2),
+        ))
+    return result
 
 
 def update_supplier(supplier_id: int, data: SupplierUpdate, actor: User | None) -> Supplier:

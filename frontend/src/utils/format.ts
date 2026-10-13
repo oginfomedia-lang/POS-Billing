@@ -26,3 +26,8 @@ export function isoDateIst(daysAgo = 0): string {
 export function monthStartIst(): string {
   return `${isoDateIst().slice(0, 8)}01`;
 }
+
+/** Indian Rupee formatted amount (e.g. ₹1,23,456.78). */
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 }).format(amount);
+}

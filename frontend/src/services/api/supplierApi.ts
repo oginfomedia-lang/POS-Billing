@@ -1,4 +1,11 @@
-import type { PagedResponse, SupplierDashboard, SupplierOut } from '../../types/api';
+import type {
+  PagedResponse,
+  SupplierDashboard,
+  SupplierLedgerEntry,
+  SupplierOut,
+  SupplierProductOut,
+  SupplierSummary,
+} from '../../types/api';
 import { httpClient } from './httpClient';
 
 export interface SupplierCreatePayload {
@@ -16,11 +23,30 @@ export interface SupplierCreatePayload {
   pincode?: string;
   country?: string;
   payment_terms?: string;
+  opening_balance?: number;
   notes?: string;
 }
 
 export interface SupplierUpdatePayload extends Partial<SupplierCreatePayload> {
   is_active?: boolean;
+}
+
+export interface SupplierProductPayload {
+  product_id: number;
+  supplier_product_code?: string | null;
+  purchase_price?: number | null;
+  min_order_qty?: number;
+  lead_time_days?: number | null;
+  is_preferred?: boolean;
+  notes?: string | null;
+}
+
+export interface PoProductRow {
+  product_id: number;
+  product_name: string;
+  product_sku: string | null;
+  purchase_price: string | null;
+  min_order_qty: string;
 }
 
 export const supplierApi = {
@@ -41,5 +67,26 @@ export const supplierApi = {
   },
   toggleStatus(id: number) {
     return httpClient.patch<SupplierOut>(`/suppliers/${id}/status`);
+  },
+  getSummary(id: number) {
+    return httpClient.get<SupplierSummary>(`/suppliers/${id}/summary`);
+  },
+  getLedger(id: number, params?: { date_from?: string; date_to?: string }) {
+    return httpClient.get<SupplierLedgerEntry[]>(`/suppliers/${id}/ledger`, { params });
+  },
+  listProducts(id: number) {
+    return httpClient.get<SupplierProductOut[]>(`/suppliers/${id}/products`);
+  },
+  getPoProducts(id: number) {
+    return httpClient.get<PoProductRow[]>(`/suppliers/${id}/po-products`);
+  },
+  addProduct(id: number, data: SupplierProductPayload) {
+    return httpClient.post<SupplierProductOut>(`/suppliers/${id}/products`, data);
+  },
+  updateProduct(id: number, spId: number, data: Partial<SupplierProductPayload>) {
+    return httpClient.put<SupplierProductOut>(`/suppliers/${id}/products/${spId}`, data);
+  },
+  removeProduct(id: number, spId: number) {
+    return httpClient.delete<{ message: string }>(`/suppliers/${id}/products/${spId}`);
   },
 };

@@ -26,7 +26,10 @@ class PurchaseOrder(TimestampMixin, db.Model):
     subtotal = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     discount_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    shipping_charges = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    other_charges = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     grand_total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    shipping_address = db.Column(db.Text, nullable=True)
 
     status = db.Column(
         db.Enum(PurchaseStatus, values_callable=lambda x: [e.value for e in x]),
@@ -38,14 +41,20 @@ class PurchaseOrder(TimestampMixin, db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     ordered_at = db.Column(db.DateTime(timezone=True), nullable=True)
     ordered_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    approved_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     cancelled_at = db.Column(db.DateTime(timezone=True), nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    closed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     supplier = db.relationship("Supplier", foreign_keys=[supplier_id])
     store = db.relationship("Store", foreign_keys=[store_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
     ordered_by = db.relationship("User", foreign_keys=[ordered_by_id])
+    approved_by = db.relationship("User", foreign_keys=[approved_by_id])
     cancelled_by = db.relationship("User", foreign_keys=[cancelled_by_id])
+    closed_by = db.relationship("User", foreign_keys=[closed_by_id])
     items = db.relationship(
         "PurchaseOrderItem",
         back_populates="purchase_order",
@@ -134,7 +143,13 @@ class GoodsReceiptItem(db.Model):
     )
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
     qty_received = db.Column(db.Numeric(12, 3), nullable=False)
+    qty_accepted = db.Column(db.Numeric(12, 3), nullable=True)
+    qty_rejected = db.Column(db.Numeric(12, 3), nullable=False, default=0)
+    qty_damaged = db.Column(db.Numeric(12, 3), nullable=False, default=0)
+    batch_number = db.Column(db.String(100), nullable=True)
+    mfg_date = db.Column(db.Date, nullable=True)
     expiry_date = db.Column(db.Date, nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
 
     receipt = db.relationship("GoodsReceipt", back_populates="receipt_items")
     purchase_order_item = db.relationship("PurchaseOrderItem")

@@ -864,9 +864,12 @@ export const mr: typeof en = {
     emptyAll: 'कोणतेही खरेदी ऑर्डर सापडले नाहीत.',
     statuses: {
       draft: 'मसुदा',
+      pending_approval: 'मंजुरी प्रलंबित',
+      approved: 'मंजूर',
       ordered: 'ऑर्डर केलेले',
       partially_received: 'अंशतः मिळाले',
       received: 'मिळाले',
+      closed: 'बंद',
       cancelled: 'रद्द',
     },
     addTitle: 'नवीन खरेदी ऑर्डर',

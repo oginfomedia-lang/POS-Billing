@@ -25,6 +25,9 @@ class PurchaseOrderCreate(BaseModel):
     reference_number: str | None = Field(None, max_length=100)
     notes: str | None = None
     internal_remarks: str | None = None
+    shipping_charges: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    other_charges: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    shipping_address: str | None = None
     items: list[PurchaseOrderItemCreate] = Field(..., min_length=1)
 
 
@@ -36,6 +39,9 @@ class PurchaseOrderUpdate(BaseModel):
     reference_number: str | None = Field(None, max_length=100)
     notes: str | None = None
     internal_remarks: str | None = None
+    shipping_charges: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
+    other_charges: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
+    shipping_address: str | None = None
     items: list[PurchaseOrderItemCreate] | None = None
 
 
@@ -69,24 +75,40 @@ class PurchaseOrderOut(BaseModel):
     reference_number: str | None
     notes: str | None
     internal_remarks: str | None
+    shipping_address: str | None = None
     subtotal: Decimal
     discount_amount: Decimal
     tax_amount: Decimal
+    shipping_charges: Decimal = Decimal("0")
+    other_charges: Decimal = Decimal("0")
     grand_total: Decimal
     status: PurchaseStatus
     ordered_at: datetime | None
+    approved_at: datetime | None = None
+    approved_by_id: int | None = None
     cancelled_at: datetime | None
+    closed_at: datetime | None = None
     created_by_id: int | None
     created_by_name: str = ""
     items: list[PurchaseOrderItemOut] = []
     created_at: datetime
     updated_at: datetime
+    # Payment summary fields (enriched from linked invoice)
+    payment_status: str = "unpaid"
+    amount_paid: Decimal = Decimal("0")
+    outstanding_amount: Decimal = Decimal("0")
 
 
 class GoodsReceiptItemCreate(BaseModel):
     purchase_order_item_id: int
     qty_received: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    qty_accepted: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=3)
+    qty_rejected: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=3)
+    qty_damaged: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=3)
+    batch_number: str | None = Field(None, max_length=100)
+    mfg_date: date | None = None
     expiry_date: date | None = None
+    remarks: str | None = None
 
 
 class GoodsReceiptCreate(BaseModel):
@@ -103,7 +125,13 @@ class GoodsReceiptItemOut(BaseModel):
     product_id: int
     product_name: str = ""
     qty_received: Decimal
+    qty_accepted: Decimal | None
+    qty_rejected: Decimal
+    qty_damaged: Decimal
+    batch_number: str | None
+    mfg_date: date | None
     expiry_date: date | None
+    remarks: str | None
 
 
 class GoodsReceiptOut(BaseModel):
@@ -128,3 +156,50 @@ class PurchaseDashboard(BaseModel):
     partially_received: int
     received: int
     cancelled: int
+    total_paid: Decimal = Decimal("0")
+    total_due: Decimal = Decimal("0")
+
+
+class QuickPaymentIn(BaseModel):
+    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
+    payment_method: str = "cash"
+    reference_number: str | None = Field(None, max_length=100)
+    payment_date: date | None = None
+    notes: str | None = None
+
+
+class POPaymentSummary(BaseModel):
+    po_id: int
+    grand_total: Decimal
+    total_paid: Decimal
+    outstanding: Decimal
+    invoice_count: int
+    payment_status: str
+    invoice_id: int | None
+
+
+class POPaymentEntry(BaseModel):
+    payment_id: int
+    payment_date: date
+    amount: Decimal
+    allocated_amount: Decimal
+    payment_method: str
+    reference_number: str | None
+    notes: str | None
+    is_voided: bool
+    created_by_name: str
+    running_total_paid: Decimal
+    balance_after: Decimal
+
+
+class POPaymentHistoryOut(BaseModel):
+    po_id: int
+    po_number: str
+    supplier_name: str
+    grand_total: Decimal
+    total_paid: Decimal
+    outstanding: Decimal
+    payment_status: str
+    invoice_number: str | None
+    invoice_id: int | None
+    entries: list[POPaymentEntry]

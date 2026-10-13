@@ -17,3 +17,10 @@ from app.models.user import User  # noqa: F401
 from app.models.backup import BackupRun  # noqa: F401
 from app.models.supplier import Supplier  # noqa: F401
 from app.models.purchase import PurchaseOrder, PurchaseOrderItem, GoodsReceipt, GoodsReceiptItem  # noqa: F401
+from app.models.cloud_upload import CloudUploadAttempt  # noqa: F401
+from app.models.restore_record import RestoreRecord  # noqa: F401
+from app.models.replication_snapshot import ReplicationSnapshot  # noqa: F401
+from app.models.supplier_product import SupplierProduct  # noqa: F401
+from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN  # noqa: F401
+from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation  # noqa: F401
+from app.models.supplier_document import SupplierDocument  # noqa: F401

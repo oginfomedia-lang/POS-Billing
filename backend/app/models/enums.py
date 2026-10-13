@@ -70,10 +70,49 @@ class PaymentTerms(str, enum.Enum):
 
 class PurchaseStatus(str, enum.Enum):
     DRAFT = "draft"
+    PENDING_APPROVAL = "pending_approval"
+    APPROVED = "approved"
     ORDERED = "ordered"
     PARTIALLY_RECEIVED = "partially_received"
     RECEIVED = "received"
+    CLOSED = "closed"
     CANCELLED = "cancelled"
+
+
+class SupplierInvoiceStatus(str, enum.Enum):
+    UNPAID = "unpaid"
+    PARTIALLY_PAID = "partially_paid"
+    PAID = "paid"
+    CANCELLED = "cancelled"
+
+
+class InvoiceVerificationStatus(str, enum.Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    DISPUTED = "disputed"
+
+
+class SupplierPaymentType(str, enum.Enum):
+    PAYMENT = "payment"
+    ADVANCE = "advance"
+    CREDIT_NOTE = "credit_note"
+    DEBIT_NOTE = "debit_note"
+
+
+class SupplierPaymentMethod(str, enum.Enum):
+    CASH = "cash"
+    BANK_TRANSFER = "bank_transfer"
+    UPI = "upi"
+    CHEQUE = "cheque"
+    OTHER = "other"
+
+
+class DocumentEntityType(str, enum.Enum):
+    SUPPLIER = "supplier"
+    PURCHASE_ORDER = "purchase_order"
+    GOODS_RECEIPT = "goods_receipt"
+    SUPPLIER_INVOICE = "supplier_invoice"
+    SUPPLIER_PAYMENT = "supplier_payment"
 
 
 class PaymentIntentStatus(str, enum.Enum):

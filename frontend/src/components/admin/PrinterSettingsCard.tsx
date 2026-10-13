@@ -22,7 +22,9 @@ export function PrinterSettingsCard() {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
-    window.posBridge.listPrinters().then(setPrinters).catch(() => setPrinters([]));
+    if (window.posBridge) {
+      window.posBridge.listPrinters().then(setPrinters).catch(() => setPrinters([]));
+    }
   }, []);
 
   useEffect(() => {
