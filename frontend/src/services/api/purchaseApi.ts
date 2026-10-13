@@ -53,14 +53,6 @@ export interface GoodsReceiptCreatePayload {
   items: GoodsReceiptItemPayload[];
 }
 
-export interface QuickPaymentPayload {
-  amount: number;
-  payment_method: 'cash' | 'bank_transfer' | 'upi' | 'cheque' | 'other';
-  reference_number?: string | null;
-  payment_date?: string | null;
-  notes?: string | null;
-}
-
 export interface PurchaseListParams {
   page?: number;
   per_page?: number;
@@ -111,9 +103,6 @@ export const purchaseApi = {
   },
   getPaymentSummary(id: number) {
     return httpClient.get<POPaymentSummary>(`/purchases/${id}/payment-summary`);
-  },
-  quickPayment(id: number, data: QuickPaymentPayload) {
-    return httpClient.post<POPaymentSummary>(`/purchases/${id}/quick-payment`, data);
   },
   getPaymentHistory(id: number) {
     return httpClient.get<POPaymentHistoryOut>(`/purchases/${id}/payment-history`);

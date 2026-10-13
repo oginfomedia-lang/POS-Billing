@@ -174,23 +174,50 @@ export interface SupplierProductOut {
   is_active: boolean;
 }
 
+/** Money with one supplier. What is owed comes from invoices' payable amounts (= goods received). */
 export interface SupplierSummary {
   supplier_id: number;
-  total_invoiced: string;
-  total_paid: string;
-  outstanding: string;
-  overdue: string;
-  open_pos: number;
+  total_po_value: number;
+  /** Goods accepted on all GRNs, at PO rates. */
+  total_received_value: number;
+  /** Received but no supplier invoice entered yet. */
+  not_invoiced_value: number;
+  /** Invoice totals as the supplier billed them. */
+  total_invoiced: number;
+  /** What is owed on those invoices: never more than the goods received. */
+  total_payable: number;
+  total_paid: number;
+  /** Opening balance + payable − paid. */
+  outstanding_balance: number;
+  advance_balance: number;
+  overdue_amount: number;
+  invoice_count: number;
+  /** Invoices whose amount differs from the goods received. */
+  disputed_count: number;
+  payment_count: number;
 }
 
 export interface SupplierLedgerEntry {
   date: string;
-  type: 'invoice' | 'payment';
+  entry_type: string; // invoice / payment / advance …
   reference: string;
   description: string;
-  debit: string;
-  credit: string;
-  balance: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+
+/** A goods receipt on the supplier page: its value and the invoice that bills it (null = not invoiced). */
+export interface SupplierGRNOut {
+  id: number;
+  receipt_number: string;
+  purchase_order_id: number;
+  po_number: string;
+  received_at: string;
+  value: string;
+  item_count: number;
+  invoice_id: number | null;
+  invoice_number: string | null;
 }
 
 export interface SupplierDashboard {
@@ -254,10 +281,20 @@ export interface PurchaseOrderOut {
   items: PurchaseOrderItemOut[];
   created_at: string;
   updated_at: string;
-  payment_status: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+  payment_status: POPaymentStatus;
+  /** Goods accepted on the GRNs, at PO rates. */
+  received_value: string;
+  /** Received but no supplier invoice yet. */
+  not_invoiced_value: string;
+  invoiced_amount: string;
+  /** What is owed on the invoices (never more than the goods received). */
+  payable_amount: string;
   amount_paid: string;
+  /** payable − paid */
   outstanding_amount: string;
 }
+
+export type POPaymentStatus = 'not_invoiced' | 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
 
 export interface PurchaseDashboard {
   total: number;
@@ -274,11 +311,16 @@ export interface PurchaseDashboard {
 export interface POPaymentSummary {
   po_id: number;
   grand_total: string;
+  received_value: string;
+  not_invoiced_value: string;
+  invoiced_amount: string;
+  payable_amount: string;
   total_paid: string;
   outstanding: string;
   invoice_count: number;
-  payment_status: 'unpaid' | 'partially_paid' | 'paid';
+  payment_status: POPaymentStatus;
   invoice_id: number | null;
+  invoice_ids: number[];
 }
 
 export interface POPaymentEntry {
@@ -293,6 +335,7 @@ export interface POPaymentEntry {
   created_by_name: string;
   running_total_paid: string;
   balance_after: string;
+  invoice_number: string;
 }
 
 export interface POPaymentHistoryOut {
@@ -300,6 +343,7 @@ export interface POPaymentHistoryOut {
   po_number: string;
   supplier_name: string;
   grand_total: string;
+  payable_amount: string;
   total_paid: string;
   outstanding: string;
   payment_status: string;
@@ -367,11 +411,24 @@ export interface SupplierInvoiceOut {
   tax_amount: string;
   other_charges: string;
   grand_total: string;
+  /** Goods accepted on the GRNs (null = old invoice without GRNs). */
+  received_value: string | null;
+  /** Invoice goods amount − received value. */
+  difference: string | null;
+  difference_reason: string | null;
+  /** What is owed: never more than the goods received (+ other charges). */
+  payable_amount: string;
   amount_paid: string;
+  /** payable − paid */
   outstanding: string;
   payment_status: SupplierInvoiceStatus;
   verification_status: InvoiceVerificationStatus;
   grn_ids: number[];
+  grn_numbers: string[];
+  /** Made before invoices were tied to GRNs (e.g. the old PO quick payment). */
+  is_legacy: boolean;
+  /** The uploaded bill. */
+  document_id: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -404,6 +461,8 @@ export interface SupplierPaymentOut {
   is_voided: boolean;
   voided_at: string | null;
   allocations: PaymentAllocationOut[];
+  /** Advance not yet applied to an invoice. */
+  unallocated_amount: string;
   created_at: string;
 }
 

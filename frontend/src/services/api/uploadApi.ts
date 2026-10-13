@@ -24,6 +24,14 @@ export const uploadApi = {
     });
   },
 
+  /** Opens a stored document (e.g. a supplier's bill) in a new window; the request carries the login. */
+  async open(docId: number): Promise<void> {
+    const resp = await httpClient.get<Blob>(`/documents/${docId}/download`, { responseType: 'blob' });
+    const url = URL.createObjectURL(resp.data);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  },
+
   downloadUrl(docId: number): string {
     // Returns the URL; caller uses <a href> or window.open so auth header is added via interceptor
     return `/api/v1/documents/${docId}/download`;

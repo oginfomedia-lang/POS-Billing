@@ -24,7 +24,13 @@ class SupplierInvoice(TimestampMixin, db.Model):
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     other_charges = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     grand_total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    # Value of the goods actually accepted on the linked GRNs (PO rates). NULL = old invoice without GRNs.
+    received_value = db.Column(db.Numeric(12, 2), nullable=True)
+    # What the shop owes on this invoice: never more than the goods received (+ the invoice's other charges).
+    payable_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     amount_paid = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    # Why the invoice total differs from the received value (required when it does).
+    difference_reason = db.Column(db.Text, nullable=True)
 
     payment_status = db.Column(
         db.Enum(SupplierInvoiceStatus, values_callable=lambda x: [e.value for e in x]),
@@ -71,8 +77,9 @@ class SupplierInvoiceGRN(db.Model):
         nullable=False,
         index=True,
     )
+    # A GRN can be billed on only one invoice (unique), so the same goods are never paid for twice.
     goods_receipt_id = db.Column(
-        db.Integer, db.ForeignKey("goods_receipts.id"), nullable=False
+        db.Integer, db.ForeignKey("goods_receipts.id"), nullable=False, unique=True
     )
 
     __table_args__ = (

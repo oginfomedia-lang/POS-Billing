@@ -5,6 +5,7 @@ import mimetypes
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from flask import current_app
@@ -47,13 +48,16 @@ def _safe_filename(name: str) -> str:
     return name[:200] if name else "file"
 
 
-def save_document(
-    file: FileStorage,
-    entity_type: DocumentEntityType,
-    entity_id: int,
-    document_label: str | None,
-    actor: User | None,
-) -> SupplierDocumentOut:
+@dataclass
+class StoredFile:
+    original_filename: str
+    stored_filename: str
+    size: int
+    mime: str
+
+
+def store_file(file: FileStorage | None) -> StoredFile:
+    """Checks the type and size and writes the file to the upload folder (no database row yet)."""
     if not file or not file.filename:
         raise BadRequestError("No file provided.")
 
@@ -73,26 +77,59 @@ def save_document(
 
     ext = Path(file.filename).suffix.lower() or mimetypes.guess_extension(mime) or ""
     stored = f"{uuid.uuid4().hex}{ext}"
-    dest = _upload_dir() / stored
-    dest.write_bytes(content)
+    (_upload_dir() / stored).write_bytes(content)
+    return StoredFile(_safe_filename(file.filename), stored, len(content), mime)
 
-    with transaction():
-        doc = SupplierDocument(
-            entity_type=entity_type,
-            entity_id=entity_id,
-            document_label=document_label,
-            original_filename=_safe_filename(file.filename),
-            stored_filename=stored,
-            file_size=len(content),
-            mime_type=mime,
-            uploaded_by_id=actor.id if actor else None,
-        )
-        db.session.add(doc)
-        db.session.flush()
-        audit_service.log(
-            actor, "document.upload", "supplier_document", doc.id,
-            new_values={"entity_type": entity_type.value, "entity_id": entity_id, "filename": doc.original_filename},
-        )
+
+def discard_file(stored: StoredFile) -> None:
+    """Removes a stored file whose database row was never saved."""
+    try:
+        (_upload_dir() / stored.stored_filename).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def add_document(
+    stored: StoredFile,
+    entity_type: DocumentEntityType,
+    entity_id: int,
+    document_label: str | None,
+    actor: User | None,
+) -> SupplierDocument:
+    """The database row for a stored file. Runs inside the caller's transaction."""
+    doc = SupplierDocument(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        document_label=document_label,
+        original_filename=stored.original_filename,
+        stored_filename=stored.stored_filename,
+        file_size=stored.size,
+        mime_type=stored.mime,
+        uploaded_by_id=actor.id if actor else None,
+    )
+    db.session.add(doc)
+    db.session.flush()
+    audit_service.log(
+        actor, "document.upload", "supplier_document", doc.id,
+        new_values={"entity_type": entity_type.value, "entity_id": entity_id, "filename": doc.original_filename},
+    )
+    return doc
+
+
+def save_document(
+    file: FileStorage,
+    entity_type: DocumentEntityType,
+    entity_id: int,
+    document_label: str | None,
+    actor: User | None,
+) -> SupplierDocumentOut:
+    stored = store_file(file)
+    try:
+        with transaction():
+            doc = add_document(stored, entity_type, entity_id, document_label, actor)
+    except Exception:
+        discard_file(stored)
+        raise
     return SupplierDocumentOut.model_validate(doc)
 
 
