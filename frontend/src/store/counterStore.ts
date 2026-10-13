@@ -16,7 +16,12 @@ export const useCounterStore = create<CounterState>((set) => ({
   error: null,
   load: async () => {
     try {
-      const config = await window.posBridge.getCounterConfig();
+      // window.posBridge is only present in the Electron app.
+      // In a plain browser (dev / admin web UI) fall back to localhost defaults.
+      const bridge = typeof window !== 'undefined' ? window.posBridge : undefined;
+      const config = bridge
+        ? await bridge.getCounterConfig()
+        : { counterCode: 'C01', apiUrl: 'http://localhost:5000/api/v1', printerName: '', autoPrint: true, drawerEnabled: true };
       setApiBaseUrl(config.apiUrl);
       set({ config, error: null });
     } catch (err) {
@@ -24,7 +29,9 @@ export const useCounterStore = create<CounterState>((set) => ({
     }
   },
   savePrinterSettings: async (changes) => {
-    const config = await window.posBridge.saveCounterConfig(changes);
-    set({ config });
+    if (typeof window !== 'undefined' && window.posBridge) {
+      const config = await window.posBridge.saveCounterConfig(changes);
+      set({ config });
+    }
   },
 }));

@@ -26,10 +26,14 @@ class Supplier(TimestampMixin, db.Model):
         nullable=False,
         default=PaymentTerms.NET_30,
     )
+    opening_balance = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     notes = db.Column(db.Text, nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
     products = db.relationship("Product", back_populates="supplier", lazy="dynamic")
+    supplier_products = db.relationship(
+        "SupplierProduct", back_populates="supplier", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Supplier {self.supplier_code} {self.company_name}>"

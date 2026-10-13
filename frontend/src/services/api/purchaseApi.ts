@@ -1,6 +1,8 @@
 import type {
   GoodsReceiptOut,
   PagedResponse,
+  POPaymentHistoryOut,
+  POPaymentSummary,
   PurchaseDashboard,
   PurchaseOrderOut,
   PurchaseStatus,
@@ -23,6 +25,9 @@ export interface PurchaseOrderCreatePayload {
   reference_number?: string | null;
   notes?: string | null;
   internal_remarks?: string | null;
+  shipping_address?: string | null;
+  shipping_charges?: number;
+  other_charges?: number;
   items: PurchaseOrderItemPayload[];
 }
 
@@ -33,13 +38,27 @@ export type PurchaseOrderUpdatePayload = Partial<Omit<PurchaseOrderCreatePayload
 export interface GoodsReceiptItemPayload {
   purchase_order_item_id: number;
   qty_received: number;
+  qty_accepted?: number | null;
+  qty_rejected?: number;
+  qty_damaged?: number;
   expiry_date?: string | null;
+  batch_number?: string | null;
+  mfg_date?: string | null;
+  remarks?: string | null;
 }
 
 export interface GoodsReceiptCreatePayload {
   received_at?: string | null;
   notes?: string | null;
   items: GoodsReceiptItemPayload[];
+}
+
+export interface QuickPaymentPayload {
+  amount: number;
+  payment_method: 'cash' | 'bank_transfer' | 'upi' | 'cheque' | 'other';
+  reference_number?: string | null;
+  payment_date?: string | null;
+  notes?: string | null;
 }
 
 export interface PurchaseListParams {
@@ -50,6 +69,7 @@ export interface PurchaseListParams {
   q?: string;
   date_from?: string;
   date_to?: string;
+  payment_filter?: 'has_outstanding' | 'has_payments';
 }
 
 export const purchaseApi = {
@@ -71,6 +91,15 @@ export const purchaseApi = {
   placeOrder(id: number) {
     return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/place`, {});
   },
+  submitForApproval(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/submit`, {});
+  },
+  approveOrder(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/approve`, {});
+  },
+  closeOrder(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/close`, {});
+  },
   cancelOrder(id: number) {
     return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/cancel`, {});
   },
@@ -79,5 +108,14 @@ export const purchaseApi = {
   },
   listReceipts(id: number) {
     return httpClient.get<GoodsReceiptOut[]>(`/purchases/${id}/receipts`);
+  },
+  getPaymentSummary(id: number) {
+    return httpClient.get<POPaymentSummary>(`/purchases/${id}/payment-summary`);
+  },
+  quickPayment(id: number, data: QuickPaymentPayload) {
+    return httpClient.post<POPaymentSummary>(`/purchases/${id}/quick-payment`, data);
+  },
+  getPaymentHistory(id: number) {
+    return httpClient.get<POPaymentHistoryOut>(`/purchases/${id}/payment-history`);
   },
 };

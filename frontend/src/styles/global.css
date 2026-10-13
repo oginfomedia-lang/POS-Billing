@@ -1380,6 +1380,23 @@ select.field-input {
 .badge-inhouse { background: #d1fae5; color: #065f46; }
 .badge-scale { background: #fef3c7; color: #92400e; }
 
+/* Status badges used across admin pages */
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.badge-success  { background: #d1fae5; color: #065f46; }
+.badge-neutral  { background: #f3f4f6; color: #6b7280; }
+.badge-warning  { background: #fef3c7; color: #92400e; }
+.badge-info     { background: #dbeafe; color: #1e40af; }
+.badge-danger   { background: #fee2e2; color: #991b1b; }
+
 .chip-remove-btn {
   display: inline-flex;
   align-items: center;

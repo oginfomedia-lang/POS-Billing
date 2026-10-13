@@ -864,9 +864,12 @@ export const en = {
     emptyAll: 'No purchase orders found.',
     statuses: {
       draft: 'Draft',
+      pending_approval: 'Pending Approval',
+      approved: 'Approved',
       ordered: 'Ordered',
       partially_received: 'Partially Received',
       received: 'Received',
+      closed: 'Closed',
       cancelled: 'Cancelled',
     },
     addTitle: 'New Purchase Order',

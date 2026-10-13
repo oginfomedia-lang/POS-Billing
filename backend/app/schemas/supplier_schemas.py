@@ -153,3 +153,71 @@ class SupplierDashboard(BaseModel):
     active: int
     inactive: int
     products_linked: int
+
+
+class SupplierProductCreate(BaseModel):
+    product_id: int
+    supplier_product_code: str | None = None
+    purchase_price: float | None = None
+    min_order_qty: float | None = None
+    lead_time_days: int | None = None
+    is_preferred: bool = False
+    notes: str | None = None
+    is_active: bool = True
+
+    _clean = field_validator("supplier_product_code", "notes", mode="before")(
+        classmethod(lambda cls, v: _clean(v))
+    )
+
+
+class SupplierProductUpdate(BaseModel):
+    supplier_product_code: str | None = None
+    purchase_price: float | None = None
+    min_order_qty: float | None = None
+    lead_time_days: int | None = None
+    is_preferred: bool | None = None
+    notes: str | None = None
+    is_active: bool | None = None
+
+
+class SupplierProductOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    supplier_id: int
+    product_id: int
+    product_name: str = ""
+    product_sku: str | None = None
+    supplier_product_code: str | None
+    purchase_price: float | None
+    last_purchase_price: float | None
+    min_order_qty: float | None
+    lead_time_days: int | None
+    is_preferred: bool
+    notes: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class SupplierSummary(BaseModel):
+    supplier_id: int
+    total_po_value: float
+    total_received_value: float
+    total_invoiced: float
+    total_paid: float
+    outstanding_balance: float
+    advance_balance: float
+    overdue_amount: float
+    invoice_count: int
+    payment_count: int
+
+
+class SupplierLedgerEntry(BaseModel):
+    date: str
+    entry_type: str
+    reference: str
+    description: str
+    debit: float
+    credit: float
+    balance: float

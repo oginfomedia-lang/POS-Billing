@@ -18,6 +18,9 @@ from app.routes.shift_routes import shift_bp
 from app.routes.store_routes import store_bp
 from app.routes.supplier_routes import supplier_bp
 from app.routes.purchase_routes import purchase_bp
+from app.routes.supplier_invoice_routes import supplier_invoice_bp
+from app.routes.supplier_payment_routes import supplier_payment_bp
+from app.routes.upload_routes import upload_bp
 from app.routes.user_routes import user_bp
 
 
@@ -40,4 +43,7 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(backup_bp, url_prefix=prefix)
     app.register_blueprint(supplier_bp, url_prefix=prefix)
     app.register_blueprint(purchase_bp, url_prefix=prefix)
+    app.register_blueprint(supplier_invoice_bp, url_prefix=prefix)
+    app.register_blueprint(supplier_payment_bp, url_prefix=prefix)
+    app.register_blueprint(upload_bp, url_prefix=prefix)
     app.register_blueprint(customer_bp, url_prefix=prefix)

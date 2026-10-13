@@ -53,6 +53,23 @@ class BaseConfig:
     # Full path to the PostgreSQL bin directory (e.g. C:\Program Files\PostgreSQL\16\bin).
     # Leave empty when pg_dump / pg_restore are already on PATH.
     PGBIN = os.environ.get("PGBIN") or None
+
+    # --- S3 cloud backup ---
+    AWS_ACCESS_KEY_ID     = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    AWS_S3_BUCKET         = os.environ.get("AWS_S3_BUCKET", "")
+    AWS_S3_REGION         = os.environ.get("AWS_S3_REGION", "ap-south-1")
+    AWS_S3_PREFIX         = os.environ.get("AWS_S3_PREFIX", "backups/")
+
+    # --- Backup scheduler (cron expression: minute hour dom month dow) ---
+    BACKUP_CRON_SCHEDULE  = os.environ.get("BACKUP_CRON_SCHEDULE", "0 2 * * *")
+
+    # --- Supplier document uploads ---
+    UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None
+    UPLOAD_MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES") or str(20 * 1024 * 1024))  # 20 MB
+
+    # --- PostgreSQL replication ---
+    PG_REPLICA_HOST       = os.environ.get("PG_REPLICA_HOST", "")
     # --- WhatsApp Business Cloud API (nightly collection summary to the owner) ---
     WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "")

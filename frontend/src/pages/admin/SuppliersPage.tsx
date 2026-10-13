@@ -1,8 +1,9 @@
 // Supplier Management page — admin and manager.
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
-import { IconEdit, IconTruck, IconX } from '../../components/common/Icons';
+import { IconEdit, IconTruck, IconX, IconBarChart } from '../../components/common/Icons';
 import { supplierApi } from '../../services/api/supplierApi';
 import type { SupplierCreatePayload, SupplierUpdatePayload } from '../../services/api/supplierApi';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -44,6 +45,7 @@ function emptyForm(): SupplierCreatePayload {
 
 export function SuppliersPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const [dash, setDash] = useState<SupplierDashboard | null>(null);
   const [items, setItems] = useState<SupplierOut[]>([]);
@@ -314,6 +316,13 @@ export function SuppliersPage() {
                 <td style={{ whiteSpace: 'nowrap' }}>{formatDate(s.created_at)}</td>
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      className="btn-icon"
+                      title="View Details"
+                      onClick={() => navigate(`/admin/suppliers/${s.id}`)}
+                    >
+                      <IconBarChart size={15} />
+                    </button>
                     <button
                       className="btn-icon"
                       title={t('suppliers.editBtn')}

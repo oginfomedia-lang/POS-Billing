@@ -6,6 +6,7 @@ import {
   IconCheck,
   IconClipboardList,
   IconEdit,
+  IconHistory,
   IconPlus,
   IconTrash,
   IconX,
@@ -17,12 +18,15 @@ import type {
   PurchaseOrderCreatePayload,
   PurchaseOrderItemPayload,
   PurchaseOrderUpdatePayload,
+  QuickPaymentPayload,
 } from '../../services/api/purchaseApi';
 import { supplierApi } from '../../services/api/supplierApi';
 import { listStores } from '../../services/api/storeApi';
 import { listProducts } from '../../services/api/productApi';
 import type {
   GoodsReceiptOut,
+  POPaymentHistoryOut,
+  POPaymentSummary,
   PurchaseDashboard,
   PurchaseOrderItemOut,
   PurchaseOrderOut,
@@ -35,31 +39,40 @@ import { formatDate } from '../../utils/format';
 const PER_PAGE = 20;
 
 const STATUS_OPTIONS: PurchaseStatus[] = [
-  'draft', 'ordered', 'partially_received', 'received', 'cancelled',
+  'draft', 'pending_approval', 'approved', 'ordered', 'partially_received', 'received', 'closed', 'cancelled',
 ];
 
 // Colour tokens per status — uses CSS vars so dark-mode adapts
 const STATUS_ACCENT: Record<PurchaseStatus, string> = {
   draft:              'var(--muted)',
+  pending_approval:   '#7c3aed',
+  approved:           '#0891b2',
   ordered:            '#0284c7',
   partially_received: '#d97706',
   received:           'var(--ok)',
+  closed:             'var(--ok)',
   cancelled:          'var(--danger)',
 };
 
 const STATUS_BG: Record<PurchaseStatus, string> = {
   draft:              'var(--surface-3)',
+  pending_approval:   '#ede9fe',
+  approved:           '#cffafe',
   ordered:            'var(--info-bg)',
   partially_received: 'var(--warn-bg)',
   received:           'var(--ok-bg)',
+  closed:             'var(--ok-bg)',
   cancelled:          'var(--danger-bg)',
 };
 
 const STATUS_FG: Record<PurchaseStatus, string> = {
   draft:              'var(--muted)',
+  pending_approval:   '#5b21b6',
+  approved:           '#164e63',
   ordered:            'var(--info-text)',
   partially_received: 'var(--warn-text)',
   received:           'var(--ok-text)',
+  closed:             'var(--ok-text)',
   cancelled:          'var(--danger-text)',
 };
 
@@ -103,21 +116,72 @@ function StatTile({
   value,
   sub,
   accent,
+  onClick,
+  isActive,
 }: {
   label: string;
   value: string | number;
   accent: string;
   sub?: string;
+  onClick?: () => void;
+  isActive?: boolean;
 }) {
   return (
     <div
       className="stat-tile"
-      style={{ '--accent': accent } as React.CSSProperties}
+      style={{
+        '--accent': accent,
+        cursor: onClick ? 'pointer' : undefined,
+        outline: isActive ? `2px solid ${accent}` : undefined,
+        outlineOffset: isActive ? 2 : undefined,
+        userSelect: onClick ? 'none' : undefined,
+      } as React.CSSProperties}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}
     >
       <div className="stat-value">{value}</div>
       {sub && <div className="stat-sub">{sub}</div>}
       <div className="stat-label">{label}</div>
+      {isActive && (
+        <div style={{ fontSize: 10, fontWeight: 700, color: accent, marginTop: 2, letterSpacing: '0.05em' }}>
+          ▲ ACTIVE FILTER
+        </div>
+      )}
     </div>
+  );
+}
+
+// ── Payment status badge ──────────────────────────────────────────────────────
+
+function PaymentStatusBadge({ status, cancelled }: { status?: string; cancelled?: boolean }) {
+  if (cancelled) return null;
+  const cfg: Record<string, { label: string; bg: string; color: string }> = {
+    paid:          { label: 'Paid',    bg: 'var(--ok-bg)',      color: 'var(--ok-text)' },
+    partially_paid:{ label: 'Partial', bg: 'var(--warn-bg)',    color: 'var(--warn-text)' },
+    unpaid:        { label: 'Pending', bg: 'var(--danger-bg)',  color: 'var(--danger-text)' },
+    overdue:       { label: 'Overdue', bg: '#fef2f2',           color: '#991b1b' },
+  };
+  const c = cfg[status ?? 'unpaid'] ?? cfg.unpaid;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 8px',
+        borderRadius: 999,
+        fontSize: 11,
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        background: c.bg,
+        color: c.color,
+      }}
+    >
+      {status === 'overdue' && <span style={{ fontSize: 9 }}>⚠</span>}
+      {c.label}
+    </span>
   );
 }
 
@@ -679,6 +743,7 @@ function DetailModal({
   onCancel,
   onReceive,
   onEdit,
+  onPayment,
 }: {
   po: PurchaseOrderOut;
   stores: StoreOut[];
@@ -687,15 +752,25 @@ function DetailModal({
   onCancel: () => void;
   onReceive: () => void;
   onEdit: () => void;
+  onPayment: () => void;
 }) {
   const { t } = useTranslation();
   const [receipts, setReceipts] = useState<GoodsReceiptOut[] | null>(null);
   const [showReceipts, setShowReceipts] = useState(false);
+  const [paymentSummary, setPaymentSummary] = useState<POPaymentSummary | null>(null);
 
   const canPlace = po.status === 'draft';
   const canCancel = po.status === 'draft' || po.status === 'ordered';
   const canReceive = po.status === 'ordered' || po.status === 'partially_received';
   const canEdit = po.status === 'draft';
+  const canPay = po.status !== 'draft' && po.status !== 'cancelled';
+
+  useEffect(() => {
+    if (!canPay) return;
+    purchaseApi.getPaymentSummary(po.id)
+      .then((r) => setPaymentSummary(r.data))
+      .catch(() => {});
+  }, [po.id, canPay]);
 
   const storeName = stores.find((s) => s.id === po.store_id)?.name ?? (po.store_id ? `Store #${po.store_id}` : '—');
 
@@ -855,6 +930,58 @@ function DetailModal({
           </table>
         </div>
 
+        {/* Payment summary bar */}
+        {paymentSummary && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 0,
+              marginBottom: 16,
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              overflow: 'hidden',
+            }}
+          >
+            {[
+              { label: 'Grand Total', val: paymentSummary.grand_total, color: 'var(--text)' },
+              { label: 'Paid', val: paymentSummary.total_paid, color: 'var(--ok)' },
+              { label: 'Outstanding', val: paymentSummary.outstanding, color: parseFloat(paymentSummary.outstanding) > 0 ? '#d97706' : 'var(--ok)' },
+            ].map((col, i) => (
+              <div
+                key={i}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  padding: '10px 8px',
+                  borderRight: i < 2 ? '1px solid var(--border)' : undefined,
+                  background: 'var(--surface-2)',
+                }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{col.label}</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: col.color }}>
+                  ₹{parseFloat(col.val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+            ))}
+            <div style={{ flex: 1, textAlign: 'center', padding: '10px 8px', background: 'var(--surface-2)' }}>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</div>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '2px 10px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: paymentSummary.payment_status === 'paid' ? 'var(--ok-bg)' : paymentSummary.payment_status === 'partially_paid' ? 'var(--warn-bg)' : 'var(--danger-bg)',
+                  color: paymentSummary.payment_status === 'paid' ? 'var(--ok-text)' : paymentSummary.payment_status === 'partially_paid' ? 'var(--warn-text)' : 'var(--danger-text)',
+                }}
+              >
+                {paymentSummary.payment_status === 'paid' ? 'Paid' : paymentSummary.payment_status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Receipts section */}
         {showReceipts && receipts !== null && (
           <div>
@@ -923,6 +1050,15 @@ function DetailModal({
               <IconEdit size={14} /> {t('common.edit')}
             </button>
           )}
+          {canPay && paymentSummary && parseFloat(paymentSummary.outstanding) > 0.005 && (
+            <button
+              className="btn-primary"
+              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)', borderColor: '#5b21b6' }}
+              onClick={onPayment}
+            >
+              💳 Record Payment
+            </button>
+          )}
           {canReceive && (
             <button className="btn-primary" onClick={onReceive}>
               <IconCheck size={14} /> {t('purchases.receiveGoods')}
@@ -966,7 +1102,7 @@ function ReceiveModal({
   const today = new Date().toISOString().slice(0, 16);
   const [receivedAt, setReceivedAt] = useState(today);
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<{ item: PurchaseOrderItemOut; qty: string; expiry: string }[]>(
+  const [lines, setLines] = useState<{ item: PurchaseOrderItemOut; qty: string; expiry: string; batch: string }[]>(
     () =>
       po.items
         .filter((i) => parseFloat(i.received_qty) < parseFloat(i.ordered_qty))
@@ -974,6 +1110,7 @@ function ReceiveModal({
           item: i,
           qty: (parseFloat(i.ordered_qty) - parseFloat(i.received_qty)).toFixed(3),
           expiry: '',
+          batch: '',
         })),
   );
   const [saving, setSaving] = useState(false);
@@ -986,6 +1123,7 @@ function ReceiveModal({
         purchase_order_item_id: l.item.id,
         qty_received: parseFloat(l.qty),
         expiry_date: l.expiry || null,
+        batch_number: l.batch || null,
       }));
     if (items.length === 0) { setErr('No items to receive.'); return; }
     setSaving(true);
@@ -1013,7 +1151,14 @@ function ReceiveModal({
       >
         <div className="modal-header">
           <div>
-            <p className="modal-subtitle">{po.po_number}</p>
+            <p className="modal-subtitle">
+              {po.po_number}
+              {po.status === 'partially_received' && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 999, background: 'var(--warn-bg)', color: 'var(--warn-text)' }}>
+                  Completing Partial Receipt
+                </span>
+              )}
+            </p>
             <h3 className="modal-title" style={{ margin: 0 }}>{t('purchases.receiveTitle', { po: po.po_number })}</h3>
           </div>
           <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
@@ -1048,6 +1193,7 @@ function ReceiveModal({
                 <tr>
                   <th>{t('purchases.colProduct')}</th>
                   <th className="num">{t('purchases.receiveQty')}</th>
+                  <th>Batch No.</th>
                   <th>{t('purchases.expiryDate')}</th>
                 </tr>
               </thead>
@@ -1076,6 +1222,20 @@ function ReceiveModal({
                             )
                           }
                           style={{ padding: '5px 8px', minHeight: 34, width: 100 }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field-input"
+                          type="text"
+                          value={l.batch}
+                          placeholder="Optional"
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x, i) => i === idx ? { ...x, batch: e.target.value } : x)
+                            )
+                          }
+                          style={{ minHeight: 34, width: 110 }}
                         />
                       </td>
                       <td>
@@ -1156,6 +1316,375 @@ function ConfirmModal({
   );
 }
 
+// ── Record Payment modal ──────────────────────────────────────────────────────
+
+function RecordPaymentModal({
+  po,
+  summary,
+  onClose,
+  onSaved,
+}: {
+  po: PurchaseOrderOut;
+  summary: POPaymentSummary;
+  onClose: () => void;
+  onSaved: (s: POPaymentSummary) => void;
+}) {
+  const outstanding = parseFloat(summary.outstanding);
+  const [amount, setAmount] = useState(outstanding.toFixed(2));
+  const [method, setMethod] = useState<QuickPaymentPayload['payment_method']>('cash');
+  const [reference, setReference] = useState('');
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  function fmt(v: string) {
+    return parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  async function submit() {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) { setErr('Enter a valid amount.'); return; }
+    if (amt > outstanding + 0.01) { setErr(`Amount exceeds outstanding ₹${fmt(summary.outstanding)}`); return; }
+    setSaving(true); setErr('');
+    try {
+      const r = await purchaseApi.quickPayment(po.id, {
+        amount: amt,
+        payment_method: method,
+        reference_number: reference || null,
+        payment_date: paymentDate,
+        notes: notes || null,
+      });
+      onSaved(r.data);
+    } catch (e) {
+      setErr(getErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-box"
+        style={{ maxWidth: 480, width: '95%' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div>
+            <p className="modal-subtitle">{po.po_number} · {po.supplier_name}</p>
+            <h3 className="modal-title" style={{ margin: 0 }}>Record Payment</h3>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
+        </div>
+
+        <div className="modal-form">
+          {/* Summary bar */}
+          <div style={{ display: 'flex', gap: 0, marginBottom: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+            {[
+              { label: 'Invoice Total', val: summary.grand_total, color: 'var(--text)' },
+              { label: 'Already Paid', val: summary.total_paid, color: 'var(--ok)' },
+              { label: 'Outstanding', val: summary.outstanding, color: '#d97706' },
+            ].map((col, i) => (
+              <div
+                key={i}
+                style={{ flex: 1, textAlign: 'center', padding: '10px 8px', borderRight: i < 2 ? '1px solid var(--border)' : undefined, background: 'var(--surface-2)' }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{col.label}</div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: col.color }}>₹{fmt(col.val)}</div>
+              </div>
+            ))}
+          </div>
+
+          {err && <div className="page-error">{err}</div>}
+
+          <div className="form-row">
+            <label className="field-label">
+              Amount (₹) *
+              <input
+                className="field-input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                max={outstanding}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+            <label className="field-label">
+              Payment Method
+              <select className="field-input" value={method} onChange={(e) => setMethod(e.target.value as QuickPaymentPayload['payment_method'])}>
+                <option value="cash">Cash</option>
+                <option value="bank_transfer">Bank Transfer / NEFT / RTGS</option>
+                <option value="upi">UPI</option>
+                <option value="cheque">Cheque</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="field-label">
+              Payment Date
+              <input
+                className="field-input"
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+              />
+            </label>
+            <label className="field-label">
+              Reference / UTR / Cheque No.
+              <input
+                className="field-input"
+                value={reference}
+                placeholder="Transaction ID"
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </label>
+            <label className="field-label" style={{ gridColumn: '1 / -1' }}>
+              Notes
+              <textarea
+                className="field-input"
+                rows={2}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="modal-buttons">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" onClick={submit} disabled={saving || outstanding <= 0}>
+            {saving ? 'Recording…' : 'Record Payment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Payment History modal ─────────────────────────────────────────────────────
+
+function PaymentHistoryModal({
+  po,
+  onClose,
+}: {
+  po: PurchaseOrderOut;
+  onClose: () => void;
+}) {
+  const [history, setHistory] = useState<POPaymentHistoryOut | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    purchaseApi.getPaymentHistory(po.id)
+      .then((r) => setHistory(r.data))
+      .catch((e) => setErr(getErrorMessage(e)))
+      .finally(() => setLoading(false));
+  }, [po.id]);
+
+  function fmt(v: string | number) {
+    return parseFloat(String(v)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const METHOD_LABEL: Record<string, string> = {
+    cash: 'Cash',
+    bank_transfer: 'Bank Transfer',
+    upi: 'UPI',
+    cheque: 'Cheque',
+    other: 'Other',
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        className="modal-box"
+        style={{ maxWidth: 780, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="modal-header">
+          <div>
+            <p className="modal-subtitle">{po.supplier_name}</p>
+            <h3 className="modal-title" style={{ margin: 0 }}>
+              Payment History — {po.po_number}
+            </h3>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
+        </div>
+
+        {loading && (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)' }}>Loading…</div>
+        )}
+        {err && <div className="page-error" style={{ margin: '16px' }}>{err}</div>}
+
+        {history && (
+          <div style={{ padding: '0 2px' }}>
+            {/* Summary bar */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 0,
+                marginBottom: 16,
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                overflow: 'hidden',
+              }}
+            >
+              {[
+                { label: 'PO Total', val: history.grand_total, color: 'var(--text)' },
+                { label: 'Total Paid', val: history.total_paid, color: 'var(--ok)' },
+                { label: 'Outstanding', val: history.outstanding, color: parseFloat(history.outstanding) > 0 ? '#d97706' : 'var(--ok)' },
+              ].map((col, i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '12px 8px',
+                    borderRight: i < 2 ? '1px solid var(--border)' : undefined,
+                    background: 'var(--surface-2)',
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                    {col.label}
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: col.color }}>₹{fmt(col.val)}</div>
+                </div>
+              ))}
+              {/* Payment status + invoice ref */}
+              <div style={{ flex: 1, textAlign: 'center', padding: '12px 8px', background: 'var(--surface-2)' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+                  Invoice
+                </div>
+                {history.invoice_number ? (
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--brand)' }}>
+                    {history.invoice_number}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--muted)' }}>—</div>
+                )}
+              </div>
+            </div>
+
+            {/* Entries */}
+            {history.entries.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '40px 20px',
+                  color: 'var(--muted)',
+                  fontSize: 14,
+                  border: '1px dashed var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                }}
+              >
+                <div style={{ fontSize: 32, marginBottom: 8 }}>💳</div>
+                No payments recorded for this purchase order yet.
+              </div>
+            ) : (
+              <div className="table-card">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 32 }}>#</th>
+                      <th>Date</th>
+                      <th>Method</th>
+                      <th>Reference</th>
+                      <th className="num">Amount Paid</th>
+                      <th className="num">Cumulative Paid</th>
+                      <th className="num">Balance After</th>
+                      <th>Recorded By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.entries.map((e, idx) => (
+                      <tr
+                        key={e.payment_id}
+                        style={{
+                          opacity: e.is_voided ? 0.45 : 1,
+                          background: e.is_voided ? 'var(--surface-3)' : undefined,
+                        }}
+                      >
+                        <td style={{ color: 'var(--muted)', fontSize: 12 }}>{idx + 1}</td>
+                        <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {new Date(e.payment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '1px 8px',
+                              borderRadius: 999,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: 'var(--info-bg)',
+                              color: 'var(--info-text)',
+                            }}
+                          >
+                            {METHOD_LABEL[e.payment_method] ?? e.payment_method}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+                          {e.reference_number || <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </td>
+                        <td className="num" style={{ fontWeight: 700, color: e.is_voided ? 'var(--muted)' : 'var(--ok)' }}>
+                          {e.is_voided && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--danger)', marginRight: 4, verticalAlign: 'middle', padding: '1px 5px', borderRadius: 3, background: 'var(--danger-bg)' }}>
+                              VOID
+                            </span>
+                          )}
+                          ₹{fmt(e.allocated_amount)}
+                        </td>
+                        <td className="num" style={{ fontWeight: 700 }}>
+                          ₹{fmt(e.running_total_paid)}
+                        </td>
+                        <td
+                          className="num"
+                          style={{
+                            fontWeight: 700,
+                            color: parseFloat(e.balance_after) <= 0.01 ? 'var(--ok)' : '#d97706',
+                          }}
+                        >
+                          ₹{fmt(e.balance_after)}
+                        </td>
+                        <td style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                          {e.created_by_name || '—'}
+                          {e.notes && (
+                            <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }} title={e.notes}>
+                              {e.notes.length > 30 ? e.notes.slice(0, 30) + '…' : e.notes}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {history.entries.length > 1 && (
+                    <tfoot>
+                      <tr className="total-row">
+                        <td colSpan={4} className="num" style={{ fontSize: 13, fontWeight: 600 }}>
+                          {history.entries.filter(e => !e.is_voided).length} payment(s)
+                        </td>
+                        <td className="num" style={{ fontWeight: 800, fontSize: 15, color: 'var(--ok)' }}>
+                          ₹{fmt(history.total_paid)}
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="modal-buttons">
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function PurchasesPage() {
@@ -1166,6 +1695,7 @@ export function PurchasesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<PurchaseStatus | ''>('');
+  const [paymentFilter, setPaymentFilter] = useState<'has_outstanding' | 'has_payments' | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1173,10 +1703,12 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<SupplierOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
 
-  type ModalKind = 'create' | 'edit' | 'detail' | 'receive' | 'place-confirm' | 'cancel-confirm' | null;
+  type ModalKind = 'create' | 'edit' | 'detail' | 'receive' | 'record-payment' | 'payment-history' | 'place-confirm' | 'cancel-confirm' | null;
   const [modal, setModal] = useState<ModalKind>(null);
   const [selected, setSelected] = useState<PurchaseOrderOut | null>(null);
   const [actioning, setActioning] = useState(false);
+  const [detailRefresh, setDetailRefresh] = useState(0);
+  const [activeSummary, setActiveSummary] = useState<POPaymentSummary | null>(null);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1209,7 +1741,12 @@ export function PurchasesPage() {
     } catch { /* */ }
   }
 
-  async function load(p = page, s = search, st = statusFilter) {
+  async function load(
+    p = page,
+    s = search,
+    st = statusFilter,
+    pf: 'has_outstanding' | 'has_payments' | null = paymentFilter,
+  ) {
     setLoading(true);
     setError('');
     try {
@@ -1218,6 +1755,7 @@ export function PurchasesPage() {
         per_page: PER_PAGE,
         status: st || undefined,
         q: s || undefined,
+        payment_filter: pf ?? undefined,
       });
       setItems(r.data.items);
       setTotal(r.data.total);
@@ -1231,20 +1769,35 @@ export function PurchasesPage() {
   function handleSearch(val: string) {
     setSearch(val);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => { setPage(1); load(1, val, statusFilter); }, 400);
+    searchTimeout.current = setTimeout(() => { setPage(1); load(1, val, statusFilter, paymentFilter); }, 400);
   }
 
   function handleStatusChange(val: string) {
     const st = val as PurchaseStatus | '';
     setStatusFilter(st);
     setPage(1);
-    load(1, search, st);
+    load(1, search, st, paymentFilter);
+  }
+
+  function handlePaymentFilterClick(filter: 'has_outstanding' | 'has_payments') {
+    const newPf = paymentFilter === filter ? null : filter;
+    setPaymentFilter(newPf);
+    setPage(1);
+    load(1, search, statusFilter, newPf);
+  }
+
+  function clearAllFilters() {
+    setSearch('');
+    setStatusFilter('');
+    setPaymentFilter(null);
+    setPage(1);
+    load(1, '', '', null);
   }
 
   function afterSave(_po: PurchaseOrderOut) {
     setModal(null);
     setSelected(null);
-    load(page, search, statusFilter);
+    load(page, search, statusFilter, paymentFilter);
     loadDash();
   }
 
@@ -1255,7 +1808,7 @@ export function PurchasesPage() {
       await purchaseApi.placeOrder(selected.id);
       setModal(null);
       setSelected(null);
-      load(page, search, statusFilter);
+      load(page, search, statusFilter, paymentFilter);
       loadDash();
     } catch (e) {
       alert(getErrorMessage(e));
@@ -1271,7 +1824,7 @@ export function PurchasesPage() {
       await purchaseApi.cancelOrder(selected.id);
       setModal(null);
       setSelected(null);
-      load(page, search, statusFilter);
+      load(page, search, statusFilter, paymentFilter);
       loadDash();
     } catch (e) {
       alert(getErrorMessage(e));
@@ -1315,6 +1868,20 @@ export function PurchasesPage() {
           <StatTile label={t('purchases.cardPartial')}  value={dash.partially_received}   accent="var(--warn)" />
           <StatTile label={t('purchases.cardReceived')} value={dash.received}             accent="var(--ok)" />
           <StatTile label={t('purchases.cardCancelled')} value={dash.cancelled}           accent="var(--danger)" />
+          <StatTile
+            label="Amount Paid"
+            value={`₹${parseFloat(dash.total_paid || '0').toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+            accent="#7c3aed"
+            onClick={() => handlePaymentFilterClick('has_payments')}
+            isActive={paymentFilter === 'has_payments'}
+          />
+          <StatTile
+            label="Purchase Due"
+            value={`₹${parseFloat(dash.total_due || '0').toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
+            accent="#dc2626"
+            onClick={() => handlePaymentFilterClick('has_outstanding')}
+            isActive={paymentFilter === 'has_outstanding'}
+          />
         </div>
       )}
 
@@ -1337,6 +1904,32 @@ export function PurchasesPage() {
             <option key={s} value={s}>{t(`purchases.statuses.${s}` as const)}</option>
           ))}
         </select>
+        {paymentFilter && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span
+              style={{
+                padding: '4px 10px',
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                background: paymentFilter === 'has_outstanding' ? '#fee2e2' : '#ede9fe',
+                color: paymentFilter === 'has_outstanding' ? '#dc2626' : '#7c3aed',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {paymentFilter === 'has_outstanding' ? '● Purchase Due' : '● Amount Paid'}
+            </span>
+          </div>
+        )}
+        {(search || statusFilter || paymentFilter) && (
+          <button
+            className="btn-secondary"
+            style={{ flexShrink: 0, fontSize: 12, padding: '6px 12px' }}
+            onClick={clearAllFilters}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {error && <div className="page-error">{error}</div>}
@@ -1353,13 +1946,14 @@ export function PurchasesPage() {
               <th className="num">{t('purchases.colItems')}</th>
               <th className="num">{t('purchases.colTotal')}</th>
               <th>{t('purchases.colStatus')}</th>
+              <th>Payment</th>
               <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {!loading && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="empty-row">{t('purchases.emptyAll')}</td>
+                <td colSpan={8} className="empty-row">{t('purchases.emptyAll')}</td>
               </tr>
             )}
             {items.map((po) => (
@@ -1387,6 +1981,17 @@ export function PurchasesPage() {
                   ₹{parseFloat(po.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
                 <td><StatusBadge status={po.status} /></td>
+                <td>
+                  <PaymentStatusBadge
+                    status={po.payment_status}
+                    cancelled={po.status === 'cancelled'}
+                  />
+                  {po.status !== 'cancelled' && po.payment_status !== 'paid' && parseFloat(po.outstanding_amount || '0') > 0.01 && (
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
+                      ₹{parseFloat(po.outstanding_amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} due
+                    </div>
+                  )}
+                </td>
                 <td
                   className="table-actions"
                   onClick={(e) => e.stopPropagation()}
@@ -1410,6 +2015,16 @@ export function PurchasesPage() {
                       <IconCheck size={14} />
                     </button>
                   )}
+                  {po.payment_status !== 'unpaid' && (
+                    <button
+                      className="btn-sm"
+                      title="Payment History"
+                      style={{ marginLeft: 4, color: '#7c3aed', borderColor: '#c4b5fd' }}
+                      onClick={() => { setSelected(po); setModal('payment-history'); }}
+                    >
+                      <IconHistory size={14} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -1422,14 +2037,14 @@ export function PurchasesPage() {
         <div className="pagination">
           <button
             disabled={page <= 1}
-            onClick={() => { const p = page - 1; setPage(p); load(p, search, statusFilter); }}
+            onClick={() => { const p = page - 1; setPage(p); load(p, search, statusFilter, paymentFilter); }}
           >
             {t('common.prev')}
           </button>
           <span>{t('common.pageInfo', { page, total })}</span>
           <button
             disabled={page >= pages}
-            onClick={() => { const p = page + 1; setPage(p); load(p, search, statusFilter); }}
+            onClick={() => { const p = page + 1; setPage(p); load(p, search, statusFilter, paymentFilter); }}
           >
             {t('common.next')}
           </button>
@@ -1449,13 +2064,19 @@ export function PurchasesPage() {
 
       {modal === 'detail' && selected && (
         <DetailModal
+          key={`detail-${selected.id}-${detailRefresh}`}
           po={selected}
           stores={stores}
-          onClose={() => { setModal(null); setSelected(null); }}
+          onClose={() => { setModal(null); setSelected(null); setActiveSummary(null); }}
           onEdit={() => setModal('edit')}
           onPlace={() => setModal('place-confirm')}
           onCancel={() => setModal('cancel-confirm')}
           onReceive={() => setModal('receive')}
+          onPayment={() => {
+            purchaseApi.getPaymentSummary(selected.id)
+              .then((r) => { setActiveSummary(r.data); setModal('record-payment'); })
+              .catch(() => setModal('record-payment'));
+          }}
         />
       )}
 
@@ -1466,9 +2087,31 @@ export function PurchasesPage() {
           onSaved={() => {
             setModal(null);
             setSelected(null);
-            load(page, search, statusFilter);
+            load(page, search, statusFilter, paymentFilter);
             loadDash();
           }}
+        />
+      )}
+
+      {modal === 'record-payment' && selected && activeSummary && (
+        <RecordPaymentModal
+          po={selected}
+          summary={activeSummary}
+          onClose={() => { setModal('detail'); setActiveSummary(null); }}
+          onSaved={() => {
+            setModal('detail');
+            setActiveSummary(null);
+            setDetailRefresh((r) => r + 1);
+            load(page, search, statusFilter, paymentFilter);
+            loadDash();
+          }}
+        />
+      )}
+
+      {modal === 'payment-history' && selected && (
+        <PaymentHistoryModal
+          po={selected}
+          onClose={() => { setModal(null); setSelected(null); }}
         />
       )}
 

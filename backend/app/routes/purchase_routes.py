@@ -8,9 +8,12 @@ from app.schemas.common import PagedResponse
 from app.schemas.purchase_schemas import (
     GoodsReceiptCreate,
     GoodsReceiptOut,
+    POPaymentHistoryOut,
+    POPaymentSummary,
     PurchaseOrderCreate,
     PurchaseOrderOut,
     PurchaseOrderUpdate,
+    QuickPaymentIn,
 )
 from app.services import purchase_service
 from app.utils.permissions import require_permission
@@ -46,8 +49,10 @@ def list_purchases():
         search=request.args.get("q"),
         date_from=request.args.get("date_from"),
         date_to=request.args.get("date_to"),
+        payment_filter=request.args.get("payment_filter"),
     )
-    out = [purchase_service._enrich_po(po).model_dump(mode="json") for po in items]
+    invoice_map = purchase_service._get_invoice_map([po.id for po in items])
+    out = [purchase_service._enrich_po(po, invoice_map.get(po.id)).model_dump(mode="json") for po in items]
     resp = PagedResponse.build(out, total, page, per_page)
     return jsonify(resp.model_dump()), 200
 
@@ -64,7 +69,8 @@ def create_purchase():
 @require_permission("purchases.read")
 def get_purchase(po_id: int):
     po = purchase_service.get_purchase_order(po_id)
-    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+    invoice_map = purchase_service._get_invoice_map([po_id])
+    return jsonify(purchase_service._enrich_po(po, invoice_map.get(po_id)).model_dump(mode="json")), 200
 
 
 @purchase_bp.put("/purchases/<int:po_id>")
@@ -79,6 +85,27 @@ def update_purchase(po_id: int):
 @require_permission("purchases.update")
 def place_order(po_id: int):
     po = purchase_service.place_order(po_id, _current_user())
+    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/submit")
+@require_permission("purchases.update")
+def submit_for_approval(po_id: int):
+    po = purchase_service.submit_for_approval(po_id, _current_user())
+    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/approve")
+@require_permission("purchases.approve")
+def approve_order(po_id: int):
+    po = purchase_service.approve_order(po_id, _current_user())
+    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/close")
+@require_permission("purchases.update")
+def close_order(po_id: int):
+    po = purchase_service.close_order(po_id, _current_user())
     return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
 
 
@@ -103,3 +130,25 @@ def list_receipts(po_id: int):
     receipts = purchase_service.get_receipts(po_id)
     out = [purchase_service._enrich_receipt(r).model_dump(mode="json") for r in receipts]
     return jsonify(out), 200
+
+
+@purchase_bp.get("/purchases/<int:po_id>/payment-summary")
+@require_permission("purchases.read")
+def get_payment_summary(po_id: int):
+    summary = purchase_service.get_payment_summary(po_id)
+    return jsonify(summary.model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/quick-payment")
+@require_permission("payments.create")
+def quick_payment(po_id: int):
+    data = QuickPaymentIn.model_validate(request.get_json(force=True))
+    summary = purchase_service.quick_payment(po_id, data, _current_user())
+    return jsonify(summary.model_dump(mode="json")), 201
+
+
+@purchase_bp.get("/purchases/<int:po_id>/payment-history")
+@require_permission("purchases.read")
+def get_payment_history(po_id: int):
+    history = purchase_service.get_payment_history(po_id)
+    return jsonify(history.model_dump(mode="json")), 200

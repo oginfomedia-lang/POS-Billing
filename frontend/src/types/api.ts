@@ -69,6 +69,49 @@ export interface PagedResponse<T> {
 
 export type BackupStatus = 'running' | 'success' | 'failed' | 'deleted';
 export type BackupStorageLocation = 'local' | 's3';
+export type CloudUploadStatus = 'pending' | 'success' | 'failed';
+export type RestoreStatus = 'running' | 'success' | 'failed';
+
+export interface CloudUploadAttemptOut {
+  id: number;
+  backup_run_id: number;
+  provider: string;
+  bucket: string | null;
+  key: string | null;
+  status: CloudUploadStatus;
+  bytes_uploaded: number | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface RestoreRecordOut {
+  id: number;
+  backup_run_id: number | null;
+  target_db: string;
+  status: RestoreStatus;
+  triggered_by_id: number | null;
+  safety_backup_path: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface ReplicationReplicaOut {
+  client_addr: string | null;
+  state: string;
+  sent_lsn: string;
+  replay_lsn: string;
+  lag_bytes: number | null;
+  lag_seconds: number | null;
+}
+
+export interface ReplicationStatusOut {
+  replicas: ReplicationReplicaOut[];
+  replica_count: number;
+  is_healthy: boolean;
+  error?: string;
+}
 
 export interface BackupRunOut {
   id: number;
@@ -107,11 +150,47 @@ export interface SupplierOut {
   pincode: string | null;
   country: string;
   payment_terms: PaymentTerms;
+  opening_balance: string;
   notes: string | null;
   is_active: boolean;
   product_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface SupplierProductOut {
+  id: number;
+  supplier_id: number;
+  product_id: number;
+  product_name: string;
+  product_sku: string | null;
+  supplier_product_code: string | null;
+  purchase_price: string | null;
+  last_purchase_price: string | null;
+  min_order_qty: string;
+  lead_time_days: number | null;
+  is_preferred: boolean;
+  notes: string | null;
+  is_active: boolean;
+}
+
+export interface SupplierSummary {
+  supplier_id: number;
+  total_invoiced: string;
+  total_paid: string;
+  outstanding: string;
+  overdue: string;
+  open_pos: number;
+}
+
+export interface SupplierLedgerEntry {
+  date: string;
+  type: 'invoice' | 'payment';
+  reference: string;
+  description: string;
+  debit: string;
+  credit: string;
+  balance: string;
 }
 
 export interface SupplierDashboard {
@@ -121,7 +200,15 @@ export interface SupplierDashboard {
   products_linked: number;
 }
 
-export type PurchaseStatus = 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+export type PurchaseStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'ordered'
+  | 'partially_received'
+  | 'received'
+  | 'closed'
+  | 'cancelled';
 
 export interface PurchaseOrderItemOut {
   id: number;
@@ -149,18 +236,27 @@ export interface PurchaseOrderOut {
   reference_number: string | null;
   notes: string | null;
   internal_remarks: string | null;
+  shipping_address: string | null;
   subtotal: string;
   discount_amount: string;
   tax_amount: string;
+  shipping_charges: string;
+  other_charges: string;
   grand_total: string;
   status: PurchaseStatus;
   ordered_at: string | null;
+  approved_at: string | null;
+  approved_by_id: number | null;
   cancelled_at: string | null;
+  closed_at: string | null;
   created_by_id: number | null;
   created_by_name: string;
   items: PurchaseOrderItemOut[];
   created_at: string;
   updated_at: string;
+  payment_status: 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+  amount_paid: string;
+  outstanding_amount: string;
 }
 
 export interface PurchaseDashboard {
@@ -171,6 +267,45 @@ export interface PurchaseDashboard {
   partially_received: number;
   received: number;
   cancelled: number;
+  total_paid: string;
+  total_due: string;
+}
+
+export interface POPaymentSummary {
+  po_id: number;
+  grand_total: string;
+  total_paid: string;
+  outstanding: string;
+  invoice_count: number;
+  payment_status: 'unpaid' | 'partially_paid' | 'paid';
+  invoice_id: number | null;
+}
+
+export interface POPaymentEntry {
+  payment_id: number;
+  payment_date: string;
+  amount: string;
+  allocated_amount: string;
+  payment_method: string;
+  reference_number: string | null;
+  notes: string | null;
+  is_voided: boolean;
+  created_by_name: string;
+  running_total_paid: string;
+  balance_after: string;
+}
+
+export interface POPaymentHistoryOut {
+  po_id: number;
+  po_number: string;
+  supplier_name: string;
+  grand_total: string;
+  total_paid: string;
+  outstanding: string;
+  payment_status: string;
+  invoice_number: string | null;
+  invoice_id: number | null;
+  entries: POPaymentEntry[];
 }
 
 export interface GoodsReceiptItemOut {
@@ -179,7 +314,13 @@ export interface GoodsReceiptItemOut {
   product_id: number;
   product_name: string;
   qty_received: string;
+  qty_accepted: string | null;
+  qty_rejected: string;
+  qty_damaged: string;
   expiry_date: string | null;
+  batch_number: string | null;
+  mfg_date: string | null;
+  remarks: string | null;
 }
 
 export interface GoodsReceiptOut {
@@ -204,5 +345,85 @@ export interface AuditLogOut {
   old_values: unknown;
   new_values: unknown;
   ip_address: string | null;
+  created_at: string;
+}
+
+// ── Supplier Invoice (AP) ──────────────────────────────────────────────────────
+
+export type SupplierInvoiceStatus = 'unpaid' | 'partially_paid' | 'paid' | 'cancelled';
+export type InvoiceVerificationStatus = 'pending' | 'verified' | 'disputed';
+
+export interface SupplierInvoiceOut {
+  id: number;
+  supplier_id: number;
+  supplier_name: string;
+  purchase_order_id: number | null;
+  po_number: string | null;
+  store_id: number | null;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string | null;
+  subtotal: string;
+  tax_amount: string;
+  other_charges: string;
+  grand_total: string;
+  amount_paid: string;
+  outstanding: string;
+  payment_status: SupplierInvoiceStatus;
+  verification_status: InvoiceVerificationStatus;
+  grn_ids: number[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Supplier Payment ──────────────────────────────────────────────────────────
+
+export type SupplierPaymentType = 'payment' | 'advance' | 'credit_note' | 'debit_note';
+export type SupplierPaymentMethod = 'cash' | 'bank_transfer' | 'upi' | 'cheque' | 'other';
+
+export interface PaymentAllocationOut {
+  id: number;
+  invoice_id: number;
+  invoice_number: string;
+  allocated_amount: string;
+}
+
+export interface SupplierPaymentOut {
+  id: number;
+  supplier_id: number;
+  supplier_name: string;
+  store_id: number | null;
+  payment_date: string;
+  amount: string;
+  payment_type: SupplierPaymentType;
+  payment_method: SupplierPaymentMethod;
+  reference_number: string | null;
+  bank_account: string | null;
+  notes: string | null;
+  is_voided: boolean;
+  voided_at: string | null;
+  allocations: PaymentAllocationOut[];
+  created_at: string;
+}
+
+// ── Supplier Document ─────────────────────────────────────────────────────────
+
+export type DocumentEntityType =
+  | 'supplier'
+  | 'purchase_order'
+  | 'goods_receipt'
+  | 'supplier_invoice'
+  | 'supplier_payment';
+
+export interface SupplierDocumentOut {
+  id: number;
+  entity_type: DocumentEntityType;
+  entity_id: number;
+  document_label: string | null;
+  original_filename: string;
+  file_size: number;
+  mime_type: string;
+  uploaded_by_id: number | null;
   created_at: string;
 }
