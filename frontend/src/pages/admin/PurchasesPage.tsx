@@ -1,6 +1,7 @@
 // Purchase Orders management page — admin and manager.
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import {
   IconCheck,
@@ -18,7 +19,6 @@ import type {
   PurchaseOrderCreatePayload,
   PurchaseOrderItemPayload,
   PurchaseOrderUpdatePayload,
-  QuickPaymentPayload,
 } from '../../services/api/purchaseApi';
 import { supplierApi } from '../../services/api/supplierApi';
 import { listStores } from '../../services/api/storeApi';
@@ -158,12 +158,13 @@ function StatTile({
 function PaymentStatusBadge({ status, cancelled }: { status?: string; cancelled?: boolean }) {
   if (cancelled) return null;
   const cfg: Record<string, { label: string; bg: string; color: string }> = {
+    not_invoiced:  { label: 'No invoice yet', bg: 'var(--surface-2)', color: 'var(--muted)' },
     paid:          { label: 'Paid',    bg: 'var(--ok-bg)',      color: 'var(--ok-text)' },
     partially_paid:{ label: 'Partial', bg: 'var(--warn-bg)',    color: 'var(--warn-text)' },
     unpaid:        { label: 'Pending', bg: 'var(--danger-bg)',  color: 'var(--danger-text)' },
     overdue:       { label: 'Overdue', bg: '#fef2f2',           color: '#991b1b' },
   };
-  const c = cfg[status ?? 'unpaid'] ?? cfg.unpaid;
+  const c = cfg[status ?? 'not_invoiced'] ?? cfg.unpaid;
   return (
     <span
       style={{
@@ -698,7 +699,7 @@ function DetailModal({
   onCancel,
   onReceive,
   onEdit,
-  onPayment,
+  onOpenInvoices,
 }: {
   po: PurchaseOrderOut;
   stores: StoreOut[];
@@ -707,7 +708,8 @@ function DetailModal({
   onCancel: () => void;
   onReceive: () => void;
   onEdit: () => void;
-  onPayment: () => void;
+  /** Payments are made on the supplier's invoices: go to the supplier's Invoices tab. */
+  onOpenInvoices: () => void;
 }) {
   const { t } = useTranslation();
   const [receipts, setReceipts] = useState<GoodsReceiptOut[] | null>(null);
@@ -885,55 +887,52 @@ function DetailModal({
           </table>
         </div>
 
-        {/* Payment summary bar */}
+        {/* Money: payments are made against the supplier's invoices, never more than the goods received */}
         {paymentSummary && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 0,
-              marginBottom: 16,
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              overflow: 'hidden',
-            }}
-          >
-            {[
-              { label: 'Grand Total', val: paymentSummary.grand_total, color: 'var(--text)' },
-              { label: 'Paid', val: paymentSummary.total_paid, color: 'var(--ok)' },
-              { label: 'Outstanding', val: paymentSummary.outstanding, color: parseFloat(paymentSummary.outstanding) > 0 ? '#d97706' : 'var(--ok)' },
-            ].map((col, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  textAlign: 'center',
-                  padding: '10px 8px',
-                  borderRight: i < 2 ? '1px solid var(--border)' : undefined,
-                  background: 'var(--surface-2)',
-                }}
-              >
-                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{col.label}</div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: col.color }}>
-                  ₹{parseFloat(col.val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 0,
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                overflow: 'hidden',
+              }}
+            >
+              {[
+                { label: 'Received (GRN)', val: paymentSummary.received_value, color: 'var(--text)' },
+                { label: 'Invoiced', val: paymentSummary.invoiced_amount, color: 'var(--text)' },
+                { label: 'Payable', val: paymentSummary.payable_amount, color: 'var(--text)' },
+                { label: 'Paid', val: paymentSummary.total_paid, color: 'var(--ok)' },
+                { label: 'Balance', val: paymentSummary.outstanding, color: parseFloat(paymentSummary.outstanding) > 0 ? '#d97706' : 'var(--ok)' },
+              ].map((col, i) => (
+                <div
+                  key={i}
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '10px 8px',
+                    borderRight: '1px solid var(--border)',
+                    background: 'var(--surface-2)',
+                  }}
+                >
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{col.label}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: col.color }}>
+                    ₹{parseFloat(col.val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
                 </div>
+              ))}
+              <div style={{ flex: 1, textAlign: 'center', padding: '10px 8px', background: 'var(--surface-2)' }}>
+                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</div>
+                <PaymentStatusBadge status={paymentSummary.payment_status} />
               </div>
-            ))}
-            <div style={{ flex: 1, textAlign: 'center', padding: '10px 8px', background: 'var(--surface-2)' }}>
-              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Status</div>
-              <span
-                style={{
-                  display: 'inline-block',
-                  padding: '2px 10px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  background: paymentSummary.payment_status === 'paid' ? 'var(--ok-bg)' : paymentSummary.payment_status === 'partially_paid' ? 'var(--warn-bg)' : 'var(--danger-bg)',
-                  color: paymentSummary.payment_status === 'paid' ? 'var(--ok-text)' : paymentSummary.payment_status === 'partially_paid' ? 'var(--warn-text)' : 'var(--danger-text)',
-                }}
-              >
-                {paymentSummary.payment_status === 'paid' ? 'Paid' : paymentSummary.payment_status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}
-              </span>
             </div>
+            {parseFloat(paymentSummary.not_invoiced_value) > 0.005 && (
+              <p className="hint-text" style={{ margin: '6px 0 0' }}>
+                ₹{parseFloat(paymentSummary.not_invoiced_value).toFixed(2)} of goods received has no supplier invoice yet.
+                Add the supplier's bill from the supplier page, then pay against it.
+              </p>
+            )}
           </div>
         )}
 
@@ -981,7 +980,8 @@ function DetailModal({
                           fontWeight: 600,
                         }}
                       >
-                        {ri.product_name}: {ri.qty_received}
+                        {ri.product_name}: {ri.qty_accepted ?? ri.qty_received}
+                        {parseFloat(ri.qty_rejected) > 0 ? ` (+${ri.qty_rejected} rejected)` : ''}
                         {ri.expiry_date ? ` · exp ${ri.expiry_date}` : ''}
                       </span>
                     ))}
@@ -1005,13 +1005,9 @@ function DetailModal({
               <IconEdit size={14} /> {t('common.edit')}
             </button>
           )}
-          {canPay && paymentSummary && parseFloat(paymentSummary.outstanding) > 0.005 && (
-            <button
-              className="btn-primary"
-              style={{ background: 'linear-gradient(180deg,#7c3aed,#6d28d9)', borderColor: '#5b21b6' }}
-              onClick={onPayment}
-            >
-              💳 Record Payment
+          {canPay && (
+            <button className="btn-secondary" onClick={onOpenInvoices}>
+              Supplier invoices &amp; payments →
             </button>
           )}
           {canReceive && (
@@ -1057,13 +1053,14 @@ function ReceiveModal({
   const today = new Date().toISOString().slice(0, 16);
   const [receivedAt, setReceivedAt] = useState(today);
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<{ item: PurchaseOrderItemOut; qty: string; expiry: string; batch: string }[]>(
+  const [lines, setLines] = useState<{ item: PurchaseOrderItemOut; qty: string; rejected: string; expiry: string; batch: string }[]>(
     () =>
       po.items
         .filter((i) => parseFloat(i.received_qty) < parseFloat(i.ordered_qty))
         .map((i) => ({
           item: i,
           qty: (parseFloat(i.ordered_qty) - parseFloat(i.received_qty)).toFixed(3),
+          rejected: '',
           expiry: '',
           batch: '',
         })),
@@ -1072,11 +1069,15 @@ function ReceiveModal({
   const [err, setErr] = useState('');
 
   async function submit() {
+    const wrong = lines.find((l) => (parseFloat(l.rejected) || 0) > (parseFloat(l.qty) || 0));
+    if (wrong) { setErr(`${wrong.item.product_name}: rejected can't be more than what arrived.`); return; }
     const items: GoodsReceiptItemPayload[] = lines
       .filter((l) => parseFloat(l.qty) > 0)
       .map((l) => ({
         purchase_order_item_id: l.item.id,
         qty_received: parseFloat(l.qty),
+        // Rejected / damaged goods: not stocked, not paid for, still owed by the supplier.
+        qty_rejected: parseFloat(l.rejected) || 0,
         expiry_date: l.expiry || null,
         batch_number: l.batch || null,
       }));
@@ -1148,6 +1149,7 @@ function ReceiveModal({
                 <tr>
                   <th>{t('purchases.colProduct')}</th>
                   <th className="num">{t('purchases.receiveQty')}</th>
+                  <th className="num" title="Not added to stock, not paid for; the supplier still owes them">Rejected / damaged</th>
                   <th>Batch No.</th>
                   <th>{t('purchases.expiryDate')}</th>
                 </tr>
@@ -1178,6 +1180,27 @@ function ReceiveModal({
                           }
                           style={{ padding: '5px 8px', minHeight: 34, width: 100 }}
                         />
+                      </td>
+                      <td>
+                        <input
+                          className="field-input"
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={l.rejected}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setLines((prev) =>
+                              prev.map((x, i) => i === idx ? { ...x, rejected: e.target.value } : x)
+                            )
+                          }
+                          style={{ padding: '5px 8px', minHeight: 34, width: 90 }}
+                        />
+                        {(parseFloat(l.rejected) || 0) > 0 && (
+                          <div style={{ fontSize: 11, color: 'var(--muted)' }}>
+                            To stock: {Math.max((parseFloat(l.qty) || 0) - (parseFloat(l.rejected) || 0), 0).toFixed(3)}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <input
@@ -1264,152 +1287,6 @@ function ConfirmModal({
             disabled={loading}
           >
             {loading ? 'Please wait…' : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Record Payment modal ──────────────────────────────────────────────────────
-
-function RecordPaymentModal({
-  po,
-  summary,
-  onClose,
-  onSaved,
-}: {
-  po: PurchaseOrderOut;
-  summary: POPaymentSummary;
-  onClose: () => void;
-  onSaved: (s: POPaymentSummary) => void;
-}) {
-  const outstanding = parseFloat(summary.outstanding);
-  const [amount, setAmount] = useState(outstanding.toFixed(2));
-  const [method, setMethod] = useState<QuickPaymentPayload['payment_method']>('cash');
-  const [reference, setReference] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-
-  function fmt(v: string) {
-    return parseFloat(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  async function submit() {
-    const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { setErr('Enter a valid amount.'); return; }
-    if (amt > outstanding + 0.01) { setErr(`Amount exceeds outstanding ₹${fmt(summary.outstanding)}`); return; }
-    setSaving(true); setErr('');
-    try {
-      const r = await purchaseApi.quickPayment(po.id, {
-        amount: amt,
-        payment_method: method,
-        reference_number: reference || null,
-        payment_date: paymentDate,
-        notes: notes || null,
-      });
-      onSaved(r.data);
-    } catch (e) {
-      setErr(getErrorMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-box"
-        style={{ maxWidth: 480, width: '95%' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div>
-            <p className="modal-subtitle">{po.po_number} · {po.supplier_name}</p>
-            <h3 className="modal-title" style={{ margin: 0 }}>Record Payment</h3>
-          </div>
-          <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
-        </div>
-
-        <div className="modal-form">
-          {/* Summary bar */}
-          <div style={{ display: 'flex', gap: 0, marginBottom: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-            {[
-              { label: 'Invoice Total', val: summary.grand_total, color: 'var(--text)' },
-              { label: 'Already Paid', val: summary.total_paid, color: 'var(--ok)' },
-              { label: 'Outstanding', val: summary.outstanding, color: '#d97706' },
-            ].map((col, i) => (
-              <div
-                key={i}
-                style={{ flex: 1, textAlign: 'center', padding: '10px 8px', borderRight: i < 2 ? '1px solid var(--border)' : undefined, background: 'var(--surface-2)' }}
-              >
-                <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{col.label}</div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: col.color }}>₹{fmt(col.val)}</div>
-              </div>
-            ))}
-          </div>
-
-          {err && <div className="page-error">{err}</div>}
-
-          <div className="form-row">
-            <label className="field-label">
-              Amount (₹) *
-              <input
-                className="field-input"
-                type="number"
-                min="0.01"
-                step="0.01"
-                max={outstanding}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </label>
-            <label className="field-label">
-              Payment Method
-              <select className="field-input" value={method} onChange={(e) => setMethod(e.target.value as QuickPaymentPayload['payment_method'])}>
-                <option value="cash">Cash</option>
-                <option value="bank_transfer">Bank Transfer / NEFT / RTGS</option>
-                <option value="upi">UPI</option>
-                <option value="cheque">Cheque</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label className="field-label">
-              Payment Date
-              <input
-                className="field-input"
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-              />
-            </label>
-            <label className="field-label">
-              Reference / UTR / Cheque No.
-              <input
-                className="field-input"
-                value={reference}
-                placeholder="Transaction ID"
-                onChange={(e) => setReference(e.target.value)}
-              />
-            </label>
-            <label className="field-label" style={{ gridColumn: '1 / -1' }}>
-              Notes
-              <textarea
-                className="field-input"
-                rows={2}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="modal-buttons">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn-primary" onClick={submit} disabled={saving || outstanding <= 0}>
-            {saving ? 'Recording…' : 'Record Payment'}
           </button>
         </div>
       </div>
@@ -1644,6 +1521,7 @@ function PaymentHistoryModal({
 
 export function PurchasesPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   const [dash, setDash] = useState<PurchaseDashboard | null>(null);
   const [items, setItems] = useState<PurchaseOrderOut[]>([]);
@@ -1658,12 +1536,10 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<SupplierOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
 
-  type ModalKind = 'create' | 'edit' | 'detail' | 'receive' | 'record-payment' | 'payment-history' | 'place-confirm' | 'cancel-confirm' | null;
+  type ModalKind = 'create' | 'edit' | 'detail' | 'receive' | 'payment-history' | 'place-confirm' | 'cancel-confirm' | null;
   const [modal, setModal] = useState<ModalKind>(null);
   const [selected, setSelected] = useState<PurchaseOrderOut | null>(null);
   const [actioning, setActioning] = useState(false);
-  const [detailRefresh, setDetailRefresh] = useState(0);
-  const [activeSummary, setActiveSummary] = useState<POPaymentSummary | null>(null);
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -2019,19 +1895,15 @@ export function PurchasesPage() {
 
       {modal === 'detail' && selected && (
         <DetailModal
-          key={`detail-${selected.id}-${detailRefresh}`}
+          key={`detail-${selected.id}`}
           po={selected}
           stores={stores}
-          onClose={() => { setModal(null); setSelected(null); setActiveSummary(null); }}
+          onClose={() => { setModal(null); setSelected(null); }}
           onEdit={() => setModal('edit')}
           onPlace={() => setModal('place-confirm')}
           onCancel={() => setModal('cancel-confirm')}
           onReceive={() => setModal('receive')}
-          onPayment={() => {
-            purchaseApi.getPaymentSummary(selected.id)
-              .then((r) => { setActiveSummary(r.data); setModal('record-payment'); })
-              .catch(() => setModal('record-payment'));
-          }}
+          onOpenInvoices={() => navigate(`/admin/suppliers/${selected.supplier_id}?tab=invoices`)}
         />
       )}
 
@@ -2042,21 +1914,6 @@ export function PurchasesPage() {
           onSaved={() => {
             setModal(null);
             setSelected(null);
-            load(page, search, statusFilter, paymentFilter);
-            loadDash();
-          }}
-        />
-      )}
-
-      {modal === 'record-payment' && selected && activeSummary && (
-        <RecordPaymentModal
-          po={selected}
-          summary={activeSummary}
-          onClose={() => { setModal('detail'); setActiveSummary(null); }}
-          onSaved={() => {
-            setModal('detail');
-            setActiveSummary(null);
-            setDetailRefresh((r) => r + 1);
             load(page, search, statusFilter, paymentFilter);
             loadDash();
           }}

@@ -54,5 +54,12 @@ class SupplierPaymentOut(BaseModel):
     is_voided: bool
     voided_at: datetime | None
     allocations: list[PaymentAllocationOut] = []
+    unallocated_amount: Decimal = Decimal("0")  # advance not yet applied to an invoice
     created_at: datetime
     updated_at: datetime
+
+
+class ApplyAdvanceIn(BaseModel):
+    """Put (part of) an advance against invoices that arrived later."""
+
+    allocations: list[PaymentAllocationIn] = Field(..., min_length=1)

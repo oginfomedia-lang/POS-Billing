@@ -9,10 +9,10 @@ from sqlalchemy import func
 
 from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError, ValidationError
 from app.extensions import db
-from app.models.enums import InventoryTxnType, PurchaseStatus, SupplierInvoiceStatus, SupplierPaymentMethod
+from app.models.enums import InventoryTxnType, PurchaseStatus, SupplierInvoiceStatus
 from app.models.purchase import GoodsReceipt, GoodsReceiptItem, PurchaseOrder, PurchaseOrderItem
 from app.models.supplier import Supplier
-from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation
 from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository
@@ -28,7 +28,7 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderCreate,
     PurchaseOrderOut,
     PurchaseOrderUpdate,
-    QuickPaymentIn,
+    SupplierGRNOut,
 )
 from app.services import audit_service
 from app.utils.transactions import transaction
@@ -86,40 +86,111 @@ def _recalc_totals(po: PurchaseOrder) -> None:
     po.grand_total = subtotal - disc_total + tax_total + shipping + other
 
 
-def _get_invoice_map(po_ids: list[int]) -> dict[int, SupplierInvoice]:
-    if not po_ids:
-        return {}
-    return {
-        inv.purchase_order_id: inv
-        for inv in db.session.scalars(
-            db.select(SupplierInvoice).where(SupplierInvoice.purchase_order_id.in_(po_ids))
-        ).all()
+def grn_value(receipt: GoodsReceipt) -> Decimal:
+    """Value of the goods accepted on a GRN at the PO rates: qty × rate − line discount + GST.
+
+    Accepted qty (rejected / damaged goods aren't paid for); same arithmetic as the PO lines (_calc_line).
+    """
+    total = Decimal("0")
+    for item in receipt.receipt_items:
+        poi = item.purchase_order_item
+        qty = item.qty_accepted if item.qty_accepted is not None else item.qty_received
+        gross, disc, tax = _calc_line(qty, poi.unit_price, poi.discount_percent, poi.tax_rate)
+        total += gross - disc + tax
+    return total
+
+
+def _po_money_map(po_ids: list[int]) -> dict[int, dict]:
+    """Per PO: what its supplier invoices add up to (cancelled invoices left out)."""
+    money = {
+        pid: {"invoiced": Decimal("0"), "payable": Decimal("0"), "paid": Decimal("0"),
+              "invoice_count": 0, "overdue": False}
+        for pid in po_ids
     }
+    if not po_ids:
+        return money
+    invoices = db.session.scalars(
+        db.select(SupplierInvoice)
+        .where(SupplierInvoice.purchase_order_id.in_(po_ids))
+        .where(SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED)
+    ).all()
+    for inv in invoices:
+        m = money[inv.purchase_order_id]
+        payable, paid = Decimal(str(inv.payable_amount)), Decimal(str(inv.amount_paid))
+        m["invoiced"] += Decimal(str(inv.grand_total))
+        m["payable"] += payable
+        m["paid"] += paid
+        m["invoice_count"] += 1
+        if inv.due_date and inv.due_date < date.today() and paid < payable:
+            m["overdue"] = True
+    return money
 
 
-def _enrich_po(po: PurchaseOrder, invoice: SupplierInvoice | None = None) -> PurchaseOrderOut:
+def _payment_status(payable: Decimal, paid: Decimal, invoice_count: int, overdue: bool) -> str:
+    if invoice_count == 0:
+        return "not_invoiced"
+    if paid >= payable - Decimal("0.01"):
+        return "paid"
+    if overdue:
+        return "overdue"
+    return "partially_paid" if paid > 0 else "unpaid"
+
+
+def _enrich_po(po: PurchaseOrder, money: dict | None = None) -> PurchaseOrderOut:
+    """PO plus its money: received value (GRNs), invoiced, payable, paid and balance (payable − paid)."""
     out = PurchaseOrderOut.model_validate(po)
     if po.supplier:
         out.supplier_name = po.supplier.company_name
     if po.created_by:
         out.created_by_name = po.created_by.full_name or po.created_by.username
-    grand = Decimal(str(po.grand_total))
-    if invoice is not None:
-        paid = Decimal(str(invoice.amount_paid))
-        outstanding = max(grand - paid, Decimal("0"))
-        out.amount_paid = paid
-        out.outstanding_amount = outstanding
-        if outstanding <= Decimal("0.01"):
-            out.payment_status = "paid"
-        elif invoice.due_date and invoice.due_date < date.today():
-            out.payment_status = "overdue"
-        elif paid > Decimal("0"):
-            out.payment_status = "partially_paid"
-        else:
-            out.payment_status = "unpaid"
-    else:
-        out.outstanding_amount = grand
-        out.payment_status = "unpaid"
+    if money is None:
+        money = _po_money_map([po.id])[po.id]
+    invoiced_grns = set(db.session.scalars(
+        db.select(SupplierInvoiceGRN.goods_receipt_id)
+        .join(GoodsReceipt, SupplierInvoiceGRN.goods_receipt_id == GoodsReceipt.id)
+        .where(GoodsReceipt.purchase_order_id == po.id)
+    ))
+    received = not_invoiced = Decimal("0")
+    for receipt in po.receipts:
+        value = grn_value(receipt)
+        received += value
+        if receipt.id not in invoiced_grns:
+            not_invoiced += value
+    out.received_value = received
+    out.not_invoiced_value = not_invoiced
+    out.invoiced_amount = money["invoiced"]
+    out.payable_amount = money["payable"]
+    out.amount_paid = money["paid"]
+    out.outstanding_amount = max(money["payable"] - money["paid"], Decimal("0"))
+    out.payment_status = _payment_status(money["payable"], money["paid"], money["invoice_count"], money["overdue"])
+    return out
+
+
+def supplier_grns(supplier_id: int, uninvoiced_only: bool = False) -> list[SupplierGRNOut]:
+    """Every GRN of the supplier with its value and the invoice it is billed on (if any)."""
+    rows = db.session.execute(
+        db.select(GoodsReceipt, PurchaseOrder, SupplierInvoice)
+        .join(PurchaseOrder, GoodsReceipt.purchase_order_id == PurchaseOrder.id)
+        .outerjoin(SupplierInvoiceGRN, SupplierInvoiceGRN.goods_receipt_id == GoodsReceipt.id)
+        .outerjoin(SupplierInvoice, SupplierInvoice.id == SupplierInvoiceGRN.supplier_invoice_id)
+        .where(PurchaseOrder.supplier_id == supplier_id)
+        .order_by(GoodsReceipt.received_at.desc(), GoodsReceipt.id.desc())
+    ).all()
+    out = []
+    for receipt, po, invoice in rows:
+        if uninvoiced_only and invoice is not None:
+            continue
+        out.append(SupplierGRNOut(
+            id=receipt.id,
+            receipt_number=receipt.receipt_number,
+            purchase_order_id=po.id,
+            po_number=po.po_number,
+            received_at=receipt.received_at,
+            value=grn_value(receipt),
+            item_count=len(receipt.receipt_items),
+            invoice_id=invoice.id if invoice else None,
+            invoice_number=invoice.invoice_number if invoice else None,
+        ))
     return out
 
 
@@ -153,19 +224,14 @@ def get_dashboard() -> PurchaseDashboard:
     received = counts.get("received", 0)
     cancelled = counts.get("cancelled", 0)
 
+    # Money is owed on supplier invoices (payable = goods received), not on the PO amount.
+    live_invoices = SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED
     total_paid_row = db.session.scalar(
-        db.select(func.coalesce(func.sum(SupplierInvoice.amount_paid), 0))
-        .where(SupplierInvoice.purchase_order_id.isnot(None))
+        db.select(func.coalesce(func.sum(SupplierInvoice.amount_paid), 0)).where(live_invoices)
     ) or Decimal("0")
-
-    # total_due: sum of grand_total for non-cancelled POs minus allocated payments
     total_due_row = db.session.scalar(
-        db.select(
-            func.coalesce(func.sum(PurchaseOrder.grand_total), 0)
-            - func.coalesce(func.sum(SupplierInvoice.amount_paid), 0)
-        )
-        .outerjoin(SupplierInvoice, SupplierInvoice.purchase_order_id == PurchaseOrder.id)
-        .where(PurchaseOrder.status != PurchaseStatus.CANCELLED)
+        db.select(func.coalesce(func.sum(SupplierInvoice.payable_amount - SupplierInvoice.amount_paid), 0))
+        .where(live_invoices)
     ) or Decimal("0")
 
     return PurchaseDashboard(
@@ -220,22 +286,15 @@ def list_purchase_orders(
     if date_to:
         q = q.where(PurchaseOrder.purchase_date <= date_to)
 
-    if payment_filter == "has_outstanding":
-        q = (
-            q.outerjoin(SupplierInvoice, SupplierInvoice.purchase_order_id == PurchaseOrder.id)
-            .where(PurchaseOrder.status != PurchaseStatus.CANCELLED)
-            .where(
-                db.or_(
-                    SupplierInvoice.id.is_(None),
-                    (PurchaseOrder.grand_total - SupplierInvoice.amount_paid) > Decimal("0.01"),
-                )
-            )
-        )
+    live = db.select(SupplierInvoice.purchase_order_id).where(
+        SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED
+    )
+    if payment_filter == "has_outstanding":  # an invoice with something still to pay
+        q = q.where(PurchaseOrder.id.in_(
+            live.where(SupplierInvoice.payable_amount - SupplierInvoice.amount_paid > Decimal("0.01"))
+        ))
     elif payment_filter == "has_payments":
-        q = (
-            q.join(SupplierInvoice, SupplierInvoice.purchase_order_id == PurchaseOrder.id)
-            .where(SupplierInvoice.amount_paid > 0)
-        )
+        q = q.where(PurchaseOrder.id.in_(live.where(SupplierInvoice.amount_paid > 0)))
 
     total = db.session.scalar(db.select(func.count()).select_from(q.subquery()))
     items = list(db.session.scalars(q.offset((page - 1) * per_page).limit(per_page)).all())
@@ -490,19 +549,31 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
     # Index items for fast lookup
     item_map: dict[int, PurchaseOrderItem] = {i.id: i for i in po.items}
 
-    # Validate each receipt line before starting DB work
-    for ri in data.items:
+    # Validate each receipt line before starting DB work.
+    # Of what arrived, rejected / damaged goods don't go into stock, aren't paid for, and stay outstanding
+    # on the PO (the supplier can send replacements); accepted = arrived − rejected − damaged.
+    accepted: dict[int, Decimal] = {}
+    for n, ri in enumerate(data.items):
         poi = item_map.get(ri.purchase_order_item_id)
         if poi is None:
             raise ValidationError(
                 f"Item {ri.purchase_order_item_id} does not belong to PO {po.po_number}."
             )
         outstanding = Decimal(str(poi.ordered_qty)) - Decimal(str(poi.received_qty))
-        if Decimal(str(ri.qty_received)) > outstanding:
+        arrived = Decimal(str(ri.qty_received))
+        if arrived > outstanding:
             raise ValidationError(
                 f"Cannot receive {ri.qty_received} of '{poi.product_name}': "
                 f"only {outstanding} outstanding."
             )
+        bad = Decimal(str(ri.qty_rejected)) + Decimal(str(ri.qty_damaged))
+        good = Decimal(str(ri.qty_accepted)) if ri.qty_accepted is not None else arrived - bad
+        if good < 0 or good + bad != arrived:
+            raise ValidationError(
+                f"'{poi.product_name}': accepted ({good}) + rejected/damaged ({bad}) must equal the "
+                f"quantity that arrived ({arrived})."
+            )
+        accepted[n] = good
 
     inv_repo = InventoryRepository()
 
@@ -517,16 +588,17 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
         db.session.add(receipt)
         db.session.flush()  # get receipt.id
 
-        for ri in data.items:
+        for n, ri in enumerate(data.items):
             poi = item_map[ri.purchase_order_item_id]
             qty = Decimal(str(ri.qty_received))
+            good = accepted[n]
 
             gr_item = GoodsReceiptItem(
                 goods_receipt_id=receipt.id,
                 purchase_order_item_id=poi.id,
                 product_id=poi.product_id,
                 qty_received=qty,
-                qty_accepted=ri.qty_accepted if ri.qty_accepted is not None else qty,
+                qty_accepted=good,
                 qty_rejected=ri.qty_rejected,
                 qty_damaged=ri.qty_damaged,
                 batch_number=ri.batch_number,
@@ -536,18 +608,23 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
             )
             db.session.add(gr_item)
 
-            poi.received_qty = Decimal(str(poi.received_qty)) + qty
+            # Only good goods count as delivered: rejected ones are still owed by the supplier.
+            poi.received_qty = Decimal(str(poi.received_qty)) + good
 
-            # Update inventory
-            inv_row = inv_repo.lock_or_create(po.store_id, poi.product_id)
-            inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + qty
-            inv_repo.add_transaction(
-                po.store_id, poi.product_id,
-                InventoryTxnType.PURCHASE, qty,
-                reference_id=receipt.id,
-                notes=f"Goods receipt {receipt.receipt_number}",
-                expiry_date=ri.expiry_date,
-            )
+            # Stock: accepted goods only
+            if good > 0:
+                inv_row = inv_repo.lock_or_create(po.store_id, poi.product_id)
+                inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + good
+                note = f"Goods receipt {receipt.receipt_number}"
+                if good != qty:
+                    note += f" ({qty - good} rejected/damaged not stocked)"
+                inv_repo.add_transaction(
+                    po.store_id, poi.product_id,
+                    InventoryTxnType.PURCHASE, good,
+                    reference_id=receipt.id,
+                    notes=note,
+                    expiry_date=ri.expiry_date,
+                )
 
         # Update PO status based on whether everything is received
         all_received = all(
@@ -568,194 +645,83 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
     return receipt
 
 
-# ── Payment summary ───────────────────────────────────────────────────────────
+# ── Payment summary (from the PO's supplier invoices; payments are made on the invoices) ──
+
+def _po_invoices(po_id: int) -> list[SupplierInvoice]:
+    return list(db.session.scalars(
+        db.select(SupplierInvoice)
+        .where(SupplierInvoice.purchase_order_id == po_id)
+        .where(SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED)
+        .order_by(SupplierInvoice.invoice_date, SupplierInvoice.id)
+    ).all())
+
 
 def get_payment_summary(po_id: int) -> POPaymentSummary:
     po = get_purchase_order(po_id)
-    invoice = db.session.scalar(
-        db.select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == po_id)
-    )
-    grand = Decimal(str(po.grand_total))
-    if invoice is None:
-        return POPaymentSummary(
-            po_id=po_id,
-            grand_total=grand,
-            total_paid=Decimal("0"),
-            outstanding=grand,
-            invoice_count=0,
-            payment_status="unpaid",
-            invoice_id=None,
-        )
-    paid = Decimal(str(invoice.amount_paid))
-    outstanding = grand - paid
-    if paid <= 0:
-        status = "unpaid"
-    elif outstanding <= Decimal("0.01"):
-        status = "paid"
-    else:
-        status = "partially_paid"
+    enriched = _enrich_po(po)
+    invoices = _po_invoices(po_id)
     return POPaymentSummary(
         po_id=po_id,
-        grand_total=grand,
-        total_paid=paid,
-        outstanding=max(outstanding, Decimal("0")),
-        invoice_count=1,
-        payment_status=status,
-        invoice_id=invoice.id,
+        grand_total=Decimal(str(po.grand_total)),
+        received_value=enriched.received_value,
+        not_invoiced_value=enriched.not_invoiced_value,
+        invoiced_amount=enriched.invoiced_amount,
+        payable_amount=enriched.payable_amount,
+        total_paid=enriched.amount_paid,
+        outstanding=enriched.outstanding_amount,
+        invoice_count=len(invoices),
+        payment_status=enriched.payment_status,
+        invoice_id=invoices[0].id if invoices else None,
+        invoice_ids=[i.id for i in invoices],
     )
 
-
-# ── Quick payment ─────────────────────────────────────────────────────────────
-
-def quick_payment(po_id: int, data: QuickPaymentIn, actor) -> POPaymentSummary:
-    po = get_purchase_order(po_id)
-    amount = Decimal(str(data.amount))
-    pdate = data.payment_date or date.today()
-
-    with transaction():
-        invoice = db.session.scalar(
-            db.select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == po_id)
-        )
-        if invoice is None:
-            invoice = SupplierInvoice(
-                supplier_id=po.supplier_id,
-                purchase_order_id=po.id,
-                store_id=po.store_id,
-                invoice_number=f"INV-{po.po_number}",
-                invoice_date=pdate,
-                subtotal=po.subtotal,
-                tax_amount=po.tax_amount,
-                other_charges=po.other_charges or Decimal("0"),
-                grand_total=po.grand_total,
-                amount_paid=Decimal("0"),
-                payment_status=SupplierInvoiceStatus.UNPAID,
-                created_by_id=actor.id if actor else None,
-            )
-            db.session.add(invoice)
-            db.session.flush()
-
-        outstanding = Decimal(str(invoice.grand_total)) - Decimal(str(invoice.amount_paid))
-        if amount > outstanding:
-            raise BadRequestError(
-                f"Cannot pay ₹{amount} — only ₹{outstanding} outstanding on this invoice."
-            )
-
-        payment = SupplierPayment(
-            supplier_id=po.supplier_id,
-            store_id=po.store_id,
-            payment_date=pdate,
-            amount=amount,
-            payment_method=SupplierPaymentMethod(data.payment_method),
-            reference_number=data.reference_number,
-            notes=data.notes,
-            created_by_id=actor.id if actor else None,
-        )
-        db.session.add(payment)
-        db.session.flush()
-
-        db.session.add(SupplierPaymentAllocation(
-            payment_id=payment.id,
-            invoice_id=invoice.id,
-            allocated_amount=amount,
-        ))
-
-        new_paid = Decimal(str(invoice.amount_paid)) + amount
-        invoice.amount_paid = new_paid
-        remaining = Decimal(str(invoice.grand_total)) - new_paid
-        invoice.payment_status = (
-            SupplierInvoiceStatus.PAID
-            if remaining <= Decimal("0.01")
-            else SupplierInvoiceStatus.PARTIALLY_PAID
-        )
-
-        audit_service.log(
-            actor, "purchase.quick_payment", "purchase_order", po.id,
-            {"grand_total": str(po.grand_total)},
-            {"payment_amount": str(amount), "invoice_id": invoice.id},
-        )
-
-    return get_payment_summary(po_id)
-
-
-# ── Payment history ──────────────────────────────────────────────────────────
 
 def get_payment_history(po_id: int) -> POPaymentHistoryOut:
+    """Payments made on this PO's invoices, oldest first, with the running balance."""
     po = get_purchase_order(po_id)
-    supplier_name = po.supplier.company_name if po.supplier else ""
-    grand = Decimal(str(po.grand_total))
-
-    invoice = db.session.scalar(
-        db.select(SupplierInvoice).where(SupplierInvoice.purchase_order_id == po_id)
-    )
-
-    if invoice is None:
-        return POPaymentHistoryOut(
-            po_id=po_id,
-            po_number=po.po_number,
-            supplier_name=supplier_name,
-            grand_total=grand,
-            total_paid=Decimal("0"),
-            outstanding=grand,
-            payment_status="unpaid",
-            invoice_number=None,
-            invoice_id=None,
-            entries=[],
-        )
-
-    # Load all allocations for this invoice, with their payments, sorted by date then id
-    allocations = db.session.execute(
+    summary = get_payment_summary(po_id)
+    invoices = {i.id: i for i in _po_invoices(po_id)}
+    rows = db.session.execute(
         db.select(SupplierPaymentAllocation, SupplierPayment)
         .join(SupplierPayment, SupplierPaymentAllocation.payment_id == SupplierPayment.id)
-        .where(SupplierPaymentAllocation.invoice_id == invoice.id)
-        .order_by(SupplierPayment.payment_date.asc(), SupplierPayment.id.asc())
+        .where(SupplierPaymentAllocation.invoice_id.in_(list(invoices) or [0]))
+        .order_by(SupplierPayment.payment_date.asc(), SupplierPayment.id.asc(), SupplierPaymentAllocation.id.asc())
     ).all()
 
     entries: list[POPaymentEntry] = []
     running = Decimal("0")
-    for alloc, payment in allocations:
+    for alloc, payment in rows:
         allocated = Decimal(str(alloc.allocated_amount))
         if not payment.is_voided:
             running += allocated
-        balance = max(grand - running, Decimal("0"))
-        method = (
-            payment.payment_method.value
-            if hasattr(payment.payment_method, "value")
-            else str(payment.payment_method)
-        )
-        created_by_name = ""
-        if payment.created_by:
-            created_by_name = payment.created_by.full_name or payment.created_by.username or ""
+        created_by = payment.created_by
         entries.append(POPaymentEntry(
             payment_id=payment.id,
             payment_date=payment.payment_date,
             amount=Decimal(str(payment.amount)),
             allocated_amount=allocated,
-            payment_method=method,
+            payment_method=getattr(payment.payment_method, "value", str(payment.payment_method)),
             reference_number=payment.reference_number,
             notes=payment.notes,
             is_voided=payment.is_voided,
-            created_by_name=created_by_name,
+            created_by_name=(created_by.full_name or created_by.username or "") if created_by else "",
             running_total_paid=running,
-            balance_after=balance,
+            balance_after=max(summary.payable_amount - running, Decimal("0")),
+            invoice_number=invoices[alloc.invoice_id].invoice_number,
         ))
 
-    paid = Decimal(str(invoice.amount_paid))
-    outstanding = max(grand - paid, Decimal("0"))
-    status_val = (
-        invoice.payment_status.value
-        if hasattr(invoice.payment_status, "value")
-        else str(invoice.payment_status)
-    )
+    first = next(iter(invoices.values()), None)
     return POPaymentHistoryOut(
         po_id=po_id,
         po_number=po.po_number,
-        supplier_name=supplier_name,
-        grand_total=grand,
-        total_paid=paid,
-        outstanding=outstanding,
-        payment_status=status_val,
-        invoice_number=invoice.invoice_number,
-        invoice_id=invoice.id,
+        supplier_name=po.supplier.company_name if po.supplier else "",
+        grand_total=summary.grand_total,
+        payable_amount=summary.payable_amount,
+        total_paid=summary.total_paid,
+        outstanding=summary.outstanding,
+        payment_status=summary.payment_status,
+        invoice_number=", ".join(i.invoice_number for i in invoices.values()) or None,
+        invoice_id=first.id if first else None,
         entries=entries,
     )
 

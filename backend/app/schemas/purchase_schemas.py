@@ -93,10 +93,15 @@ class PurchaseOrderOut(BaseModel):
     items: list[PurchaseOrderItemOut] = []
     created_at: datetime
     updated_at: datetime
-    # Payment summary fields (enriched from linked invoice)
-    payment_status: str = "unpaid"
+    # Money, from the GRNs and the supplier invoices of this PO (payments are made on invoices).
+    # payment_status: not_invoiced / unpaid / partially_paid / overdue / paid
+    payment_status: str = "not_invoiced"
+    received_value: Decimal = Decimal("0")  # goods accepted on the GRNs, at PO rates
+    not_invoiced_value: Decimal = Decimal("0")  # received but no supplier invoice yet
+    invoiced_amount: Decimal = Decimal("0")  # invoice totals as the supplier billed them
+    payable_amount: Decimal = Decimal("0")  # what is owed: never more than the goods received
     amount_paid: Decimal = Decimal("0")
-    outstanding_amount: Decimal = Decimal("0")
+    outstanding_amount: Decimal = Decimal("0")  # payable − paid
 
 
 class GoodsReceiptItemCreate(BaseModel):
@@ -160,22 +165,33 @@ class PurchaseDashboard(BaseModel):
     total_due: Decimal = Decimal("0")
 
 
-class QuickPaymentIn(BaseModel):
-    amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
-    payment_method: str = "cash"
-    reference_number: str | None = Field(None, max_length=100)
-    payment_date: date | None = None
-    notes: str | None = None
+class SupplierGRNOut(BaseModel):
+    """A goods receipt on the supplier page: what it is worth and which invoice bills it."""
+
+    id: int
+    receipt_number: str
+    purchase_order_id: int
+    po_number: str
+    received_at: datetime
+    value: Decimal
+    item_count: int
+    invoice_id: int | None = None
+    invoice_number: str | None = None
 
 
 class POPaymentSummary(BaseModel):
     po_id: int
     grand_total: Decimal
+    received_value: Decimal = Decimal("0")
+    not_invoiced_value: Decimal = Decimal("0")
+    invoiced_amount: Decimal = Decimal("0")
+    payable_amount: Decimal = Decimal("0")
     total_paid: Decimal
     outstanding: Decimal
     invoice_count: int
     payment_status: str
     invoice_id: int | None
+    invoice_ids: list[int] = []
 
 
 class POPaymentEntry(BaseModel):
@@ -190,6 +206,7 @@ class POPaymentEntry(BaseModel):
     created_by_name: str
     running_total_paid: Decimal
     balance_after: Decimal
+    invoice_number: str = ""
 
 
 class POPaymentHistoryOut(BaseModel):
@@ -197,6 +214,7 @@ class POPaymentHistoryOut(BaseModel):
     po_number: str
     supplier_name: str
     grand_total: Decimal
+    payable_amount: Decimal = Decimal("0")
     total_paid: Decimal
     outstanding: Decimal
     payment_status: str

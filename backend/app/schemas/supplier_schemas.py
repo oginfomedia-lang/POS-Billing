@@ -203,13 +203,16 @@ class SupplierProductOut(BaseModel):
 class SupplierSummary(BaseModel):
     supplier_id: int
     total_po_value: float
-    total_received_value: float
-    total_invoiced: float
+    total_received_value: float  # goods accepted on all GRNs, at PO rates
+    not_invoiced_value: float = 0.0  # received but no supplier invoice entered yet
+    total_invoiced: float  # invoice totals as billed
+    total_payable: float = 0.0  # what is owed on those invoices (never more than the goods received)
     total_paid: float
-    outstanding_balance: float
-    advance_balance: float
+    outstanding_balance: float  # opening balance + payable − paid − unused advance (negative = advance left over)
+    advance_balance: float  # advance paid and not yet applied to an invoice
     overdue_amount: float
     invoice_count: int
+    disputed_count: int = 0  # invoices whose amount differs from the goods received
     payment_count: int
 
 

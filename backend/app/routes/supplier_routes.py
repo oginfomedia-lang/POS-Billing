@@ -12,7 +12,7 @@ from app.schemas.supplier_schemas import (
     SupplierProductUpdate,
     SupplierUpdate,
 )
-from app.services import supplier_service
+from app.services import purchase_service, supplier_service
 from app.utils.permissions import require_permission
 
 supplier_bp = Blueprint("suppliers", __name__)
@@ -109,6 +109,16 @@ def get_supplier_ledger(supplier_id: int):
         date_to=request.args.get("date_to"),
     )
     return jsonify([e.model_dump() for e in entries]), 200
+
+
+@supplier_bp.get("/suppliers/<int:supplier_id>/grns")
+@require_permission("purchases.read")
+def list_supplier_grns(supplier_id: int):
+    """Goods received from this supplier, with value and invoice. ?uninvoiced=1 = not billed yet."""
+    supplier_service.get_supplier(supplier_id)
+    uninvoiced = request.args.get("uninvoiced", "0").lower() in ("1", "true")
+    grns = purchase_service.supplier_grns(supplier_id, uninvoiced_only=uninvoiced)
+    return jsonify([g.model_dump(mode="json") for g in grns]), 200
 
 
 # ── Supplier-product mapping ──────────────────────────────────────────────────

@@ -1,7 +1,12 @@
-// Supplier detail page — tabbed view: Overview, Products, POs, GRNs, Invoices, Payments, Ledger
+// Supplier detail page — tabbed view: Overview, Products, POs, GRNs, Invoices, Payments, Ledger.
+// The admin enters the supplier's bills (Invoices) and pays against them (Payments); what is owed is
+// never more than the goods actually received (GRNs).
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { SupplierInvoiceDialog } from '../../components/admin/SupplierInvoiceDialog';
+import { SupplierInvoiceEditDialog } from '../../components/admin/SupplierInvoiceEditDialog';
+import { SupplierPaymentDialog } from '../../components/admin/SupplierPaymentDialog';
 import {
   IconArrowLeft,
   IconTruck,
@@ -23,7 +28,7 @@ import type {
   SupplierLedgerEntry,
   SupplierProductOut,
   PurchaseOrderOut,
-  GoodsReceiptOut,
+  SupplierGRNOut,
   SupplierInvoiceOut,
   SupplierPaymentOut,
   SupplierDocumentOut,
@@ -53,7 +58,7 @@ function InfoRow({ label, value }: { label: string; value?: string | number | nu
   );
 }
 
-function AmountBadge({ label, amount, variant }: { label: string; amount: string; variant?: 'danger' | 'success' | 'neutral' }) {
+function AmountBadge({ label, amount, variant }: { label: string; amount: string | number; variant?: 'danger' | 'success' | 'neutral' }) {
   const color = variant === 'danger' ? 'var(--color-danger)' : variant === 'success' ? 'var(--color-success)' : 'var(--color-text)';
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 16px', textAlign: 'center', minWidth: 140 }}>
@@ -70,7 +75,10 @@ export function SupplierDetailPage() {
   const navigate = useNavigate();
   const supplierId = Number(id);
 
-  const [tab, setTab] = useState<Tab>('overview');
+  // ?tab=invoices opens a tab directly (e.g. from a purchase order).
+  const [searchParams] = useSearchParams();
+  const initialTab = TABS.some((t) => t.key === searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'overview';
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [supplier, setSupplier] = useState<SupplierOut | null>(null);
   const [summary, setSummary] = useState<SupplierSummary | null>(null);
   const [error, setError] = useState('');
@@ -79,7 +87,12 @@ export function SupplierDetailPage() {
   // Tab data
   const [products, setProducts] = useState<SupplierProductOut[]>([]);
   const [pos, setPos] = useState<PurchaseOrderOut[]>([]);
-  const [grns, setGrns] = useState<GoodsReceiptOut[]>([]);
+  const [grns, setGrns] = useState<SupplierGRNOut[]>([]);
+  // Add-invoice / record-payment dialogs (undefined = closed; a number = preselected GRN / invoice).
+  const [invoiceDialog, setInvoiceDialog] = useState<{ grnId?: number } | null>(null);
+  const [paymentDialog, setPaymentDialog] = useState<{ invoiceId?: number; advance?: SupplierPaymentOut } | null>(null);
+  const [editInvoice, setEditInvoice] = useState<SupplierInvoiceOut | null>(null);
+  const [notice, setNotice] = useState('');
   const [invoices, setInvoices] = useState<SupplierInvoiceOut[]>([]);
   const [payments, setPayments] = useState<SupplierPaymentOut[]>([]);
   const [ledger, setLedger] = useState<SupplierLedgerEntry[]>([]);
@@ -110,6 +123,52 @@ export function SupplierDetailPage() {
     loadBase();
   }, [supplierId]);
 
+  /** After an invoice or payment is saved: fresh totals, and the money tabs reload when opened. */
+  async function refreshMoney() {
+    for (const t of ['grns', 'invoices', 'payments', 'ledger', 'pos'] as Tab[]) loadedTabs.current.delete(t);
+    loadTab(tab);
+    try {
+      setSummary((await supplierApi.getSummary(supplierId)).data);
+    } catch {
+      // the tables are still right; totals refresh next time
+    }
+  }
+
+  async function voidPayment(p: SupplierPaymentOut) {
+    if (!window.confirm(`Void this payment of ${formatCurrency(Number(p.amount))}? The invoices become unpaid by that much again.`)) return;
+    try {
+      await supplierPaymentApi.void(p.id);
+      setNotice('Payment voided.');
+      refreshMoney();
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    }
+  }
+
+  async function cancelInvoice(inv: SupplierInvoiceOut) {
+    const reason = window.prompt(`Cancel invoice ${inv.invoice_number}? Its goods receipts can then be billed on a correct invoice.\n\nReason:`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setTabError('A reason is needed to cancel an invoice.');
+      return;
+    }
+    try {
+      await supplierInvoiceApi.cancel(inv.id, reason.trim());
+      setNotice(`Invoice ${inv.invoice_number} cancelled.`);
+      refreshMoney();
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    }
+  }
+
+  async function openDoc(docId: number) {
+    try {
+      await uploadApi.open(docId);
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    }
+  }
+
   useEffect(() => {
     if (loadedTabs.current.has(tab)) return;
     loadTab(tab);
@@ -131,22 +190,12 @@ export function SupplierDetailPage() {
           break;
         }
         case 'grns': {
-          // Gather GRNs across POs: load POs first if not done, then load receipts
-          const posRes = await purchaseApi.list({ supplier_id: supplierId, per_page: 50 });
-          const allGrns: GoodsReceiptOut[] = [];
-          for (const po of posRes.data.items) {
-            try {
-              const gr = await purchaseApi.listReceipts(po.id);
-              allGrns.push(...gr.data);
-            } catch {
-              // PO might have no receipts
-            }
-          }
-          setGrns(allGrns);
+          const r = await supplierApi.listGrns(supplierId);
+          setGrns(r.data);
           break;
         }
         case 'invoices': {
-          const r = await supplierInvoiceApi.list({ supplier_id: supplierId, per_page: 50 });
+          const r = await supplierInvoiceApi.list({ supplier_id: supplierId, per_page: 100 });
           setInvoices(r.data.items);
           break;
         }
@@ -230,19 +279,36 @@ export function SupplierDetailPage() {
         </div>
       </div>
 
-      {/* Financial summary bar */}
+      {/* Financial summary: what was ordered, received, billed, owed and paid */}
       {summary && (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          <AmountBadge label="Total Invoiced" amount={summary.total_invoiced} />
-          <AmountBadge label="Total Paid" amount={summary.total_paid} variant="success" />
-          <AmountBadge label="Outstanding" amount={summary.outstanding} variant={Number(summary.outstanding) > 0 ? 'danger' : 'neutral'} />
-          <AmountBadge label="Overdue" amount={summary.overdue} variant={Number(summary.overdue) > 0 ? 'danger' : 'neutral'} />
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 16px', textAlign: 'center', minWidth: 120 }}>
-            <div style={{ fontSize: '1.1em', fontWeight: 700 }}>{summary.open_pos}</div>
-            <div style={{ fontSize: '0.8em', color: 'var(--color-text-muted)', marginTop: 2 }}>Open POs</div>
+        <>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+            <AmountBadge label="PO value" amount={summary.total_po_value} />
+            <AmountBadge label="Goods received (GRN)" amount={summary.total_received_value} />
+            <AmountBadge label="Invoiced (as billed)" amount={summary.total_invoiced} />
+            <AmountBadge label="Payable" amount={summary.total_payable} />
+            <AmountBadge label="Paid" amount={summary.total_paid} variant="success" />
+            <AmountBadge label="Balance to pay" amount={summary.outstanding_balance} variant={summary.outstanding_balance > 0 ? 'danger' : 'neutral'} />
+            {summary.advance_balance > 0 && <AmountBadge label="Unused advance" amount={summary.advance_balance} variant="success" />}
+            <AmountBadge label="Overdue" amount={summary.overdue_amount} variant={summary.overdue_amount > 0 ? 'danger' : 'neutral'} />
           </div>
-        </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
+            {summary.not_invoiced_value > 0 && (
+              <span className="hint-text">
+                Received but not invoiced yet: <strong>{formatCurrency(summary.not_invoiced_value)}</strong>{' '}
+                <button type="button" className="link-button" onClick={() => setInvoiceDialog({})}>Add invoice</button>
+              </span>
+            )}
+            {summary.disputed_count > 0 && (
+              <span className="barcode-badge badge-error">{summary.disputed_count} disputed invoice(s)</span>
+            )}
+            <span style={{ flex: 1 }} />
+            <button className="btn-secondary" onClick={() => setInvoiceDialog({})}><IconPlus size={13} /> Add invoice</button>
+            <button className="btn-primary" onClick={() => setPaymentDialog({})}>Record payment / advance</button>
+          </div>
+        </>
       )}
+      {notice && <div className="notice-bar">{notice}</div>}
 
       {/* Tab nav */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--color-border)', marginBottom: 16, flexWrap: 'wrap' }}>
@@ -333,9 +399,9 @@ export function SupplierDetailPage() {
                       <td style={{ whiteSpace: 'nowrap' }}>{formatDate(d.created_at)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <a className="btn-icon" href={uploadApi.downloadUrl(d.id)} target="_blank" rel="noreferrer" title="Download">
+                          <button className="btn-icon" onClick={() => openDoc(d.id)} title="Open">
                             <IconDownload size={14} />
-                          </a>
+                          </button>
                           <button className="btn-icon btn-icon-danger" onClick={() => handleDeleteDoc(d.id)} title="Delete">
                             <IconTrash size={14} />
                           </button>
@@ -438,26 +504,35 @@ export function SupplierDetailPage() {
             <thead>
               <tr>
                 <th>Receipt #</th>
-                <th>PO ID</th>
+                <th>PO</th>
                 <th>Received At</th>
-                <th>Received By</th>
                 <th>Items</th>
-                <th>Notes</th>
+                <th style={{ textAlign: 'right' }}>Value (accepted goods)</th>
+                <th>Invoice</th>
               </tr>
             </thead>
             <tbody>
               {grns.map((g) => (
                 <tr key={g.id}>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.receipt_number}</td>
-                  <td>{g.purchase_order_id}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.po_number}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(g.received_at)}</td>
-                  <td>{g.received_by_name}</td>
-                  <td>{g.receipt_items.length}</td>
-                  <td style={{ fontSize: '0.85em' }}>{g.notes ?? '—'}</td>
+                  <td>{g.item_count}</td>
+                  <td style={{ textAlign: 'right' }}>{formatCurrency(Number(g.value))}</td>
+                  <td>
+                    {g.invoice_number ? (
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.invoice_number}</span>
+                    ) : (
+                      <span>
+                        <span className="status-badge badge-warning">Not invoiced</span>{' '}
+                        <button type="button" className="link-button" onClick={() => setInvoiceDialog({ grnId: g.id })}>Add invoice</button>
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {grns.length === 0 && !tabLoading && (
-                <tr><td colSpan={6} className="empty-row">No goods receipts found.</td></tr>
+                <tr><td colSpan={6} className="empty-row">No goods received from this supplier yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -472,12 +547,15 @@ export function SupplierDetailPage() {
               <tr>
                 <th>Invoice #</th>
                 <th>Date</th>
-                <th>Due Date</th>
-                <th>Grand Total</th>
-                <th>Paid</th>
-                <th>Outstanding</th>
+                <th>Due</th>
+                <th>PO / GRNs</th>
+                <th style={{ textAlign: 'right' }}>Billed</th>
+                <th style={{ textAlign: 'right' }}>Payable</th>
+                <th style={{ textAlign: 'right' }}>Paid</th>
+                <th style={{ textAlign: 'right' }}>Balance</th>
                 <th>Status</th>
-                <th>Verification</th>
+                <th>Check</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -486,9 +564,17 @@ export function SupplierDetailPage() {
                   <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{inv.invoice_number}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(inv.invoice_date)}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                  <td style={{ fontSize: '0.82em' }}>
+                    {inv.po_number ?? '—'}
+                    {inv.grn_numbers.length > 0 && <div style={{ color: 'var(--muted)' }}>{inv.grn_numbers.join(', ')}</div>}
+                    {inv.is_legacy && <div style={{ color: 'var(--muted)' }}>old (no GRN)</div>}
+                  </td>
                   <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.grand_total))}</td>
+                  <td style={{ textAlign: 'right' }} title={inv.received_value !== null ? `Goods received: ${formatCurrency(Number(inv.received_value))}` : undefined}>
+                    {formatCurrency(Number(inv.payable_amount))}
+                  </td>
                   <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.amount_paid))}</td>
-                  <td style={{ textAlign: 'right', color: Number(inv.outstanding) > 0 ? 'var(--color-danger)' : undefined }}>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: Number(inv.outstanding) > 0 ? 'var(--danger-text)' : undefined }}>
                     {formatCurrency(Number(inv.outstanding))}
                   </td>
                   <td>
@@ -501,14 +587,36 @@ export function SupplierDetailPage() {
                     </span>
                   </td>
                   <td>
-                    <span className={`status-badge ${inv.verification_status === 'verified' ? 'badge-success' : inv.verification_status === 'disputed' ? 'badge-danger' : 'badge-neutral'}`}>
+                    <span
+                      className={`status-badge ${inv.verification_status === 'verified' ? 'badge-success' : inv.verification_status === 'disputed' ? 'badge-danger' : 'badge-neutral'}`}
+                      title={inv.difference_reason ?? undefined}
+                    >
                       {inv.verification_status}
                     </span>
+                    {inv.verification_status === 'disputed' && inv.difference !== null && (
+                      <div style={{ fontSize: '0.78em', color: 'var(--danger-text)' }}>diff {formatCurrency(Number(inv.difference))}</div>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {inv.document_id && (
+                      <button className="btn-icon" onClick={() => openDoc(inv.document_id!)} title="Open the bill">
+                        <IconFileText size={14} />
+                      </button>
+                    )}
+                    {Number(inv.outstanding) > 0 && inv.payment_status !== 'cancelled' && (
+                      <button className="btn-primary btn-compact" onClick={() => setPaymentDialog({ invoiceId: inv.id })}>Pay</button>
+                    )}
+                    {inv.payment_status !== 'paid' && inv.payment_status !== 'cancelled' && (
+                      <button type="button" className="link-button" style={{ marginLeft: 6 }} onClick={() => setEditInvoice(inv)}>Edit</button>
+                    )}
+                    {inv.payment_status !== 'cancelled' && Number(inv.amount_paid) === 0 && (
+                      <button type="button" className="link-button" style={{ marginLeft: 6 }} onClick={() => cancelInvoice(inv)}>Cancel</button>
+                    )}
                   </td>
                 </tr>
               ))}
               {invoices.length === 0 && !tabLoading && (
-                <tr><td colSpan={8} className="empty-row">No invoices found.</td></tr>
+                <tr><td colSpan={11} className="empty-row">No invoices yet. When the supplier's bill arrives, click "Add invoice".</td></tr>
               )}
             </tbody>
           </table>
@@ -534,7 +642,15 @@ export function SupplierDetailPage() {
               {payments.map((p) => (
                 <tr key={p.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.payment_date)}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{p.payment_type.replace('_', ' ')}</td>
+                  <td style={{ textTransform: 'capitalize' }}>
+                    {p.payment_type.replace('_', ' ')}
+                    {!p.is_voided && Number(p.unallocated_amount) > 0 && (
+                      <div style={{ textTransform: 'none', fontSize: '0.82em' }}>
+                        Unused {formatCurrency(Number(p.unallocated_amount))}{' '}
+                        <button type="button" className="link-button" onClick={() => setPaymentDialog({ advance: p })}>Apply</button>
+                      </div>
+                    )}
+                  </td>
                   <td style={{ textTransform: 'capitalize' }}>{p.payment_method.replace('_', ' ')}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(Number(p.amount))}</td>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{p.reference_number ?? '—'}</td>
@@ -547,10 +663,15 @@ export function SupplierDetailPage() {
                       </div>
                     ) : '—'}
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     {p.is_voided
                       ? <span className="status-badge badge-neutral">Voided</span>
-                      : <span className="status-badge badge-success">Active</span>}
+                      : (
+                        <>
+                          <span className="status-badge badge-success">Active</span>{' '}
+                          <button type="button" className="link-button" onClick={() => voidPayment(p)}>Void</button>
+                        </>
+                      )}
                   </td>
                 </tr>
               ))}
@@ -572,7 +693,7 @@ export function SupplierDetailPage() {
                 <th>Type</th>
                 <th>Reference</th>
                 <th>Description</th>
-                <th style={{ textAlign: 'right' }}>Debit (Invoice)</th>
+                <th style={{ textAlign: 'right' }}>Debit (Payable)</th>
                 <th style={{ textAlign: 'right' }}>Credit (Payment)</th>
                 <th style={{ textAlign: 'right' }}>Balance</th>
               </tr>
@@ -582,8 +703,8 @@ export function SupplierDetailPage() {
                 <tr key={idx}>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(entry.date)}</td>
                   <td style={{ textTransform: 'capitalize' }}>
-                    <span className={`status-badge ${entry.type === 'invoice' ? 'badge-warning' : 'badge-success'}`}>
-                      {entry.type}
+                    <span className={`status-badge ${entry.entry_type === 'invoice' ? 'badge-warning' : 'badge-success'}`}>
+                      {entry.entry_type}
                     </span>
                   </td>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.85em' }}>{entry.reference}</td>
@@ -611,6 +732,46 @@ export function SupplierDetailPage() {
             </tbody>
           </table>
         </div>
+      )}
+      {invoiceDialog && (
+        <SupplierInvoiceDialog
+          supplier={supplier}
+          preselectGrnId={invoiceDialog.grnId}
+          onClose={() => setInvoiceDialog(null)}
+          onSaved={(inv) => {
+            setInvoiceDialog(null);
+            setNotice(`Invoice ${inv.invoice_number} saved. Payable ${formatCurrency(Number(inv.payable_amount))}.`);
+            setTab('invoices');
+            refreshMoney();
+          }}
+        />
+      )}
+      {paymentDialog && (
+        <SupplierPaymentDialog
+          supplier={supplier}
+          preselectInvoiceId={paymentDialog.invoiceId}
+          applyAdvance={paymentDialog.advance}
+          onClose={() => setPaymentDialog(null)}
+          onSaved={(p) => {
+            const applied = Boolean(paymentDialog.advance);
+            setPaymentDialog(null);
+            setNotice(applied
+              ? `Advance applied. ${formatCurrency(Number(p.unallocated_amount))} of it is still unused.`
+              : `${p.payment_type === 'advance' ? 'Advance' : 'Payment'} of ${formatCurrency(Number(p.amount))} recorded.`);
+            refreshMoney();
+          }}
+        />
+      )}
+      {editInvoice && (
+        <SupplierInvoiceEditDialog
+          invoice={editInvoice}
+          onClose={() => setEditInvoice(null)}
+          onSaved={(inv) => {
+            setEditInvoice(null);
+            setNotice(`Invoice ${inv.invoice_number} updated. Payable ${formatCurrency(Number(inv.payable_amount))}.`);
+            refreshMoney();
+          }}
+        />
       )}
     </div>
   );

@@ -271,9 +271,14 @@ def get_products_for_po(supplier_id: int) -> list[dict]:
 # ── Financial summary ─────────────────────────────────────────────────────────
 
 def get_supplier_summary(supplier_id: int) -> SupplierSummary:
-    get_supplier(supplier_id)
+    """Money with this supplier. What is owed comes from the invoices' payable amounts (= goods received),
+    not from the PO amounts."""
+    supplier = get_supplier(supplier_id)
+    from datetime import date
+
+    from app.models.enums import InvoiceVerificationStatus, PurchaseStatus, SupplierInvoiceStatus
     from app.models.purchase import PurchaseOrder
-    from app.models.enums import PurchaseStatus, SupplierInvoiceStatus, SupplierPaymentType
+    from app.services import purchase_service
 
     total_po = db.session.scalar(
         select(func.coalesce(func.sum(PurchaseOrder.grand_total), 0))
@@ -281,58 +286,48 @@ def get_supplier_summary(supplier_id: int) -> SupplierSummary:
         .where(PurchaseOrder.status != PurchaseStatus.CANCELLED)
     ) or Decimal("0")
 
-    total_invoiced = db.session.scalar(
-        select(func.coalesce(func.sum(SupplierInvoice.grand_total), 0))
+    grns = purchase_service.supplier_grns(supplier_id)
+    received = sum((g.value for g in grns), Decimal("0"))
+    not_invoiced = sum((g.value for g in grns if g.invoice_id is None), Decimal("0"))
+
+    invoices = db.session.scalars(
+        select(SupplierInvoice)
         .where(SupplierInvoice.supplier_id == supplier_id)
         .where(SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED)
-    ) or Decimal("0")
+    ).all()
+    invoiced = sum((Decimal(str(i.grand_total)) for i in invoices), Decimal("0"))
+    payable = sum((Decimal(str(i.payable_amount)) for i in invoices), Decimal("0"))
+    paid = sum((Decimal(str(i.amount_paid)) for i in invoices), Decimal("0"))
+    today = date.today()
+    overdue = sum(
+        (max(Decimal(str(i.payable_amount)) - Decimal(str(i.amount_paid)), Decimal("0"))
+         for i in invoices if i.due_date and i.due_date < today),
+        Decimal("0"),
+    )
+    disputed = sum(1 for i in invoices if i.verification_status == InvoiceVerificationStatus.DISPUTED)
 
-    total_paid_row = db.session.scalar(
-        select(func.coalesce(func.sum(SupplierPayment.amount), 0))
-        .where(SupplierPayment.supplier_id == supplier_id)
-        .where(SupplierPayment.is_voided.is_(False))
-        .where(SupplierPayment.payment_type == SupplierPaymentType.PAYMENT)
-    ) or Decimal("0")
-
-    advance_balance = db.session.scalar(
-        select(func.coalesce(func.sum(SupplierPayment.amount), 0))
-        .where(SupplierPayment.supplier_id == supplier_id)
-        .where(SupplierPayment.is_voided.is_(False))
-        .where(SupplierPayment.payment_type == SupplierPaymentType.ADVANCE)
-    ) or Decimal("0")
-
-    from datetime import date
-    from app.models.enums import SupplierInvoiceStatus as SIS
-    overdue = db.session.scalar(
-        select(func.coalesce(func.sum(SupplierInvoice.grand_total - SupplierInvoice.amount_paid), 0))
-        .where(SupplierInvoice.supplier_id == supplier_id)
-        .where(SupplierInvoice.payment_status.in_([SIS.UNPAID, SIS.PARTIALLY_PAID]))
-        .where(SupplierInvoice.due_date < date.today())
-    ) or Decimal("0")
-
-    invoice_count = db.session.scalar(
-        select(func.count(SupplierInvoice.id)).where(SupplierInvoice.supplier_id == supplier_id)
-    ) or 0
     payment_count = db.session.scalar(
         select(func.count(SupplierPayment.id))
         .where(SupplierPayment.supplier_id == supplier_id)
         .where(SupplierPayment.is_voided.is_(False))
     ) or 0
 
-    supplier = get_supplier(supplier_id)
     opening = Decimal(str(supplier.opening_balance))
-    outstanding = opening + Decimal(str(total_invoiced)) - Decimal(str(total_paid_row)) - advance_balance
-
+    from app.services import supplier_payment_service
+    advance = supplier_payment_service.advance_balance(supplier_id)
     return SupplierSummary(
         supplier_id=supplier_id,
         total_po_value=float(total_po),
-        total_received_value=float(total_po),
-        total_invoiced=float(total_invoiced),
-        total_paid=float(total_paid_row),
-        outstanding_balance=float(outstanding),
-        advance_balance=float(advance_balance),
+        total_received_value=float(received),
+        not_invoiced_value=float(not_invoiced),
+        total_invoiced=float(invoiced),
+        total_payable=float(payable),
+        total_paid=float(paid),
+        outstanding_balance=float(opening + payable - paid - advance),  # net of unused advance, like the ledger
+        advance_balance=float(advance),
         overdue_amount=float(overdue),
-        invoice_count=invoice_count,
+        invoice_count=len(invoices),
+        disputed_count=disputed,
         payment_count=payment_count,
     )
 
@@ -342,18 +337,25 @@ def get_supplier_ledger(supplier_id: int, date_from: str | None = None, date_to:
     from app.models.enums import SupplierInvoiceStatus, SupplierPaymentType
     entries: list[dict] = []
 
-    inv_q = select(SupplierInvoice).where(SupplierInvoice.supplier_id == supplier_id)
+    inv_q = select(SupplierInvoice).where(
+        SupplierInvoice.supplier_id == supplier_id,
+        SupplierInvoice.payment_status != SupplierInvoiceStatus.CANCELLED,
+    )
     if date_from:
         inv_q = inv_q.where(SupplierInvoice.invoice_date >= date_from)
     if date_to:
         inv_q = inv_q.where(SupplierInvoice.invoice_date <= date_to)
     for inv in db.session.scalars(inv_q).all():
+        # The shop owes the payable amount (goods received), which can be less than the bill.
+        description = f"Invoice {inv.invoice_number}"
+        if inv.payable_amount != inv.grand_total:
+            description += f" (billed ₹{inv.grand_total}, payable ₹{inv.payable_amount} for goods received)"
         entries.append({
             "date": str(inv.invoice_date),
             "entry_type": "invoice",
             "reference": inv.invoice_number,
-            "description": f"Invoice {inv.invoice_number}",
-            "debit": float(inv.grand_total),
+            "description": description,
+            "debit": float(inv.payable_amount),
             "credit": 0.0,
         })
 

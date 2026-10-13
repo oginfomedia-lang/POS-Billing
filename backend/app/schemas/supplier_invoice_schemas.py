@@ -21,7 +21,10 @@ class SupplierInvoiceCreate(BaseModel):
     other_charges: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=2)
     grand_total: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
     notes: str | None = None
+    # The goods receipts (all from one PO) this invoice bills.
     grn_ids: list[int] = []
+    # Required when the invoice differs from the value of the goods received by more than ₹1.
+    difference_reason: str | None = Field(None, max_length=1000)
 
 
 class SupplierInvoiceUpdate(BaseModel):
@@ -35,6 +38,7 @@ class SupplierInvoiceUpdate(BaseModel):
     notes: str | None = None
     verification_status: InvoiceVerificationStatus | None = None
     grn_ids: list[int] | None = None
+    difference_reason: str | None = Field(None, max_length=1000)
 
 
 class SupplierInvoiceOut(BaseModel):
@@ -53,8 +57,15 @@ class SupplierInvoiceOut(BaseModel):
     tax_amount: Decimal
     other_charges: Decimal
     grand_total: Decimal
+    received_value: Decimal | None = None  # goods accepted on the GRNs (None = old invoice without GRNs)
+    difference: Decimal | None = None  # invoice goods amount − received value
+    difference_reason: str | None = None
+    payable_amount: Decimal = Decimal("0")  # what is owed: never more than the goods received
     amount_paid: Decimal
-    outstanding: Decimal = Decimal("0")
+    outstanding: Decimal = Decimal("0")  # payable − paid
+    is_legacy: bool = False  # made before invoices were tied to GRNs (e.g. the old PO quick payment)
+    document_id: int | None = None  # the uploaded invoice file
+    grn_numbers: list[str] = []
     payment_status: SupplierInvoiceStatus
     verification_status: InvoiceVerificationStatus
     notes: str | None
@@ -70,3 +81,16 @@ class SupplierInvoiceListParams(BaseModel):
     date_to: str | None = None
     page: int = 1
     per_page: int = 25
+
+
+class GRNPreviewOut(BaseModel):
+    """What the chosen GRNs are worth, for the add-invoice form."""
+
+    purchase_order_id: int
+    po_number: str
+    received_value: Decimal
+    grn_numbers: list[str]
+
+
+class SupplierInvoiceCancelIn(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=500)

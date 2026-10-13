@@ -41,6 +41,7 @@ class SupplierPayment(TimestampMixin, db.Model):
         "SupplierPaymentAllocation",
         back_populates="payment",
         cascade="all, delete-orphan",
+        order_by="SupplierPaymentAllocation.id",
     )
 
     def __repr__(self) -> str:

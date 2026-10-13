@@ -40,6 +40,10 @@ export const supplierPaymentApi = {
   create(data: SupplierPaymentCreatePayload) {
     return httpClient.post<SupplierPaymentOut>('/supplier-payments', data);
   },
+  /** Put the unused part of an advance against invoices that have arrived. */
+  applyAdvance(id: number, allocations: PaymentAllocationIn[]) {
+    return httpClient.post<SupplierPaymentOut>(`/supplier-payments/${id}/apply`, { allocations });
+  },
   void(id: number) {
     return httpClient.post<SupplierPaymentOut>(`/supplier-payments/${id}/void`, {});
   },

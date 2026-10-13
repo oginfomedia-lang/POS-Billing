@@ -1,6 +1,7 @@
 import type {
   PagedResponse,
   SupplierDashboard,
+  SupplierGRNOut,
   SupplierLedgerEntry,
   SupplierOut,
   SupplierProductOut,
@@ -73,6 +74,10 @@ export const supplierApi = {
   },
   getLedger(id: number, params?: { date_from?: string; date_to?: string }) {
     return httpClient.get<SupplierLedgerEntry[]>(`/suppliers/${id}/ledger`, { params });
+  },
+  /** Goods received from the supplier, with value and invoice; uninvoiced = not billed yet. */
+  listGrns(id: number, uninvoiced = false) {
+    return httpClient.get<SupplierGRNOut[]>(`/suppliers/${id}/grns`, { params: uninvoiced ? { uninvoiced: 1 } : {} });
   },
   listProducts(id: number) {
     return httpClient.get<SupplierProductOut[]>(`/suppliers/${id}/products`);

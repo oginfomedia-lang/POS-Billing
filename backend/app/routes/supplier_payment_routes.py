@@ -5,7 +5,7 @@ from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.extensions import db
 from app.models.user import User
 from app.schemas.common import PagedResponse
-from app.schemas.supplier_payment_schemas import SupplierPaymentCreate
+from app.schemas.supplier_payment_schemas import ApplyAdvanceIn, SupplierPaymentCreate
 from app.services import supplier_payment_service as svc
 from app.utils.permissions import require_permission
 
@@ -54,4 +54,13 @@ def get_payment(payment_id: int):
 @require_permission("payments.void")
 def void_payment(payment_id: int):
     pay = svc.void_payment(payment_id, _current_user())
+    return jsonify(pay.model_dump(mode="json")), 200
+
+
+@supplier_payment_bp.post("/supplier-payments/<int:payment_id>/apply")
+@require_permission("payments.create")
+def apply_advance(payment_id: int):
+    """Apply the unused part of an advance to invoices."""
+    data = ApplyAdvanceIn.model_validate(request.get_json(force=True))
+    pay = svc.apply_advance(payment_id, data.allocations, _current_user())
     return jsonify(pay.model_dump(mode="json")), 200
