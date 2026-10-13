@@ -7,6 +7,7 @@ from app.models.category import Category
 from app.models.enums import BarcodeType
 from app.models.product import INHOUSE_BARCODE_SEQ, Product, ProductBarcode
 from app.models.supplier import Supplier
+from app.models.supplier_product import SupplierProduct
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product_schemas import (
@@ -105,6 +106,7 @@ def create_product(data: ProductCreate) -> Product:
         db.session.flush()
         if not sku:
             product.sku = f"SKU-{product.id:05d}"
+        link_supplier(product)
 
         # Add barcodes
         for item in data.barcodes:
@@ -181,6 +183,7 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
         product.supplier_id = data.supplier_id
 
     with transaction():
+        link_supplier(product)
         if data.barcodes is not None:
             # Sync barcodes
             existing_map = {b.barcode: b for b in product.barcodes}
@@ -454,6 +457,29 @@ def _check_mrp(product: Product) -> None:
     if error:
         db.session.rollback()  # undo the in-memory edits on an existing product
         raise BadRequestError(error)
+
+
+def link_supplier(product: Product) -> None:
+    """The product's usual supplier also gets it in their product list (Suppliers → products), so it shows
+    on the supplier's page and in their purchase orders. Purchase prices there are left as they are."""
+    if product.supplier_id is None or product.id is None:
+        return
+    link = db.session.scalar(
+        db.select(SupplierProduct).where(
+            SupplierProduct.supplier_id == product.supplier_id, SupplierProduct.product_id == product.id
+        )
+    )
+    if link is None:
+        has_preferred = db.session.scalar(
+            db.select(SupplierProduct.id).where(
+                SupplierProduct.product_id == product.id, SupplierProduct.is_preferred.is_(True)
+            )
+        )
+        db.session.add(SupplierProduct(
+            supplier_id=product.supplier_id, product_id=product.id, is_preferred=has_preferred is None,
+        ))
+    elif not link.is_active:
+        link.is_active = True
 
 
 def _check_supplier(supplier_id: int | None) -> None:

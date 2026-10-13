@@ -42,6 +42,7 @@ from app.services import audit_service
 from app.services.product_service import (
     _add_barcode_to_product,
     _infer_barcode_type,
+    link_supplier,
     mrp_error,
     next_inhouse_barcode,
 )
@@ -467,6 +468,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 db.session.flush()
                 if "sku" not in v:
                     product.sku = f"SKU-{product.id:05d}"
+                link_supplier(product)
                 for i, code in enumerate(row.barcodes):
                     _add_barcode_to_product(product, code, _infer_barcode_type(code), is_primary=i == 0)
                 if not row.barcodes and not loose and options.generate_barcodes:
@@ -493,6 +495,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                     product.category_id = category_id
                 if supplier_id is not None:
                     product.supplier_id = supplier_id
+                    link_supplier(product)
                 existing = {b.barcode for b in product.barcodes}
                 for code in row.barcodes:
                     if code not in existing:

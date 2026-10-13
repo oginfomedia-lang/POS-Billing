@@ -12,6 +12,7 @@ from app.models.enums import InventoryTxnType
 from app.models.inventory import Inventory, InventoryTransaction
 from app.models.product import Product
 from app.models.supplier import Supplier
+from app.models.supplier_product import SupplierProduct
 from app.services.product_import_service import COLUMNS
 from tests.factories import make_product
 
@@ -76,6 +77,8 @@ def test_csv_creates_products_with_stock_barcodes_and_categories(client, admin_h
 
     parle = _product("Parle-G 100g")
     assert parle.supplier_id == supplier.id and parle.store_id is None
+    link = db.session.scalar(db.select(SupplierProduct).where(SupplierProduct.product_id == parle.id))
+    assert link.supplier_id == supplier.id and link.is_preferred  # shows on the supplier's page
     assert [b.barcode for b in parle.barcodes] == ["8901719101038"] and parle.barcodes[0].is_primary
     assert parle.category.name == "Biscuits" and parle.sku.startswith("SKU-")
 
@@ -203,5 +206,7 @@ def test_product_form_supplier_link(client, admin_headers, supplier):
     created = client.post("/api/v1/products", json={"name": "Dal", "price": "90", "supplier_id": supplier.id}, headers=admin_headers)
     assert created.status_code == 201 and created.get_json()["supplier_id"] == supplier.id
     pid = created.get_json()["id"]
+    listed = client.get(f"/api/v1/suppliers/{supplier.id}/products", headers=admin_headers).get_json()
+    assert [p["product_id"] for p in listed] == [pid]
     assert client.put(f"/api/v1/products/{pid}", json={"supplier_id": None}, headers=admin_headers).get_json()["supplier_id"] is None
     assert client.post("/api/v1/products", json={"name": "X", "price": "1", "supplier_id": 9999}, headers=admin_headers).status_code == 400

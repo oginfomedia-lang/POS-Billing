@@ -15,3 +15,5 @@ fpdf2>=2.8,<3
 uharfbuzz>=0.39
 # Bulk product import from Excel (.xlsx).
 openpyxl>=3.1,<4
+# Nightly automatic backup (BACKUP_CRON_SCHEDULE). Cloud copies to S3 also need: pip install boto3
+APScheduler>=3.10,<4
