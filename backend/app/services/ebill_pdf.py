@@ -93,7 +93,10 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
     pdf.row("Item", "Amt", bold=True)
     for i in r.items:
         pdf.row(i.product_name, f"{i.line_total}")
-        details = [f"{i.qty} × {i.unit_price}"]
+        if i.is_variable_weight:
+            details = [f"{float(i.qty):.3f} {i.uom} × {i.unit_price}/{i.uom}"]
+        else:
+            details = [f"{i.qty} × {i.unit_price}"]
         if i.hsn_code:
             details.append(f"HSN {i.hsn_code}")
         if i.mrp:

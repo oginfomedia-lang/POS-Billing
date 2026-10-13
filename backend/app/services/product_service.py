@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models.category import Category
 from app.models.enums import BarcodeType
 from app.models.product import INHOUSE_BARCODE_SEQ, Product, ProductBarcode
+from app.models.supplier import Supplier
 from app.repositories.category_repository import CategoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.schemas.product_schemas import (
@@ -15,7 +16,8 @@ from app.schemas.product_schemas import (
     ProductCreate,
     ProductUpdate,
 )
-from app.utils.barcode_utils import generate_inhouse_barcode, parse_variable_weight_barcode
+from app.services import inventory_service, settings_service
+from app.utils.barcode_utils import generate_inhouse_barcode, parse_scale_barcode
 from app.utils.money import round_money
 from app.utils.transactions import transaction
 
@@ -90,9 +92,13 @@ def create_product(data: ProductCreate) -> Product:
         hsn_code=data.hsn_code,
         uom=data.uom,
         is_variable_weight=data.is_variable_weight,
+        plu_code=data.plu_code,
         store_id=data.store_id,
+        supplier_id=data.supplier_id,
     )
     _check_mrp(product)
+    _check_plu(product)
+    _check_supplier(product.supplier_id)
 
     with transaction():
         repo.add(product)
@@ -161,10 +167,18 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
 
     if data.is_variable_weight is not None:
         product.is_variable_weight = data.is_variable_weight
+    if "plu_code" in data.model_fields_set:
+        product.plu_code = data.plu_code
+    if not product.is_variable_weight:
+        product.plu_code = None  # only loose items have a scale code
+    _check_plu(product)
     if data.is_active is not None:
         product.is_active = data.is_active
     if data.store_id is not None:
         product.store_id = data.store_id
+    if "supplier_id" in data.model_fields_set:  # null = no supplier
+        _check_supplier(data.supplier_id)
+        product.supplier_id = data.supplier_id
 
     with transaction():
         if data.barcodes is not None:
@@ -284,41 +298,21 @@ def generate_and_save_inhouse_barcode(product_id: int) -> ProductBarcode:
     return pb
 
 
-def scan_barcode(scanned_value: str) -> dict:
-    """Billing scanner lookup endpoint logic.
+def scan_barcode(scanned_value: str, store_id: int | None = None) -> dict:
+    """Billing scanner lookup.
 
-    Decodes variable-weight barcodes starting with '20' or performs standard product lookup.
+    A weighing-scale sticker (format set in Settings) finds the loose item by its scale code and carries
+    the weight (or the price, converted to a weight). Anything else is a normal barcode or SKU lookup.
+    store_id = the bill's store, for that store's own price.
     """
     code = scanned_value.strip()
     if not code:
         raise BadRequestError("Scanned barcode value cannot be empty.")
 
-    # 1. Variable-weight check
-    vw_data = parse_variable_weight_barcode(code)
-    if vw_data:
-        # Find product by SKU or barcode
-        product = ProductRepository().find_by_sku(vw_data.sku)
-        if not product:
-            product = ProductRepository().find_by_barcode(code)
+    scale = _scan_scale_sticker(code, store_id)
+    if scale is not None:
+        return scale
 
-        if product:
-            unit_price = Decimal(str(product.price))
-            calculated_price = round(unit_price * Decimal(str(vw_data.weight_kg)), 2)
-            inv = product.inventory
-            qty = float(inv.qty_on_hand) if inv else None
-
-            return {
-                "product": product,
-                "scanned_barcode": code,
-                "is_variable_weight": True,
-                "weight_grams": vw_data.weight_grams,
-                "weight_kg": vw_data.weight_kg,
-                "unit_price": unit_price,
-                "calculated_price": calculated_price,
-                "qty_on_hand": qty,
-            }
-
-    # 2. Standard Product Lookup
     product = ProductRepository().find_by_barcode(code)
     if not product:
         product = ProductRepository().find_by_sku(code)
@@ -326,7 +320,7 @@ def scan_barcode(scanned_value: str) -> dict:
     if not product:
         raise NotFoundError(f"No active product found for barcode '{code}'.")
 
-    unit_price = Decimal(str(product.price))
+    unit_price = _price_for(product, store_id)
     inv = product.inventory
     qty = float(inv.qty_on_hand) if inv else None
 
@@ -340,6 +334,54 @@ def scan_barcode(scanned_value: str) -> dict:
         "calculated_price": unit_price,
         "qty_on_hand": qty,
     }
+
+
+def _scan_scale_sticker(code: str, store_id: int | None) -> dict | None:
+    """None = not a scale sticker, or no loose item has that code (then it's tried as a normal barcode)."""
+    s = settings_service.get_settings()
+    parsed = parse_scale_barcode(code, s.scale_prefix, s.scale_plu_digits)
+    if parsed is None:
+        return None
+    repo = ProductRepository()
+    product = repo.find_by_plu(parsed.plu)
+    if product is None:
+        # Older setup: the scale code was the product's SKU.
+        by_sku = repo.find_by_sku(code[2:2 + s.scale_plu_digits])  # as printed, e.g. '00123'
+        product = by_sku if by_sku is not None and by_sku.is_variable_weight else None
+    if product is None:
+        # A real product barcode in the 20-28 range (rare) still scans normally.
+        if ProductRepository().find_by_barcode(code) or ProductRepository().find_by_sku(code):
+            return None
+        raise NotFoundError(f"No loose item with scale code {parsed.plu}. Set it on the product (Scale item code).")
+    if parsed.value <= 0:
+        raise BadRequestError("The sticker shows 0 weight. Weigh the item again.")
+
+    unit_price = _price_for(product, store_id)  # per kg, before GST
+    if s.scale_value == "price":
+        with_gst = unit_price * (1 + Decimal(product.tax_rate or 0) / 100)
+        if with_gst <= 0:
+            raise BadRequestError(f"{product.name} has no price; can't work out the weight from the sticker.")
+        weight_kg = (Decimal(parsed.value) / 100 / with_gst).quantize(Decimal("0.001"))
+        if weight_kg <= 0:
+            raise BadRequestError("The sticker price is too small for this item.")
+    else:
+        weight_kg = (Decimal(parsed.value) / 1000).quantize(Decimal("0.001"))
+
+    inv = product.inventory
+    return {
+        "product": product,
+        "scanned_barcode": code,
+        "is_variable_weight": True,
+        "weight_grams": int(weight_kg * 1000),
+        "weight_kg": float(weight_kg),
+        "unit_price": unit_price,
+        "calculated_price": round_money(unit_price * weight_kg),
+        "qty_on_hand": float(inv.qty_on_hand) if inv else None,
+    }
+
+
+def _price_for(product: Product, store_id: int | None) -> Decimal:
+    return inventory_service.selling_price(store_id, product) if store_id else Decimal(str(product.price))
 
 
 def get_by_barcode(barcode: str) -> Product:
@@ -397,11 +439,43 @@ def _get_category_or_404(category_id: int) -> Category:
     return c
 
 
-def _check_mrp(product: Product) -> None:
+def mrp_error(price, tax_rate, mrp) -> str | None:
     """MRP includes GST, so it can't be below our price + GST (that would be selling above MRP — illegal)."""
-    if product.mrp is None:
-        return
-    with_gst = round_money(Decimal(product.price) * (1 + Decimal(product.tax_rate or 0) / 100))
-    if Decimal(product.mrp) < with_gst:
+    if mrp is None:
+        return None
+    with_gst = round_money(Decimal(price) * (1 + Decimal(tax_rate or 0) / 100))
+    if Decimal(mrp) < with_gst:
+        return f"MRP (₹{mrp}) can't be lower than the selling price with GST (₹{with_gst})."
+    return None
+
+
+def _check_mrp(product: Product) -> None:
+    error = mrp_error(product.price, product.tax_rate, product.mrp)
+    if error:
         db.session.rollback()  # undo the in-memory edits on an existing product
-        raise BadRequestError(f"MRP (₹{product.mrp}) can't be lower than the selling price with GST (₹{with_gst}).")
+        raise BadRequestError(error)
+
+
+def _check_supplier(supplier_id: int | None) -> None:
+    if supplier_id is None:
+        return
+    supplier = db.session.get(Supplier, supplier_id)
+    if supplier is None or not supplier.is_active:
+        db.session.rollback()
+        raise BadRequestError("Choose an active supplier.")
+
+
+def _check_plu(product: Product) -> None:
+    """Only loose items have a scale code, and each code belongs to one product."""
+    if product.plu_code is None:
+        return
+    if not product.is_variable_weight:
+        db.session.rollback()
+        raise BadRequestError("Only loose (weighed) items can have a scale item code.")
+    with db.session.no_autoflush:  # don't write the edited product before the check
+        other = db.session.scalar(
+            db.select(Product).where(Product.plu_code == product.plu_code, Product.id != product.id)
+        )
+    if other is not None:
+        db.session.rollback()
+        raise ConflictError(f"Scale item code {product.plu_code} is already used by '{other.name}'.")

@@ -1,5 +1,5 @@
 // Purchase Orders management page — admin and manager.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import {
@@ -195,6 +195,14 @@ interface ProductRow {
   tax_rate: number;
 }
 
+/** Matches shown in the picker; type more of the name / SKU / barcode to narrow it down. */
+const PICKER_LIMIT = 20;
+const SEARCH_DELAY_MS = 300;
+
+/**
+ * Product picker for PO lines. Searches on the server (name, SKU or exact barcode), so every product can
+ * be found however big the catalogue is. With an empty box it shows the first few products.
+ */
 function ProductSearch({
   onSelect,
   storeId,
@@ -204,61 +212,35 @@ function ProductSearch({
 }) {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
-  const [allProducts, setAllProducts] = useState<ProductRow[]>([]);
+  const [results, setResults] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [selectedSelectValue, setSelectedSelectValue] = useState<string>('');
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let isMounted = true;
-    setLoading(true);
+    if (!open) return;
+    let cancelled = false;
     const sid = typeof storeId === 'number' && storeId > 0 ? storeId : undefined;
-    listProducts({ per_page: 200, active_only: true, store_id: sid })
-      .then((data) => {
-        if (!isMounted) return;
-        const rows: ProductRow[] = (data.items || []).map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          sku: p.sku,
-          price: parseFloat(p.store_price ?? p.price ?? '0'),
-          tax_rate: parseFloat(p.tax_rate ?? '0'),
-        }));
-        setAllProducts(rows);
-      })
-      .catch((err) => {
-        console.error('Failed to load active products, trying fallback fetch:', err);
-        listProducts({ per_page: 200 })
-          .then((data) => {
-            if (!isMounted) return;
-            const rows: ProductRow[] = (data.items || []).map((p: any) => ({
-              id: p.id,
-              name: p.name,
-              sku: p.sku,
-              price: parseFloat(p.price ?? '0'),
-              tax_rate: parseFloat(p.tax_rate ?? '0'),
-            }));
-            setAllProducts(rows);
-          })
-          .catch(() => {});
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      listProducts({ q: q.trim() || undefined, per_page: PICKER_LIMIT, active_only: true, store_id: sid })
+        .then((data) => {
+          if (cancelled) return;
+          setResults((data.items || []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            price: parseFloat(p.store_price ?? p.price ?? '0'),
+            tax_rate: parseFloat(p.tax_rate ?? '0'),
+          })));
+        })
+        .catch(() => { if (!cancelled) setResults([]); })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, q.trim() ? SEARCH_DELAY_MS : 0);
     return () => {
-      isMounted = false;
+      cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [storeId]);
-
-  const filtered = useMemo(() => {
-    if (!q.trim()) return allProducts;
-    const query = q.toLowerCase().trim();
-    return allProducts.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        (p.sku && p.sku.toLowerCase().includes(query))
-    );
-  }, [allProducts, q]);
+  }, [q, open, storeId]);
 
   function pick(p: ProductRow) {
     onSelect(p);
@@ -267,60 +249,23 @@ function ProductSearch({
   }
 
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
-      {/* Product Dropdown Select */}
-      <div style={{ flex: '1 1 260px', minWidth: 220 }}>
-        <label className="field-label" style={{ marginBottom: 4, display: 'block', fontSize: 12 }}>
-          {t('purchases.selectProductDropdown', 'Choose available product')}
-        </label>
-        <select
-          className="field-input"
-          value={selectedSelectValue}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (!val) return;
-            const selectedId = Number(val);
-            const p = allProducts.find((item) => item.id === selectedId);
-            if (p) {
-              onSelect(p);
-            }
-            setSelectedSelectValue('');
-          }}
-        >
-          <option value="">
-            {loading
-              ? t('purchases.loadingProducts', 'Loading available products...')
-              : allProducts.length > 0
-              ? `— ${t('purchases.selectProductDropdown', 'Choose available product')} (${allProducts.length}) —`
-              : `— ${t('purchases.selectProductDropdown', 'Choose available product')} —`}
-          </option>
-          {allProducts.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} {p.sku ? `[SKU: ${p.sku}]` : ''} - ₹{p.price.toFixed(2)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Product Search Input with Filtered Dropdown */}
-      <div ref={containerRef} style={{ flex: '1 1 260px', minWidth: 220, position: 'relative' }}>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ position: 'relative', maxWidth: 560 }}>
         <label className="field-label" style={{ marginBottom: 4, display: 'block', fontSize: 12 }}>
           {t('purchases.productSearch', 'Search product name or SKU')}
         </label>
-        <div style={{ position: 'relative' }}>
-          <input
-            className="field-input"
-            placeholder={t('purchases.productSearch', 'Search product name or SKU')}
-            value={q}
-            onFocus={() => setOpen(true)}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setOpen(true);
-            }}
-            onBlur={() => setTimeout(() => setOpen(false), 200)}
-          />
-        </div>
-        {open && filtered.length > 0 && (
+        <input
+          className="field-input"
+          placeholder={t('purchases.productSearchHint', 'Type name, SKU or scan barcode')}
+          value={q}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOpen(true);
+          }}
+          onBlur={() => setTimeout(() => setOpen(false), 200)}
+        />
+        {open && (
           <div
             style={{
               position: 'absolute',
@@ -332,11 +277,21 @@ function ProductSearch({
               borderRadius: 'var(--radius-md)',
               boxShadow: 'var(--shadow-lg)',
               zIndex: 60,
-              maxHeight: 240,
+              maxHeight: 280,
               overflowY: 'auto',
             }}
           >
-            {filtered.slice(0, 60).map((p) => (
+            {loading && results.length === 0 && (
+              <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
+                {t('purchases.loadingProducts', 'Loading available products...')}
+              </div>
+            )}
+            {!loading && results.length === 0 && (
+              <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
+                {t('purchases.noProductMatch', 'No product found')}
+              </div>
+            )}
+            {results.map((p) => (
               <div
                 key={p.id}
                 style={{

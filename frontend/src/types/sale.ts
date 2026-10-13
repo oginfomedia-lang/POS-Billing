@@ -34,6 +34,9 @@ export interface SaleItemOut {
   tax_amount: string;
   /** MRP × qty − amount paid (or the discount when there's no MRP). */
   saving: string;
+  /** Loose item sold by weight: qty is in `uom` (kg) and may have decimals. */
+  is_variable_weight: boolean;
+  uom: string;
 }
 
 /** One line of the rate-wise GST table on a receipt / credit note. */

@@ -84,6 +84,7 @@ def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_hea
         "rewards_enabled": False, "reward_rupees_per_point": "100", "reward_block_points": 100, "reward_block_value": "100",
         "daily_report_enabled": False, "daily_report_time": "22:30", "daily_report_mobiles": "",
         "ebill_enabled": False,
+        "scale_prefix": "20", "scale_plu_digits": 5, "scale_value": "weight",
     }
 
     resp = client.put("/api/v1/settings", json={**s, "receipt_footer": "No returns after 7 days", "low_stock_threshold": "2"}, headers=admin_headers)

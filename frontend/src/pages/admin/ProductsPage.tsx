@@ -12,11 +12,14 @@ import {
 } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { stockIn } from '../../services/api/inventoryApi';
+import { supplierApi } from '../../services/api/supplierApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useStoreContext, useStores } from '../../store/storeContext';
 import { formatRupees } from '../../utils/money';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { ProductImportDialog } from '../../components/admin/ProductImportDialog';
+import type { SupplierOut } from '../../types/api';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 
 interface BarcodeItem {
@@ -52,8 +55,13 @@ export function ProductsPage() {
   const [formMrp, setFormMrp] = useState('');
   const [formHsn, setFormHsn] = useState('');
   const [formCategory, setFormCategory] = useState('');
+  const [formSupplier, setFormSupplier] = useState('');
+  const [suppliers, setSuppliers] = useState<SupplierOut[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [formUom, setFormUom] = useState<UOMType>('pcs');
   const [formVariableWeight, setFormVariableWeight] = useState(false);
+  // Loose items: the item code set on the weighing scale.
+  const [formPlu, setFormPlu] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [barcodesList, setBarcodesList] = useState<BarcodeItem[]>([]);
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -118,6 +126,13 @@ export function ProductsPage() {
     fetchAll();
   }, [page, view, branchId]);
 
+  // Suppliers for the product form (the usual supplier of a product). Optional: the form works without them.
+  useEffect(() => {
+    supplierApi.list({ status: 'active', per_page: 500 })
+      .then((r) => setSuppliers(r.data.items))
+      .catch(() => setSuppliers([]));
+  }, []);
+
   useEffect(() => {
     if (modal) {
       setTimeout(() => barcodeInputRef.current?.focus(), 100);
@@ -148,8 +163,10 @@ export function ProductsPage() {
     setFormMrp('');
     setFormHsn('');
     setFormCategory('');
+    setFormSupplier('');
     setFormUom('pcs');
     setFormVariableWeight(false);
+    setFormPlu('');
     setBarcodesList([]);
     setBarcodeInput('');
     setFormActive(true);
@@ -169,8 +186,10 @@ export function ProductsPage() {
     setFormMrp(p.mrp ?? '');
     setFormHsn(p.hsn_code ?? '');
     setFormCategory(p.category_id ? String(p.category_id) : '');
+    setFormSupplier(p.supplier_id ? String(p.supplier_id) : '');
     setFormUom(p.uom || 'pcs');
     setFormVariableWeight(p.is_variable_weight || false);
+    setFormPlu(p.plu_code ?? '');
     setFormActive(p.is_active);
     setBarcodesList(
       p.barcodes
@@ -258,8 +277,10 @@ export function ProductsPage() {
         mrp: formMrp.trim() ? parseFloat(formMrp) : null,
         hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
+        supplier_id: formSupplier ? parseInt(formSupplier, 10) : null,
         uom: formUom,
         is_variable_weight: formVariableWeight,
+        plu_code: formVariableWeight ? formPlu.trim() || null : null,
         barcodes: barcodesList,
       });
       setModal(null);
@@ -291,8 +312,10 @@ export function ProductsPage() {
         mrp: formMrp.trim() ? parseFloat(formMrp) : null,
         hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
+        supplier_id: formSupplier ? parseInt(formSupplier, 10) : null,
         uom: formUom,
         is_variable_weight: formVariableWeight,
+        plu_code: formVariableWeight ? formPlu.trim() || null : null,
         is_active: formActive,
         barcodes: barcodesList,
       });
@@ -323,6 +346,9 @@ export function ProductsPage() {
       <div className="admin-header">
         <h2>{t('products.title')}</h2>
         <div className="admin-actions">
+          <button className="btn-secondary" onClick={() => setImportOpen(true)}>
+            {t('import.open')}
+          </button>
           <button className="btn-primary" onClick={openCreate}>
             {t('products.add')}
           </button>
@@ -390,7 +416,9 @@ export function ProductsPage() {
                   <td>{cat?.name ?? '—'}</td>
                   <td>
                     {p.is_variable_weight ? (
-                      <span className="barcode-badge badge-scale">{t('products.typeScale')}</span>
+                      <span className="barcode-badge badge-scale">
+                        {t('products.typeScale')}{p.plu_code ? ` · ${t('products.pluShort', { code: p.plu_code })}` : ''}
+                      </span>
                     ) : (
                       <span className="barcode-badge badge-manufacturer">{t('products.typeStandard')}</span>
                     )}
@@ -523,6 +551,25 @@ export function ProductsPage() {
                     ))}
                   </select>
                 </label>
+                <label className="field-label">
+                  {t('products.supplier')}
+                  <select
+                    className="field-input"
+                    value={formSupplier}
+                    onChange={(e) => setFormSupplier(e.target.value)}
+                  >
+                    <option value="">{t('common.none')}</option>
+                    {/* Keep showing a supplier that was deactivated after it was set. */}
+                    {formSupplier && !suppliers.some((x) => String(x.id) === formSupplier) && (
+                      <option value={formSupplier}>#{formSupplier}</option>
+                    )}
+                    {suppliers.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.company_name} ({x.supplier_code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="form-row">
@@ -564,10 +611,28 @@ export function ProductsPage() {
                 <input
                   type="checkbox"
                   checked={formVariableWeight}
-                  onChange={(e) => setFormVariableWeight(e.target.checked)}
+                  onChange={(e) => {
+                    setFormVariableWeight(e.target.checked);
+                    // Loose items are sold by the kg.
+                    if (e.target.checked && formUom === 'pcs') setFormUom('kg');
+                  }}
                 />
                 <strong>{t('products.variableWeight')}</strong>
               </label>
+              {formVariableWeight && (
+                <label className="field-label">
+                  {t('products.pluCode')}
+                  <input
+                    className="field-input"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={formPlu}
+                    onChange={(e) => setFormPlu(e.target.value.replace(/\D/g, ''))}
+                    placeholder="123"
+                  />
+                  <span className="hint-text">{t('products.pluHint')}</span>
+                </label>
+              )}
 
               <div className="field-label">
                 <span>{t('products.barcodes')}</span>
@@ -683,6 +748,14 @@ export function ProductsPage() {
             </form>
           </div>
         </div>
+      )}
+      {importOpen && (
+        <ProductImportDialog
+          stores={stores}
+          defaultStoreId={branchId ?? user?.store_id ?? null}
+          onImported={() => fetchAll()}
+          onClose={() => setImportOpen(false)}
+        />
       )}
     </div>
   );

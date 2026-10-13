@@ -7,6 +7,7 @@ import { BarcodeInput } from '../../components/pos/BarcodeInput';
 import { BillSummary } from '../../components/pos/BillSummary';
 import { CartTable } from '../../components/pos/CartTable';
 import { HoldBillDialog } from '../../components/pos/HoldBillDialog';
+import { WeightDialog } from '../../components/pos/WeightDialog';
 import { ManualDiscountDialog } from '../../components/pos/ManualDiscountDialog';
 import { PaymentDialog } from '../../components/pos/PaymentDialog';
 import { ShortcutBar } from '../../components/pos/ShortcutBar';
@@ -54,6 +55,9 @@ export function BillingPage() {
   const [dialogError, setDialogError] = useState('');
   // Cart line whose manual-discount dialog is open (null = closed).
   const [discountItem, setDiscountItem] = useState<SaleItemOut | null>(null);
+  // Loose item picked by name: asking for its weight (null = closed).
+  const [weightProduct, setWeightProduct] = useState<ProductOut | null>(null);
+  const noPopup = dialog === null && discountItem === null && weightProduct === null;
 
   const hasItems = (sale?.items.length ?? 0) > 0;
 
@@ -82,15 +86,26 @@ export function BillingPage() {
 
   function handleScan(code: string) {
     act(async () => {
-      const scanRes = await getProductByBarcode(code);
+      // A weighing-scale sticker comes back with the weight (kg) to bill.
+      const scanRes = await getProductByBarcode(code, sale?.store_id ?? shiftStoreId ?? undefined);
       const qty = scanRes.is_variable_weight && scanRes.weight_kg ? scanRes.weight_kg : 1;
       await addItem(scanRes.product.id, qty);
     });
   }
 
-  /** Product picked from the name/SKU suggestions: add one (1 kg for weighed items; qty can be changed in the cart). */
+  /** Product picked from the name/SKU suggestions: add one; a loose item asks for its weight first. */
   function handlePick(product: ProductOut) {
+    if (product.is_variable_weight) {
+      setWeightProduct(product);
+      return;
+    }
     act(() => addItem(product.id, 1));
+  }
+
+  function handleWeight(kg: number) {
+    const product = weightProduct;
+    setWeightProduct(null);
+    if (product) act(() => addItem(product.id, kg));
   }
 
   function openDialog(d: Exclude<Dialog, null>) {
@@ -151,7 +166,7 @@ export function BillingPage() {
     F12: () => openDialog('pay'),
     Escape: handleVoid,
   };
-  useKeyboardShortcuts(shortcuts, dialog === null && discountItem === null);
+  useKeyboardShortcuts(shortcuts, noPopup);
 
   return (
     <div className="billing-page">
@@ -163,7 +178,7 @@ export function BillingPage() {
         <BarcodeInput
           onScan={handleScan}
           onPick={handlePick}
-          active={dialog === null && discountItem === null}
+          active={noPopup}
           storeId={shiftStoreId}
         />
         <div className="billing-meta">
@@ -263,6 +278,14 @@ export function BillingPage() {
           error={dialogError}
           onConfirm={handleHold}
           onClose={() => setDialog(null)}
+        />
+      )}
+      {weightProduct && (
+        <WeightDialog
+          product={weightProduct}
+          busy={busy}
+          onConfirm={handleWeight}
+          onClose={() => setWeightProduct(null)}
         />
       )}
       {discountItem && (

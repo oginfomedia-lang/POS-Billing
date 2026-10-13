@@ -29,6 +29,8 @@ class Product(TimestampMixin, db.Model):
     hsn_code = db.Column(db.String(8), nullable=True)  # GST HSN code, 4-8 digits
     uom = db.Column(db.Enum(UOMType, values_callable=lambda x: [e.value for e in x]), nullable=False, default=UOMType.PCS)
     is_variable_weight = db.Column(db.Boolean, nullable=False, default=False)
+    # Loose items: the item code set on the weighing scale (no leading zeros). Its barcode stickers carry it.
+    plu_code = db.Column(db.String(6), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
     supplier_id = db.Column(db.Integer, db.ForeignKey("suppliers.id"), nullable=True)
@@ -38,6 +40,10 @@ class Product(TimestampMixin, db.Model):
     supplier = db.relationship("Supplier", back_populates="products", foreign_keys=[supplier_id])
     barcodes = db.relationship("ProductBarcode", back_populates="product", cascade="all, delete-orphan")
     inventory = db.relationship("Inventory", back_populates="product", uselist=False)
+
+    __table_args__ = (
+        db.Index("uq_products_plu_code", "plu_code", unique=True, postgresql_where=plu_code.isnot(None)),
+    )
 
     def __repr__(self) -> str:
         return f"<Product {self.name}>"

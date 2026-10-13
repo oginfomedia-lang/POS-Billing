@@ -65,6 +65,18 @@ def _optional_hsn(v):
     return v
 
 
+def _optional_plu(v):
+    """Weighing-scale item code: 1-6 digits, stored without leading zeros. "" or None = no code."""
+    if v is None:
+        return None
+    v = str(v).strip()
+    if not v:
+        return None
+    if not re.fullmatch(r"\d{1,6}", v):
+        raise ValueError("Scale item code must be 1 to 6 digits.")
+    return str(int(v))
+
+
 class ProductOut(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -79,8 +91,10 @@ class ProductOut(BaseModel):
     hsn_code: str | None = None
     uom: UOMType = UOMType.PCS
     is_variable_weight: bool
+    plu_code: str | None = None
     is_active: bool
     store_id: int | None
+    supplier_id: int | None = None
     barcodes: list[BarcodeOut] = []
     # Only when the request names a store: that store's own selling price (None = sells at `price`).
     store_price: Decimal | None = None
@@ -97,7 +111,9 @@ class ProductCreate(BaseModel):
     hsn_code: str | None = None
     uom: UOMType = UOMType.PCS
     is_variable_weight: bool = False
+    plu_code: str | None = None  # loose items only: the item code set on the weighing scale
     store_id: int | None = None
+    supplier_id: int | None = None  # usual supplier (for information; any supplier can be used on a PO)
     barcodes: list[str | BarcodeCreatePayload] = []
 
     @field_validator("price", "tax_rate", mode="before")
@@ -109,6 +125,7 @@ class ProductCreate(BaseModel):
 
     _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
+    _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
 
 
 class ProductUpdate(BaseModel):
@@ -123,12 +140,17 @@ class ProductUpdate(BaseModel):
     hsn_code: str | None = None
     uom: UOMType | None = None
     is_variable_weight: bool | None = None
+    # Leave out to keep; send null or "" to clear.
+    plu_code: str | None = None
     is_active: bool | None = None
     store_id: int | None = None
+    # Leave out to keep; null removes the supplier.
+    supplier_id: int | None = None
     barcodes: list[str | BarcodeCreatePayload] | None = None
 
     _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
+    _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
 
     @field_validator("price", "tax_rate", mode="before")
     @classmethod

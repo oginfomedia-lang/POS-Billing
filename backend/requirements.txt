@@ -13,3 +13,5 @@ requests>=2.32,<3
 # PDF e-bill sent on WhatsApp; uharfbuzz shapes Marathi (Devanagari) text.
 fpdf2>=2.8,<3
 uharfbuzz>=0.39
+# Bulk product import from Excel (.xlsx).
+openpyxl>=3.1,<4
