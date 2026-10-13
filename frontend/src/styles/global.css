@@ -3583,10 +3583,21 @@ button.stat-tile:hover {
     max-width: none;
   }
 
+  /* Fit the receipt to the printable band of an 80mm roll: 72mm wide, starting 4mm in from the
+     paper edge (Epson TM-T82X-II and most 80mm printers). Centred, it slides off the right side;
+     at 0mm, the left 4mm falls in the unprintable margin. */
+  .reprint-page {
+    max-width: none;
+    margin: 0;
+  }
+
   .receipt {
+    width: 72mm;
+    max-width: none;
+    padding: 0 1mm 4mm;
     border: none;
     border-radius: 0;
-    margin: 0;
+    margin: 0 0 0 4mm;
     box-shadow: none;
   }
 
