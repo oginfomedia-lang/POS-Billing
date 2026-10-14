@@ -43,11 +43,14 @@ export interface SupplierProductPayload {
 }
 
 export interface PoProductRow {
-  product_id: number;
-  product_name: string;
-  product_sku: string | null;
-  purchase_price: string | null;
-  min_order_qty: string;
+  id: number;
+  name: string;
+  sku: string | null;
+  purchase_price: number;
+  tax_rate: number;
+  supplier_product_code: string | null;
+  min_order_qty: number;
+  is_preferred: boolean;
 }
 
 export const supplierApi = {

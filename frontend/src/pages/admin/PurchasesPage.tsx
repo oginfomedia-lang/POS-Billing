@@ -201,24 +201,61 @@ const PICKER_LIMIT = 20;
 const SEARCH_DELAY_MS = 300;
 
 /**
- * Product picker for PO lines. Searches on the server (name, SKU or exact barcode), so every product can
- * be found however big the catalogue is. With an empty box it shows the first few products.
+ * Product picker for PO lines.
+ * When a supplier is selected: shows only products linked to that supplier (fetched once, filtered locally).
+ * When no supplier is selected: input is locked with a hint to pick a supplier first.
  */
 function ProductSearch({
   onSelect,
   storeId,
+  supplierId,
 }: {
   onSelect: (p: ProductRow) => void;
   storeId?: number | '';
+  supplierId?: number;
 }) {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [supplierProducts, setSupplierProducts] = useState<ProductRow[]>([]);
+
+  // Fetch all products linked to the chosen supplier once (not per-keystroke).
+  useEffect(() => {
+    if (!supplierId || supplierId === 0) {
+      setSupplierProducts([]);
+      setResults([]);
+      return;
+    }
+    supplierApi.getPoProducts(supplierId)
+      .then((r) => {
+        setSupplierProducts(r.data.map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          price: p.purchase_price,
+          tax_rate: p.tax_rate,
+        })));
+      })
+      .catch(() => setSupplierProducts([]));
+  }, [supplierId]);
 
   useEffect(() => {
     if (!open) return;
+
+    // Supplier selected: filter locally from the pre-loaded list.
+    if (supplierId && supplierId > 0) {
+      const lq = q.trim().toLowerCase();
+      setResults(
+        supplierProducts
+          .filter((p) => !lq || p.name.toLowerCase().includes(lq) || (p.sku ?? '').toLowerCase().includes(lq))
+          .slice(0, PICKER_LIMIT),
+      );
+      return;
+    }
+
+    // No supplier: fall back to full-catalogue search (shouldn't reach here because input is disabled, but just in case).
     let cancelled = false;
     const sid = typeof storeId === 'number' && storeId > 0 ? storeId : undefined;
     const timer = window.setTimeout(() => {
@@ -241,7 +278,7 @@ function ProductSearch({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [q, open, storeId]);
+  }, [q, open, storeId, supplierId, supplierProducts]);
 
   function pick(p: ProductRow) {
     onSelect(p);
@@ -249,86 +286,102 @@ function ProductSearch({
     setOpen(false);
   }
 
+  const noSupplier = !supplierId || supplierId === 0;
+
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ position: 'relative', maxWidth: 560 }}>
         <label className="field-label" style={{ marginBottom: 4, display: 'block', fontSize: 12 }}>
           {t('purchases.productSearch', 'Search product name or SKU')}
+          {!noSupplier && supplierProducts.length > 0 && (
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: '#6366f1', background: '#eef2ff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '1px 8px' }}>
+              {supplierProducts.length} linked products
+            </span>
+          )}
         </label>
-        <input
-          className="field-input"
-          placeholder={t('purchases.productSearchHint', 'Type name, SKU or scan barcode')}
-          value={q}
-          onFocus={() => setOpen(true)}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onBlur={() => setTimeout(() => setOpen(false), 200)}
-        />
-        {open && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 'calc(100% + 4px)',
-              left: 0,
-              right: 0,
-              background: 'var(--surface)',
-              border: '1px solid var(--border-strong)',
-              borderRadius: 'var(--radius-md)',
-              boxShadow: 'var(--shadow-lg)',
-              zIndex: 60,
-              maxHeight: 280,
-              overflowY: 'auto',
-            }}
-          >
-            {loading && results.length === 0 && (
-              <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
-                {t('purchases.loadingProducts', 'Loading available products...')}
-              </div>
-            )}
-            {!loading && results.length === 0 && (
-              <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
-                {t('purchases.noProductMatch', 'No product found')}
-              </div>
-            )}
-            {results.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  padding: '9px 14px',
-                  cursor: 'pointer',
-                  borderBottom: '1px solid var(--border-subtle)',
-                  transition: 'background 100ms',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--brand-50)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '')}
-                onMouseDown={() => pick(p)}
-              >
-                <div>
-                  <span style={{ fontWeight: 700 }}>{p.name}</span>
-                  {p.sku && (
-                    <span
-                      style={{
-                        marginLeft: 8,
-                        fontSize: 12,
-                        color: 'var(--muted)',
-                        fontFamily: 'var(--font-mono)',
-                      }}
-                    >
-                      {p.sku}
-                    </span>
-                  )}
-                </div>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginLeft: 12, flexShrink: 0 }}>
-                  ₹{p.price.toFixed(2)}
-                </span>
-              </div>
-            ))}
+        {noSupplier ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, color: '#94a3b8', fontSize: '0.88em' }}>
+            <span style={{ fontSize: 18 }}>🔒</span>
+            <span>Select a <strong style={{ color: '#64748b' }}>Supplier</strong> above to see their linked products</span>
           </div>
+        ) : (
+          <>
+            <input
+              className="field-input"
+              placeholder={t('purchases.productSearchHint', 'Type name, SKU or scan barcode')}
+              value={q}
+              onFocus={() => setOpen(true)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setOpen(true);
+              }}
+              onBlur={() => setTimeout(() => setOpen(false), 200)}
+            />
+            {open && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  left: 0,
+                  right: 0,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-lg)',
+                  zIndex: 60,
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                }}
+              >
+                {loading && results.length === 0 && (
+                  <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
+                    {t('purchases.loadingProducts', 'Loading available products...')}
+                  </div>
+                )}
+                {!loading && results.length === 0 && (
+                  <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
+                    {t('purchases.noProductMatch', 'No product found — make sure this product is linked to the supplier')}
+                  </div>
+                )}
+                {results.map((p) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      padding: '9px 14px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      transition: 'background 100ms',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--brand-50)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                    onMouseDown={() => pick(p)}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 700 }}>{p.name}</span>
+                      {p.sku && (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            fontSize: 12,
+                            color: 'var(--muted)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          {p.sku}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginLeft: 12, flexShrink: 0 }}>
+                      ₹{p.price.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -493,7 +546,14 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
                 <select
                   className="field-input"
                   value={supplierId}
-                  onChange={(e) => setSupplierId(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newId = Number(e.target.value);
+                    if (newId !== supplierId && lines.length > 0) {
+                      if (!window.confirm('Changing the supplier will clear all line items. Continue?')) return;
+                      setLines([]);
+                    }
+                    setSupplierId(newId);
+                  }}
                 >
                   <option value={0}>{t('purchases.chooseSupplier')}</option>
                   {suppliers.map((s) => (
@@ -563,7 +623,7 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
           {/* Section — Line items */}
           <fieldset className="form-section">
             <legend>{t('purchases.sectionItems')}</legend>
-            <ProductSearch onSelect={addLine} storeId={storeId} />
+            <ProductSearch onSelect={addLine} storeId={storeId} supplierId={supplierId || undefined} />
 
             {lines.length > 0 && (
               <div className="table-card" style={{ marginTop: 12 }}>

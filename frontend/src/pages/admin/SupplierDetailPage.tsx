@@ -1,7 +1,7 @@
 // Supplier detail page — tabbed view: Overview, Products, POs, GRNs, Invoices, Payments, Ledger.
 // The admin enters the supplier's bills (Invoices) and pays against them (Payments); what is owed is
 // never more than the goods actually received (GRNs).
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { SupplierInvoiceDialog } from '../../components/admin/SupplierInvoiceDialog';
@@ -15,6 +15,16 @@ import {
   IconTrash,
   IconPlus,
   IconDownload,
+  IconPackage,
+  IconSearch,
+  IconAlert,
+  IconCreditCard,
+  IconCash,
+  IconCheck,
+  IconEdit,
+  IconStore,
+  IconUsers,
+  IconHistory,
 } from '../../components/common/Icons';
 import { supplierApi } from '../../services/api/supplierApi';
 import { supplierInvoiceApi } from '../../services/api/supplierInvoiceApi';
@@ -29,6 +39,7 @@ import type {
   SupplierProductOut,
   PurchaseOrderOut,
   SupplierGRNOut,
+  GoodsReceiptOut,
   SupplierInvoiceOut,
   SupplierPaymentOut,
   SupplierDocumentOut,
@@ -58,12 +69,24 @@ function InfoRow({ label, value }: { label: string; value?: string | number | nu
   );
 }
 
-function AmountBadge({ label, amount, variant }: { label: string; amount: string | number; variant?: 'danger' | 'success' | 'neutral' }) {
-  const color = variant === 'danger' ? 'var(--color-danger)' : variant === 'success' ? 'var(--color-success)' : 'var(--color-text)';
+function AmountBadge({ label, amount, variant, icon }: { label: string; amount: string | number; variant?: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; icon?: React.ReactNode }) {
+  const palette = {
+    neutral: { cardBg: '#eff6ff', iconBg: '#dbeafe', iconColor: '#2563eb', text: '#1e3a8a', label: '#60a5fa' },
+    success: { cardBg: '#f0fdf4', iconBg: '#dcfce7', iconColor: '#16a34a', text: '#14532d', label: '#4ade80' },
+    info:    { cardBg: '#eef2ff', iconBg: '#e0e7ff', iconColor: '#4f46e5', text: '#312e81', label: '#818cf8' },
+    warning: { cardBg: '#fff7ed', iconBg: '#fed7aa', iconColor: '#ea580c', text: '#7c2d12', label: '#fb923c' },
+    danger:  { cardBg: '#fef2f2', iconBg: '#fecaca', iconColor: '#dc2626', text: '#7f1d1d', label: '#f87171' },
+  };
+  const p = palette[variant ?? 'neutral'];
   return (
-    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '10px 16px', textAlign: 'center', minWidth: 140 }}>
-      <div style={{ fontSize: '1.1em', fontWeight: 700, color }}>{formatCurrency(Number(amount))}</div>
-      <div style={{ fontSize: '0.8em', color: 'var(--color-text-muted)', marginTop: 2 }}>{label}</div>
+    <div style={{ background: p.cardBg, border: `1px solid ${p.iconBg}`, borderRadius: 14, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: p.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: p.iconColor }}>
+        {icon}
+      </div>
+      <div>
+        <div style={{ fontSize: '0.7em', color: p.label, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.6px', fontWeight: 700 }}>{label}</div>
+        <div style={{ fontSize: '1.3em', fontWeight: 700, color: p.text, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>{formatCurrency(Number(amount))}</div>
+      </div>
     </div>
   );
 }
@@ -100,8 +123,44 @@ export function SupplierDetailPage() {
 
   const [tabLoading, setTabLoading] = useState(false);
   const [tabError, setTabError] = useState('');
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('');
+  const [invPage, setInvPage] = useState(1);
+  const INV_PER_PAGE = 10;
+  const [poReceipt, setPoReceipt] = useState<PurchaseOrderOut | null>(null);
+  const [poReceiptLoading, setPoReceiptLoading] = useState(false);
+  const [grnReceipt, setGrnReceipt] = useState<GoodsReceiptOut | null>(null);
+  const [grnReceiptMeta, setGrnReceiptMeta] = useState<SupplierGRNOut | null>(null);
+  const [grnReceiptLoading, setGrnReceiptLoading] = useState(false);
+  const [invReceipt, setInvReceipt] = useState<SupplierInvoiceOut | null>(null);
 
   const loadedTabs = useRef<Set<Tab>>(new Set());
+
+  async function openPoReceipt(poId: number) {
+    setPoReceiptLoading(true);
+    try {
+      const r = await purchaseApi.get(poId);
+      setPoReceipt(r.data);
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    } finally {
+      setPoReceiptLoading(false);
+    }
+  }
+
+  async function openGrnReceipt(g: SupplierGRNOut) {
+    setGrnReceiptLoading(true);
+    setGrnReceiptMeta(g);
+    try {
+      const receipts = await purchaseApi.listReceipts(g.purchase_order_id);
+      const match = receipts.data.find((r) => r.id === g.id) ?? receipts.data[0] ?? null;
+      setGrnReceipt(match);
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    } finally {
+      setGrnReceiptLoading(false);
+    }
+  }
 
   useEffect(() => {
     async function loadBase() {
@@ -262,70 +321,95 @@ export function SupplierDetailPage() {
     <div className="admin-page">
       <AdminNav />
 
-      {/* Back + header */}
-      <div className="admin-header" style={{ marginBottom: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button className="btn-icon" onClick={() => navigate('/admin/suppliers')} title="Back to Suppliers">
-            <IconArrowLeft size={18} />
-          </button>
-          <IconTruck size={22} />
-          <h2 style={{ margin: 0 }}>{supplier.company_name}</h2>
-          <span style={{ fontFamily: 'monospace', fontSize: '0.8em', color: 'var(--color-text-muted)', padding: '2px 8px', background: 'var(--color-surface)', borderRadius: 4, border: '1px solid var(--color-border)' }}>
-            {supplier.supplier_code}
-          </span>
-          <span className={`status-badge ${supplier.is_active ? 'badge-success' : 'badge-neutral'}`}>
-            {supplier.is_active ? 'Active' : 'Inactive'}
-          </span>
+      {/* Back link */}
+      <button type="button" onClick={() => navigate('/admin/suppliers')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-text-muted)', fontSize: '0.88em', marginBottom: 14, padding: 0 }}>
+        <IconArrowLeft size={15} /> Back to Suppliers
+      </button>
+
+      {/* Supplier header row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
+        {/* Avatar */}
+        <div style={{ width: 60, height: 60, borderRadius: 16, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <IconStore size={28} color="#7c3aed" />
         </div>
+        {/* Name + meta */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h2 style={{ margin: 0, fontSize: '1.45em', fontWeight: 700, letterSpacing: '-0.3px' }}>{supplier.company_name}</h2>
+            <span className={`status-badge ${supplier.is_active ? 'badge-success' : 'badge-neutral'}`}>{supplier.is_active ? 'Active' : 'Inactive'}</span>
+          </div>
+          <div style={{ marginTop: 5, display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: '0.85em', color: 'var(--color-text-muted)', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'monospace', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px' }}>{supplier.supplier_code}</span>
+            {supplier.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.61 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.52 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.5a16 16 0 0 0 6 6l.87-.87a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              {supplier.phone}
+            </span>}
+            {supplier.gstin && <span>GSTIN: {supplier.gstin}</span>}
+          </div>
+        </div>
+        {/* Action buttons */}
+        {summary && (
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            <button className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setInvoiceDialog({})}><IconPlus size={14} /> Add Invoice</button>
+            <button className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => setPaymentDialog({})}><IconCreditCard size={14} /> Record Payment</button>
+          </div>
+        )}
       </div>
 
       {/* Financial summary: what was ordered, received, billed, owed and paid */}
       {summary && (
         <>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
-            <AmountBadge label="PO value" amount={summary.total_po_value} />
-            <AmountBadge label="Goods received (GRN)" amount={summary.total_received_value} />
-            <AmountBadge label="Invoiced (as billed)" amount={summary.total_invoiced} />
-            <AmountBadge label="Payable" amount={summary.total_payable} />
-            <AmountBadge label="Paid" amount={summary.total_paid} variant="success" />
-            <AmountBadge label="Balance to pay" amount={summary.outstanding_balance} variant={summary.outstanding_balance > 0 ? 'danger' : 'neutral'} />
-            {summary.advance_balance > 0 && <AmountBadge label="Unused advance" amount={summary.advance_balance} variant="success" />}
-            <AmountBadge label="Overdue" amount={summary.overdue_amount} variant={summary.overdue_amount > 0 ? 'danger' : 'neutral'} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 12 }}>
+            <AmountBadge label="PO Value" amount={summary.total_po_value} variant="neutral" icon={<IconClipboardList size={20} />} />
+            <AmountBadge label="Goods Received (GRN)" amount={summary.total_received_value} variant="neutral" icon={<IconPackage size={20} />} />
+            <AmountBadge label="Invoiced (As Billed)" amount={summary.total_invoiced} variant="info" icon={<IconFileText size={20} />} />
+            <AmountBadge label="Total Payable" amount={summary.total_payable} variant="info" icon={<IconCreditCard size={20} />} />
+            <AmountBadge label="Total Paid" amount={summary.total_paid} variant="success" icon={<IconCash size={20} />} />
+            <AmountBadge label="Balance Due" amount={summary.outstanding_balance} variant={summary.outstanding_balance > 0 ? 'danger' : 'success'} icon={<IconAlert size={20} />} />
+            {summary.advance_balance > 0 && <AmountBadge label="Unused Advance" amount={summary.advance_balance} variant="success" icon={<IconCheck size={20} />} />}
+            <AmountBadge label="Overdue" amount={summary.overdue_amount} variant={summary.overdue_amount > 0 ? 'warning' : 'neutral'} icon={<IconAlert size={20} />} />
           </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-            {summary.not_invoiced_value > 0 && (
-              <span className="hint-text">
-                Received but not invoiced yet: <strong>{formatCurrency(summary.not_invoiced_value)}</strong>{' '}
-                <button type="button" className="link-button" onClick={() => setInvoiceDialog({})}>Add invoice</button>
-              </span>
-            )}
-            {summary.disputed_count > 0 && (
-              <span className="barcode-badge badge-error">{summary.disputed_count} disputed invoice(s)</span>
-            )}
-            <span style={{ flex: 1 }} />
-            <button className="btn-secondary" onClick={() => setInvoiceDialog({})}><IconPlus size={13} /> Add invoice</button>
-            <button className="btn-primary" onClick={() => setPaymentDialog({})}>Record payment / advance</button>
-          </div>
+          {(summary.not_invoiced_value > 0 || summary.disputed_count > 0) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16, padding: '12px 16px', background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10 }}>
+              <div style={{ color: '#d97706', flexShrink: 0 }}><IconAlert size={20} /></div>
+              <div style={{ flex: 1 }}>
+                {summary.not_invoiced_value > 0 && (
+                  <div style={{ fontWeight: 600, fontSize: '0.9em', color: '#92400e' }}>
+                    Received but not invoiced: <span style={{ color: '#d97706' }}>{formatCurrency(summary.not_invoiced_value)}</span>
+                  </div>
+                )}
+                <div style={{ fontSize: '0.82em', color: '#b45309', marginTop: 2 }}>
+                  {summary.not_invoiced_value > 0 ? 'Goods received through GRN are pending invoicing. Link invoices to the respective GRNs.' : ''}
+                  {summary.disputed_count > 0 ? ` ${summary.disputed_count} disputed invoice(s) need attention.` : ''}
+                </div>
+              </div>
+              {summary.not_invoiced_value > 0 && (
+                <button className="btn-secondary" style={{ fontSize: '0.83em', padding: '4px 12px', flexShrink: 0 }} onClick={() => setTab('grns')}>View GRNs</button>
+              )}
+            </div>
+          )}
         </>
       )}
       {notice && <div className="notice-bar">{notice}</div>}
 
       {/* Tab nav */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--color-border)', marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 2, borderBottom: '2px solid var(--color-border)', marginBottom: 18, flexWrap: 'wrap' }}>
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
-              padding: '8px 16px',
-              background: 'none',
+              padding: '9px 18px',
+              background: tab === t.key ? 'var(--color-primary-bg, rgba(99,102,241,0.08))' : 'none',
               border: 'none',
               borderBottom: tab === t.key ? '2px solid var(--color-primary)' : '2px solid transparent',
+              borderRadius: '6px 6px 0 0',
               color: tab === t.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
               fontWeight: tab === t.key ? 600 : 400,
               cursor: 'pointer',
               marginBottom: -2,
-              fontSize: '0.92em',
+              fontSize: '0.9em',
+              transition: 'color 0.15s, background 0.15s',
             }}
           >
             {t.label}
@@ -473,7 +557,12 @@ export function SupplierDetailPage() {
             <tbody>
               {pos.map((po) => (
                 <tr key={po.id}>
-                  <td><span style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{po.po_number}</span></td>
+                  <td>
+                    <button type="button" onClick={() => openPoReceipt(po.id)}
+                      style={{ fontFamily: 'monospace', fontSize: '0.88em', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600, padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+                      {po.po_number}
+                    </button>
+                  </td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(po.purchase_date)}</td>
                   <td>
                     <span className={`status-badge ${
@@ -514,7 +603,12 @@ export function SupplierDetailPage() {
             <tbody>
               {grns.map((g) => (
                 <tr key={g.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.receipt_number}</td>
+                  <td>
+                    <button type="button" onClick={() => openGrnReceipt(g)}
+                      style={{ fontFamily: 'monospace', fontSize: '0.88em', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600, padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+                      {g.receipt_number}
+                    </button>
+                  </td>
                   <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.po_number}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDate(g.received_at)}</td>
                   <td>{g.item_count}</td>
@@ -523,10 +617,15 @@ export function SupplierDetailPage() {
                     {g.invoice_number ? (
                       <span style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{g.invoice_number}</span>
                     ) : (
-                      <span>
-                        <span className="status-badge badge-warning">Not invoiced</span>{' '}
-                        <button type="button" className="link-button" onClick={() => setInvoiceDialog({ grnId: g.id })}>Add invoice</button>
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.78em', fontWeight: 600, color: '#92400e', background: '#fef9c3', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
+                          ● Not Invoiced
+                        </span>
+                        <button type="button" onClick={() => setInvoiceDialog({ grnId: g.id })}
+                          style={{ fontSize: '0.8em', fontWeight: 600, color: '#4f46e5', background: '#eef2ff', border: '1px solid #e0e7ff', borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
+                          + Add Invoice
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -540,88 +639,163 @@ export function SupplierDetailPage() {
       )}
 
       {/* ── Tab: Invoices ─────────────────────────────────────────────────── */}
-      {tab === 'invoices' && (
-        <div className="table-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Invoice #</th>
-                <th>Date</th>
-                <th>Due</th>
-                <th>PO / GRNs</th>
-                <th style={{ textAlign: 'right' }}>Billed</th>
-                <th style={{ textAlign: 'right' }}>Payable</th>
-                <th style={{ textAlign: 'right' }}>Paid</th>
-                <th style={{ textAlign: 'right' }}>Balance</th>
-                <th>Status</th>
-                <th>Check</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id}>
-                  <td style={{ fontFamily: 'monospace', fontSize: '0.88em' }}>{inv.invoice_number}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(inv.invoice_date)}</td>
-                  <td style={{ whiteSpace: 'nowrap' }}>{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
-                  <td style={{ fontSize: '0.82em' }}>
-                    {inv.po_number ?? '—'}
-                    {inv.grn_numbers.length > 0 && <div style={{ color: 'var(--muted)' }}>{inv.grn_numbers.join(', ')}</div>}
-                    {inv.is_legacy && <div style={{ color: 'var(--muted)' }}>old (no GRN)</div>}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.grand_total))}</td>
-                  <td style={{ textAlign: 'right' }} title={inv.received_value !== null ? `Goods received: ${formatCurrency(Number(inv.received_value))}` : undefined}>
-                    {formatCurrency(Number(inv.payable_amount))}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.amount_paid))}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600, color: Number(inv.outstanding) > 0 ? 'var(--danger-text)' : undefined }}>
-                    {formatCurrency(Number(inv.outstanding))}
-                  </td>
-                  <td>
-                    <span className={`status-badge ${
-                      inv.payment_status === 'paid' ? 'badge-success' :
-                      inv.payment_status === 'cancelled' ? 'badge-neutral' :
-                      inv.payment_status === 'partially_paid' ? 'badge-info' : 'badge-warning'
-                    }`}>
-                      {inv.payment_status.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`status-badge ${inv.verification_status === 'verified' ? 'badge-success' : inv.verification_status === 'disputed' ? 'badge-danger' : 'badge-neutral'}`}
-                      title={inv.difference_reason ?? undefined}
-                    >
-                      {inv.verification_status}
-                    </span>
-                    {inv.verification_status === 'disputed' && inv.difference !== null && (
-                      <div style={{ fontSize: '0.78em', color: 'var(--danger-text)' }}>diff {formatCurrency(Number(inv.difference))}</div>
-                    )}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    {inv.document_id && (
-                      <button className="btn-icon" onClick={() => openDoc(inv.document_id!)} title="Open the bill">
-                        <IconFileText size={14} />
-                      </button>
-                    )}
-                    {Number(inv.outstanding) > 0 && inv.payment_status !== 'cancelled' && (
-                      <button className="btn-primary btn-compact" onClick={() => setPaymentDialog({ invoiceId: inv.id })}>Pay</button>
-                    )}
-                    {inv.payment_status !== 'paid' && inv.payment_status !== 'cancelled' && (
-                      <button type="button" className="link-button" style={{ marginLeft: 6 }} onClick={() => setEditInvoice(inv)}>Edit</button>
-                    )}
-                    {inv.payment_status !== 'cancelled' && Number(inv.amount_paid) === 0 && (
-                      <button type="button" className="link-button" style={{ marginLeft: 6 }} onClick={() => cancelInvoice(inv)}>Cancel</button>
-                    )}
-                  </td>
+      {tab === 'invoices' && (() => {
+        const filtered = invoices.filter(inv => {
+          const q = invoiceSearch.toLowerCase();
+          const matchQ = !q || inv.invoice_number.toLowerCase().includes(q) || (inv.po_number ?? '').toLowerCase().includes(q);
+          const matchS = !invoiceStatusFilter || inv.payment_status === invoiceStatusFilter;
+          return matchQ && matchS;
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / INV_PER_PAGE));
+        const page = Math.min(invPage, totalPages);
+        const paged = filtered.slice((page - 1) * INV_PER_PAGE, page * INV_PER_PAGE);
+        return (
+          <div className="table-card">
+            {/* Toolbar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid var(--color-border)', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, fontSize: '1em', fontWeight: 600 }}>Invoices</h3>
+              <span style={{ flex: 1 }} />
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', pointerEvents: 'none' }}><IconSearch size={14} /></span>
+                <input
+                  type="text"
+                  placeholder="Search invoice No. or PO No..."
+                  value={invoiceSearch}
+                  onChange={e => { setInvoiceSearch(e.target.value); setInvPage(1); }}
+                  style={{ paddingLeft: 30, paddingRight: 10, height: 32, border: '1px solid var(--color-border)', borderRadius: 6, fontSize: '0.85em', background: 'var(--color-surface)', color: 'var(--color-text)', width: 240 }}
+                />
+              </div>
+              <select value={invoiceStatusFilter} onChange={e => { setInvoiceStatusFilter(e.target.value); setInvPage(1); }}
+                style={{ height: 32, border: '1px solid var(--color-border)', borderRadius: 6, fontSize: '0.85em', padding: '0 8px', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+                <option value="">All Status</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partially_paid">Partially Paid</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button className="btn-secondary" style={{ height: 32, fontSize: '0.85em', display: 'flex', alignItems: 'center', gap: 5 }}
+                onClick={() => {
+                  const rows = [['Invoice #','Date','Due Date','PO/GRN','Billed','Payable','Paid','Balance','Status','Verification'].join(','),
+                    ...filtered.map(i => [i.invoice_number, formatDate(i.invoice_date), i.due_date ? formatDate(i.due_date) : '', i.po_number ?? '', i.grand_total, i.payable_amount, i.amount_paid, i.outstanding, i.payment_status, i.verification_status].join(','))].join('\n');
+                  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows], { type: 'text/csv' })); a.download = `invoices-${supplier.supplier_code}.csv`; a.click();
+                }}>
+                <IconDownload size={14} /> Export
+              </button>
+            </div>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Invoice #</th>
+                  <th>Date</th>
+                  <th>Due Date</th>
+                  <th>PO / GRN</th>
+                  <th style={{ textAlign: 'right' }}>Billed Amount</th>
+                  <th style={{ textAlign: 'right' }}>Paid Amount</th>
+                  <th style={{ textAlign: 'right' }}>Balance</th>
+                  <th>Status</th>
+                  <th>Verification</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-              {invoices.length === 0 && !tabLoading && (
-                <tr><td colSpan={11} className="empty-row">No invoices yet. When the supplier's bill arrives, click "Add invoice".</td></tr>
+              </thead>
+              <tbody>
+                {paged.map((inv) => (
+                  <tr key={inv.id}>
+                    <td>
+                      <button type="button" onClick={() => setInvReceipt(inv)}
+                        style={{ fontFamily: 'monospace', fontSize: '0.88em', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 600, padding: 0, textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+                        {inv.invoice_number}
+                      </button>
+                      {inv.document_id && (
+                        <button className="btn-icon" style={{ marginLeft: 4, verticalAlign: 'middle' }} onClick={() => openDoc(inv.document_id!)} title="View bill">
+                          <IconFileText size={13} />
+                        </button>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(inv.invoice_date)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                    <td style={{ fontSize: '0.82em' }}>
+                      {inv.po_number ?? '—'}
+                      {inv.grn_numbers.length > 0 && <div style={{ color: 'var(--color-text-muted)' }}>{inv.grn_numbers.join(', ')}</div>}
+                      {inv.is_legacy && <div style={{ color: 'var(--color-text-muted)' }}>(No GRN)</div>}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.grand_total))}</td>
+                    <td style={{ textAlign: 'right' }}>{formatCurrency(Number(inv.amount_paid))}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600, color: Number(inv.outstanding) > 0 ? '#ef4444' : undefined }}>
+                      {formatCurrency(Number(inv.outstanding))}
+                    </td>
+                    <td>
+                      <span className={`status-badge ${
+                        inv.payment_status === 'paid' ? 'badge-success' :
+                        inv.payment_status === 'cancelled' ? 'badge-neutral' :
+                        inv.payment_status === 'partially_paid' ? 'badge-info' : 'badge-warning'
+                      }`} style={{ textTransform: 'capitalize', fontSize: '0.8em' }}>
+                        {inv.payment_status === 'partially_paid' ? 'Partial' : inv.payment_status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${inv.verification_status === 'verified' ? 'badge-success' : inv.verification_status === 'disputed' ? 'badge-danger' : 'badge-neutral'}`}
+                        style={{ fontSize: '0.8em', textTransform: 'capitalize' }} title={inv.difference_reason ?? undefined}>
+                        {inv.verification_status}
+                      </span>
+                      {inv.verification_status === 'disputed' && inv.difference !== null && (
+                        <div style={{ fontSize: '0.75em', color: '#ef4444' }}>diff {formatCurrency(Number(inv.difference))}</div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                        {inv.document_id && (
+                          <button title="View attached bill" onClick={() => openDoc(inv.document_id!)}
+                            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                            <IconFileText size={14} />
+                          </button>
+                        )}
+                        {Number(inv.outstanding) > 0 && inv.payment_status !== 'cancelled' && (
+                          <button title="Record payment" onClick={() => setPaymentDialog({ invoiceId: inv.id })}
+                            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                            <IconCash size={14} />
+                          </button>
+                        )}
+                        {inv.payment_status !== 'paid' && inv.payment_status !== 'cancelled' && (
+                          <button title="Edit invoice" onClick={() => setEditInvoice(inv)}
+                            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #fde68a', background: '#fffbeb', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                            <IconEdit size={14} />
+                          </button>
+                        )}
+                        {inv.payment_status !== 'cancelled' && Number(inv.amount_paid) === 0 && (
+                          <button title="Cancel invoice" onClick={() => cancelInvoice(inv)}
+                            style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                            <IconTrash size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {paged.length === 0 && !tabLoading && (
+                  <tr><td colSpan={10} className="empty-row">{invoices.length === 0 ? 'No invoices yet. When the supplier\'s bill arrives, click "Add Invoice".' : 'No invoices match your search.'}</td></tr>
+                )}
+              </tbody>
+            </table>
+            {/* Footer */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--color-border)', fontSize: '0.85em', color: 'var(--color-text-muted)' }}>
+              <span>Showing {filtered.length === 0 ? 0 : (page - 1) * INV_PER_PAGE + 1} – {Math.min(page * INV_PER_PAGE, filtered.length)} of {filtered.length} invoice{filtered.length !== 1 ? 's' : ''}</span>
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button className="btn-icon" disabled={page <= 1} onClick={() => setInvPage(p => p - 1)}>‹</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
+                    <button key={pg} onClick={() => setInvPage(pg)}
+                      style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid var(--color-border)', background: pg === page ? 'var(--color-primary)' : 'var(--color-surface)', color: pg === page ? '#fff' : 'var(--color-text)', cursor: 'pointer', fontSize: '0.85em', fontWeight: pg === page ? 600 : 400 }}>
+                      {pg}
+                    </button>
+                  ))}
+                  <button className="btn-icon" disabled={page >= totalPages} onClick={() => setInvPage(p => p + 1)}>›</button>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Tab: Payments ─────────────────────────────────────────────────── */}
       {tab === 'payments' && (
@@ -664,14 +838,23 @@ export function SupplierDetailPage() {
                     ) : '—'}
                   </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
-                    {p.is_voided
-                      ? <span className="status-badge badge-neutral">Voided</span>
-                      : (
-                        <>
-                          <span className="status-badge badge-success">Active</span>{' '}
-                          <button type="button" className="link-button" onClick={() => voidPayment(p)}>Void</button>
-                        </>
-                      )}
+                    {p.is_voided ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78em', fontWeight: 600, color: '#6b7280', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 20, padding: '4px 10px' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#9ca3af', flexShrink: 0 }} />
+                        Voided
+                      </span>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.78em', fontWeight: 600, color: '#15803d', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 20, padding: '4px 10px' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                          Active
+                        </span>
+                        <button type="button" onClick={() => voidPayment(p)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.78em', fontWeight: 600, color: '#b91c1c', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 20, padding: '4px 10px', cursor: 'pointer' }}>
+                          ✕ Void
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -772,6 +955,421 @@ export function SupplierDetailPage() {
             refreshMoney();
           }}
         />
+      )}
+
+      {/* Invoice Receipt modal */}
+      {invReceipt && (() => {
+        const paid = Number(invReceipt.amount_paid);
+        const payable = Number(invReceipt.payable_amount);
+        const outstanding = Number(invReceipt.outstanding);
+        const pct = payable > 0 ? Math.min(100, Math.round((paid / payable) * 100)) : (paid > 0 ? 100 : 0);
+        const statusColor = invReceipt.payment_status === 'paid' ? { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#22c55e' }
+          : invReceipt.payment_status === 'partially_paid' ? { bg: '#eef2ff', border: '#e0e7ff', text: '#4f46e5', dot: '#818cf8' }
+          : invReceipt.payment_status === 'cancelled' ? { bg: '#f3f4f6', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af' }
+          : { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', dot: '#fb923c' };
+        const statusLabel = invReceipt.payment_status === 'partially_paid' ? 'Partial' : invReceipt.payment_status === 'paid' ? 'Paid' : invReceipt.payment_status === 'cancelled' ? 'Cancelled' : 'Unpaid';
+        return (
+          <div className="modal-overlay" onClick={() => setInvReceipt(null)} style={{ zIndex: 60 }}>
+            <div className="modal-box" style={{ maxWidth: 620, width: '96%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
+              onClick={(e) => e.stopPropagation()}>
+
+              {/* Header bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 22px', borderBottom: '1px solid var(--color-border)' }}>
+                <div style={{ width: 42, height: 42, borderRadius: 11, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <IconFileText size={22} color="#2563eb" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: '1.05em' }}>Supplier Invoice</div>
+                  <div style={{ fontSize: '0.77em', color: 'var(--color-text-muted)' }}>View detailed information about this supplier invoice</div>
+                </div>
+                <button type="button" onClick={() => setInvReceipt(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.3em', lineHeight: 1 }}>✕</button>
+              </div>
+
+              <div style={{ padding: '0 0 20px' }}>
+
+                {/* ── Invoice number + status ── */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 22px', background: 'linear-gradient(135deg,#eff6ff 0%,#f8faff 100%)', borderBottom: '1px solid var(--color-border)' }}>
+                  <div>
+                    <div style={{ fontSize: '0.7em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>Invoice Number</div>
+                    <div style={{ fontSize: '1.25em', fontWeight: 800, fontFamily: 'monospace', color: '#1e293b', letterSpacing: '-0.5px' }}>{invReceipt.invoice_number}</div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.88em', fontWeight: 700, color: statusColor.text, background: statusColor.bg, border: `1.5px solid ${statusColor.border}`, borderRadius: 20, padding: '6px 16px' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor.dot, display: 'inline-block' }} />
+                    {statusLabel}
+                  </span>
+                </div>
+
+                {/* ── Info table ── */}
+                <div style={{ padding: '0 22px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 0 }}>
+                    <tbody>
+                      {[
+                        ['Supplier', invReceipt.supplier_name, 'Invoice Date', formatDate(invReceipt.invoice_date)],
+                        ['Due Date', invReceipt.due_date ? formatDate(invReceipt.due_date) : '—', 'Purchase Order', invReceipt.po_number ?? '—'],
+                        ...(invReceipt.grn_numbers.length > 0 ? [['GRN(s)', invReceipt.grn_numbers.join(', '), '', '']] : []),
+                        ...(invReceipt.notes ? [['Notes', invReceipt.notes, '', '']] : []),
+                      ].map((row, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                          <td style={{ padding: '10px 0 10px', width: '18%', fontSize: '0.78em', color: '#64748b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>{row[0]}</td>
+                          <td style={{ padding: '10px 20px 10px 10px', fontSize: '0.9em', fontWeight: 600, color: '#1e293b', width: '32%' }}>{row[1]}</td>
+                          {row[2] ? <>
+                            <td style={{ padding: '10px 0 10px', width: '18%', fontSize: '0.78em', color: '#64748b', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', borderLeft: '1px solid var(--color-border)', paddingLeft: 20 }}>{row[2]}</td>
+                            <td style={{ padding: '10px 0 10px 10px', fontSize: '0.9em', fontWeight: 600, color: '#1e293b' }}>{row[3]}</td>
+                          </> : <td colSpan={2} />}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── Amount breakdown ── */}
+                <div style={{ margin: '16px 22px 0', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 16px', background: '#f8fafc', borderBottom: '1px solid var(--color-border)', fontSize: '0.75em', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Amount Breakdown
+                  </div>
+                  {[
+                    { label: 'Subtotal', value: formatCurrency(Number(invReceipt.subtotal)), bold: false },
+                    ...(Number(invReceipt.tax_amount) > 0 ? [{ label: 'Tax (GST)', value: formatCurrency(Number(invReceipt.tax_amount)), bold: false }] : []),
+                    ...(Number(invReceipt.other_charges) > 0 ? [{ label: 'Other Charges', value: formatCurrency(Number(invReceipt.other_charges)), bold: false }] : []),
+                  ].map((r, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid var(--color-border)', fontSize: '0.88em', color: '#64748b' }}>
+                      <span>{r.label}</span><span>{r.value}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 16px', fontWeight: 700, fontSize: '1em', color: '#1e293b', background: 'rgba(99,102,241,0.04)' }}>
+                    <span>Grand Total</span>
+                    <span style={{ color: '#4f46e5' }}>{formatCurrency(Number(invReceipt.grand_total))}</span>
+                  </div>
+                </div>
+
+                {/* ── Payment tiles — 3 columns ── */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, margin: '14px 22px 0' }}>
+                  <div style={{ padding: '12px 14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, borderTop: '3px solid #94a3b8' }}>
+                    <div style={{ fontSize: '0.72em', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Payable</div>
+                    <div style={{ fontSize: '1.05em', fontWeight: 700, color: '#334155' }}>{formatCurrency(payable)}</div>
+                  </div>
+                  <div style={{ padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, borderTop: '3px solid #22c55e' }}>
+                    <div style={{ fontSize: '0.72em', color: '#15803d', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Paid</div>
+                    <div style={{ fontSize: '1.05em', fontWeight: 700, color: '#14532d' }}>{formatCurrency(paid)}</div>
+                  </div>
+                  <div style={{ padding: '12px 14px', background: outstanding > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${outstanding > 0 ? '#fecaca' : '#e2e8f0'}`, borderRadius: 10, borderTop: `3px solid ${outstanding > 0 ? '#ef4444' : '#e2e8f0'}` }}>
+                    <div style={{ fontSize: '0.72em', color: outstanding > 0 ? '#b91c1c' : '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>Outstanding</div>
+                    <div style={{ fontSize: '1.05em', fontWeight: 700, color: outstanding > 0 ? '#7f1d1d' : '#94a3b8' }}>{formatCurrency(outstanding)}</div>
+                  </div>
+                </div>
+
+                {/* ── Progress bar ── */}
+                <div style={{ padding: '14px 22px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7, fontSize: '0.82em' }}>
+                    <span style={{ color: '#64748b', fontWeight: 500 }}>Payment Progress</span>
+                    <span style={{ fontWeight: 700, color: pct === 100 ? '#16a34a' : pct >= 50 ? '#4f46e5' : '#ea580c' }}>{pct}%</span>
+                  </div>
+                  <div style={{ height: 8, background: '#e2e8f0', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: 99, transition: 'width 0.5s ease', background: pct === 100 ? 'linear-gradient(90deg,#22c55e,#4ade80)' : pct >= 50 ? 'linear-gradient(90deg,#6366f1,#818cf8)' : 'linear-gradient(90deg,#fb923c,#fbbf24)' }} />
+                  </div>
+                </div>
+
+                {/* ── Status footer ── */}
+                <div style={{ margin: '14px 22px 0', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderRadius: 10, background: invReceipt.payment_status === 'paid' ? '#f0fdf4' : invReceipt.payment_status === 'cancelled' ? '#f3f4f6' : '#fffbeb', border: `1px solid ${invReceipt.payment_status === 'paid' ? '#bbf7d0' : invReceipt.payment_status === 'cancelled' ? '#e5e7eb' : '#fde68a'}` }}>
+                  <span style={{ fontSize: '1.1em' }}>{invReceipt.payment_status === 'paid' ? '✅' : invReceipt.payment_status === 'cancelled' ? '🚫' : '⏳'}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.88em', color: '#1e293b' }}>
+                      {invReceipt.payment_status === 'paid' ? 'Invoice fully paid' : invReceipt.payment_status === 'partially_paid' ? 'Partially paid' : invReceipt.payment_status === 'cancelled' ? 'Invoice cancelled' : 'Payment pending'}
+                    </div>
+                    <div style={{ fontSize: '0.76em', color: '#64748b', marginTop: 1 }}>
+                      {invReceipt.payment_status === 'paid' ? 'No outstanding balance' : outstanding > 0 ? `${formatCurrency(outstanding)} still to be paid` : 'No balance due'}
+                    </div>
+                  </div>
+                </div>
+
+                {invReceipt.difference_reason && (
+                  <div style={{ margin: '10px 22px 0', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, fontSize: '0.84em', color: '#991b1b' }}>
+                    <strong>Dispute note:</strong> {invReceipt.difference_reason}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* GRN Receipt modal */}
+      {(grnReceipt || grnReceiptLoading) && (
+        <div className="modal-overlay" onClick={() => { setGrnReceipt(null); setGrnReceiptMeta(null); }} style={{ zIndex: 60 }}>
+          <div className="modal-box" style={{ maxWidth: 580, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
+            onClick={(e) => e.stopPropagation()}>
+            {grnReceiptLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
+            ) : grnReceipt && grnReceiptMeta && (
+              <>
+                {/* Header bar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 11, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <IconPackage size={22} color="#16a34a" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: '1.05em' }}>Goods Receipt Note</div>
+                    <div style={{ fontSize: '0.77em', color: 'var(--color-text-muted)' }}>View details of goods received against purchase order</div>
+                  </div>
+                  <button type="button" onClick={() => { setGrnReceipt(null); setGrnReceiptMeta(null); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.3em', lineHeight: 1 }}>✕</button>
+                </div>
+
+                {/* GRN number + status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--color-border)', background: '#f8fdf9' }}>
+                  <div>
+                    <div style={{ fontSize: '0.7em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>GRN Number</div>
+                    <div style={{ fontSize: '1.2em', fontWeight: 800, fontFamily: 'monospace', color: '#1e293b', letterSpacing: '-0.5px' }}>{grnReceipt.receipt_number}</div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85em', fontWeight: 600, color: '#15803d', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 20, padding: '6px 14px' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} /> Received
+                  </span>
+                </div>
+
+                {/* Info cards — individual floating cards in 2-col grid */}
+                <div style={{ padding: '0 20px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[
+                      { icon: <IconClipboardList size={15} color="#4f46e5" />, iconBg: '#eef2ff', label: 'Purchase Order', value: grnReceiptMeta.po_number, mono: true },
+                      { icon: <IconHistory size={15} color="#0891b2" />, iconBg: '#ecfeff', label: 'Received Date', value: formatDate(grnReceipt.received_at), mono: false },
+                      { icon: <IconUsers size={15} color="#7c3aed" />, iconBg: '#f5f3ff', label: 'Received By', value: grnReceipt.received_by_name, mono: false },
+                      { icon: <IconTruck size={15} color="#059669" />, iconBg: '#f0fdf4', label: 'Supplier', value: supplier.company_name, mono: false },
+                    ].map((cell, i) => (
+                      <div key={i} style={{ padding: '13px 15px', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                          <span style={{ width: 24, height: 24, borderRadius: 6, background: cell.iconBg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {cell.icon}
+                          </span>
+                          <span style={{ fontSize: '0.7em', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cell.label}</span>
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9em', color: '#1e293b', fontFamily: cell.mono ? 'monospace' : 'inherit' }}>{cell.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Invoice Status card */}
+                  <div style={{ marginTop: 10, padding: '13px 15px', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                      <span style={{ width: 24, height: 24, borderRadius: 6, background: '#fef3c7', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <IconFileText size={15} color="#d97706" />
+                      </span>
+                      <span style={{ fontSize: '0.7em', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoice Status</span>
+                    </div>
+                    {grnReceiptMeta.invoice_number ? (
+                      <div style={{ fontWeight: 700, fontSize: '0.9em', color: '#1e293b', fontFamily: 'monospace' }}>{grnReceiptMeta.invoice_number}</div>
+                    ) : (
+                      <div style={{ fontWeight: 700, fontSize: '0.9em', color: '#b45309' }}>Not Invoiced</div>
+                    )}
+                  </div>
+
+                  {grnReceipt.notes && (
+                    <div style={{ marginTop: 10, padding: '11px 15px', border: '1px solid #fde68a', borderRadius: 10, background: '#fffbeb', fontSize: '0.85em', color: '#92400e' }}>
+                      <span style={{ fontWeight: 600 }}>Notes: </span>{grnReceipt.notes}
+                    </div>
+                  )}
+                </div>
+
+                {/* Items Received */}
+                <div style={{ padding: '0 20px 20px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.95em', color: '#1e293b', marginBottom: 10 }}>Items Received</div>
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84em' }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)', width: 32 }}>#</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Product</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Qty Received</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Qty Accepted</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Qty Rejected</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Qty Damaged</th>
+                          <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)' }}>Batch #</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grnReceipt.receipt_items.map((item, idx) => (
+                          <tr key={item.id} style={{ borderBottom: idx < grnReceipt.receipt_items.length - 1 ? '1px solid var(--color-border)' : 'none', background: idx % 2 === 1 ? '#fafafa' : '#fff' }}>
+                            <td style={{ padding: '10px 12px', color: '#94a3b8', fontWeight: 500 }}>{idx + 1}</td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.92em' }}>{item.product_name}</div>
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 500 }}>{parseFloat(item.qty_received).toFixed(2)}</td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', color: '#15803d', fontWeight: 500 }}>
+                              {item.qty_accepted != null ? parseFloat(item.qty_accepted).toFixed(2) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', color: parseFloat(item.qty_rejected) > 0 ? '#dc2626' : '#94a3b8', fontWeight: parseFloat(item.qty_rejected) > 0 ? 600 : 400 }}>
+                              {parseFloat(item.qty_rejected) > 0 ? parseFloat(item.qty_rejected).toFixed(2) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', color: parseFloat(item.qty_damaged) > 0 ? '#d97706' : '#94a3b8', fontWeight: parseFloat(item.qty_damaged) > 0 ? 600 : 400 }}>
+                              {parseFloat(item.qty_damaged) > 0 ? parseFloat(item.qty_damaged).toFixed(2) : '—'}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: '0.85em', color: item.batch_number ? '#1e293b' : '#94a3b8' }}>{item.batch_number ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Total GRN Value */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 20px', textAlign: 'right', minWidth: 160 }}>
+                      <div style={{ fontSize: '0.7em', color: '#2563eb', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>Total GRN Value</div>
+                      <div style={{ fontSize: '1.3em', fontWeight: 800, color: '#1e3a8a' }}>{formatCurrency(Number(grnReceiptMeta.value))}</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* PO Receipt modal */}
+      {(poReceipt || poReceiptLoading) && (
+        <div className="modal-overlay" onClick={() => setPoReceipt(null)} style={{ zIndex: 60 }}>
+          <div className="modal-box" style={{ maxWidth: 600, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
+            onClick={(e) => e.stopPropagation()}>
+            {poReceiptLoading ? (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
+            ) : poReceipt && (() => {
+              const paid = Number(poReceipt.amount_paid);
+              const payable = Number(poReceipt.payable_amount);
+              const outstanding = Number(poReceipt.outstanding_amount);
+              const pct = payable > 0 ? Math.min(100, Math.round((paid / payable) * 100)) : (paid > 0 ? 100 : 0);
+              const statusColor = poReceipt.status === 'received' || poReceipt.status === 'closed'
+                ? { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#22c55e' }
+                : poReceipt.status === 'cancelled'
+                ? { bg: '#f3f4f6', border: '#e5e7eb', text: '#6b7280', dot: '#9ca3af' }
+                : poReceipt.status === 'ordered'
+                ? { bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', dot: '#3b82f6' }
+                : { bg: '#fffbeb', border: '#fde68a', text: '#b45309', dot: '#f59e0b' };
+              return (
+                <>
+                  {/* Header bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderBottom: '1px solid var(--color-border)' }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 11, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <IconClipboardList size={22} color="#2563eb" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '1.05em' }}>Purchase Order</div>
+                      <div style={{ fontSize: '0.77em', color: 'var(--color-text-muted)' }}>View details of this purchase order</div>
+                    </div>
+                    <button type="button" onClick={() => setPoReceipt(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.3em', lineHeight: 1 }}>✕</button>
+                  </div>
+
+                  {/* PO number + status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--color-border)', background: '#f8faff' }}>
+                    <div>
+                      <div style={{ fontSize: '0.7em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 4 }}>Purchase Order Number</div>
+                      <div style={{ fontSize: '1.2em', fontWeight: 800, fontFamily: 'monospace', color: '#1e293b', letterSpacing: '-0.5px' }}>{poReceipt.po_number}</div>
+                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85em', fontWeight: 600, color: statusColor.text, background: statusColor.bg, border: `1.5px solid ${statusColor.border}`, borderRadius: 20, padding: '6px 14px' }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor.dot, display: 'inline-block' }} />
+                      {poReceipt.status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                    </span>
+                  </div>
+
+                  {/* Info cards */}
+                  <div style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {[
+                        { icon: <IconTruck size={15} color="#059669" />, iconBg: '#f0fdf4', label: 'Supplier', value: poReceipt.supplier_name, mono: false },
+                        { icon: <IconUsers size={15} color="#7c3aed" />, iconBg: '#f5f3ff', label: 'Created By', value: poReceipt.created_by_name, mono: false },
+                        { icon: <IconHistory size={15} color="#0891b2" />, iconBg: '#ecfeff', label: 'Purchase Date', value: formatDate(poReceipt.purchase_date), mono: false },
+                        ...(poReceipt.expected_delivery_date ? [{ icon: <IconHistory size={15} color="#d97706" />, iconBg: '#fffbeb', label: 'Expected Delivery', value: formatDate(poReceipt.expected_delivery_date), mono: false }] : []),
+                        ...(poReceipt.reference_number ? [{ icon: <IconFileText size={15} color="#4f46e5" />, iconBg: '#eef2ff', label: 'Reference', value: poReceipt.reference_number, mono: true }] : []),
+                      ].map((cell, i) => (
+                        <div key={i} style={{ padding: '13px 15px', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                            <span style={{ width: 24, height: 24, borderRadius: 6, background: cell.iconBg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {cell.icon}
+                            </span>
+                            <span style={{ fontSize: '0.7em', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{cell.label}</span>
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '0.9em', color: '#1e293b', fontFamily: cell.mono ? 'monospace' : 'inherit' }}>{cell.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {poReceipt.notes && (
+                      <div style={{ marginTop: 10, padding: '11px 15px', border: '1px solid #fde68a', borderRadius: 10, background: '#fffbeb', fontSize: '0.85em', color: '#92400e' }}>
+                        <span style={{ fontWeight: 600 }}>Notes: </span>{poReceipt.notes}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Items */}
+                  <div style={{ padding: '0 20px 16px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.95em', color: '#1e293b', marginBottom: 10 }}>Items</div>
+                    <div style={{ border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84em' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc' }}>
+                            {['#', 'Product / SKU', 'Qty Ordered', 'Qty Received', 'Unit Price', 'Line Total'].map((h, i) => (
+                              <th key={i} style={{ padding: '9px 12px', textAlign: i > 1 ? 'right' : 'left', fontWeight: 600, fontSize: '0.78em', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid var(--color-border)', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {poReceipt.items.map((item, idx) => (
+                            <tr key={item.id} style={{ borderBottom: idx < poReceipt.items.length - 1 ? '1px solid var(--color-border)' : 'none', background: idx % 2 === 1 ? '#fafafa' : '#fff' }}>
+                              <td style={{ padding: '10px 12px', color: '#94a3b8', fontWeight: 500 }}>{idx + 1}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.92em' }}>{item.product_name}</div>
+                                {item.product_sku && <div style={{ fontSize: '0.76em', color: '#94a3b8', fontFamily: 'monospace', marginTop: 1 }}>{item.product_sku}</div>}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 500 }}>{parseFloat(item.ordered_qty).toFixed(2)}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', color: parseFloat(item.received_qty) > 0 ? '#15803d' : '#94a3b8', fontWeight: 500 }}>
+                                {parseFloat(item.received_qty).toFixed(2)}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', color: '#475569' }}>{formatCurrency(Number(item.unit_price))}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#1e293b' }}>{formatCurrency(Number(item.line_total))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+
+                      {/* Subtotal / Grand Total rows */}
+                      <div style={{ borderTop: '1px solid var(--color-border)', background: '#f8fafc' }}>
+                        {[
+                          ...(Number(poReceipt.discount_amount) > 0 ? [{ label: 'Discount', value: `− ${formatCurrency(Number(poReceipt.discount_amount))}`, bold: false }] : []),
+                          ...(Number(poReceipt.tax_amount) > 0 ? [{ label: 'Tax', value: formatCurrency(Number(poReceipt.tax_amount)), bold: false }] : []),
+                          ...(Number(poReceipt.shipping_charges) > 0 ? [{ label: 'Shipping', value: formatCurrency(Number(poReceipt.shipping_charges)), bold: false }] : []),
+                          { label: 'Subtotal', value: formatCurrency(Number(poReceipt.subtotal)), bold: false },
+                          { label: 'Grand Total', value: formatCurrency(Number(poReceipt.grand_total)), bold: true },
+                        ].map((row, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'flex-end', gap: 32, padding: `${row.bold ? 11 : 8}px 16px`, borderTop: row.bold ? '2px solid var(--color-border)' : i > 0 ? '1px solid var(--color-border)' : 'none', fontWeight: row.bold ? 700 : 400, fontSize: row.bold ? '1em' : '0.87em', color: row.bold ? '#1e293b' : '#64748b', background: row.bold ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
+                            <span>{row.label}</span>
+                            <span style={{ minWidth: 90, textAlign: 'right', color: row.bold ? '#4f46e5' : undefined }}>{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment tiles */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, padding: '0 20px 20px' }}>
+                    <div style={{ padding: '14px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12 }}>
+                      <div style={{ fontSize: '0.72em', color: '#15803d', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Amount Paid</div>
+                      <div style={{ fontSize: '1.25em', fontWeight: 800, color: '#14532d', marginBottom: 10 }}>{formatCurrency(paid)}</div>
+                      <div style={{ height: 5, background: '#bbf7d0', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: '#22c55e', borderRadius: 99, transition: 'width 0.4s' }} />
+                      </div>
+                      <div style={{ fontSize: '0.75em', color: '#15803d' }}>{pct}% of total</div>
+                    </div>
+                    <div style={{ padding: '14px 16px', background: outstanding > 0 ? '#fef2f2' : '#f8fafc', border: `1px solid ${outstanding > 0 ? '#fecaca' : '#e2e8f0'}`, borderRadius: 12 }}>
+                      <div style={{ fontSize: '0.72em', color: outstanding > 0 ? '#b91c1c' : '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>Outstanding</div>
+                      <div style={{ fontSize: '1.25em', fontWeight: 800, color: outstanding > 0 ? '#7f1d1d' : '#94a3b8', marginBottom: 10 }}>{formatCurrency(outstanding)}</div>
+                      <div style={{ height: 5, background: outstanding > 0 ? '#fecaca' : '#e2e8f0', borderRadius: 99, overflow: 'hidden', marginBottom: 6 }}>
+                        <div style={{ height: '100%', width: `${100 - pct}%`, background: outstanding > 0 ? '#ef4444' : '#cbd5e1', borderRadius: 99, transition: 'width 0.4s' }} />
+                      </div>
+                      <div style={{ fontSize: '0.75em', color: outstanding > 0 ? '#b91c1c' : '#64748b' }}>{100 - pct}% of total</div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
       )}
     </div>
   );
