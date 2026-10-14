@@ -32,6 +32,17 @@ class InventoryRepository(BaseRepository):
         )
         return dict(db.session.execute(q).all())
 
+    def avg_costs(self, store_id: int, product_ids: list[int]) -> dict:
+        """{product_id: avg_cost} for this store's products that have one."""
+        if not product_ids:
+            return {}
+        q = db.select(Inventory.product_id, Inventory.avg_cost).where(
+            Inventory.store_id == store_id,
+            Inventory.product_id.in_(product_ids),
+            Inventory.avg_cost.is_not(None),
+        )
+        return dict(db.session.execute(q).all())
+
     def lock_rows(self, store_id: int, product_ids: list[int]) -> list[Inventory]:
         """Return locked Inventory rows for the given products (SELECT FOR UPDATE)."""
         rows = db.session.scalars(

@@ -210,3 +210,23 @@ def test_product_form_supplier_link(client, admin_headers, supplier):
     assert [p["product_id"] for p in listed] == [pid]
     assert client.put(f"/api/v1/products/{pid}", json={"supplier_id": None}, headers=admin_headers).get_json()["supplier_id"] is None
     assert client.post("/api/v1/products", json={"name": "X", "price": "1", "supplier_id": 9999}, headers=admin_headers).status_code == 400
+
+
+def test_cost_price_column_is_admin_only(client, admin_headers, store):
+    from tests.factories import make_user
+
+    content = (
+        "name,price,cost\n"
+        "Atta 5kg,240,205.50\n"
+    ).encode("utf-8")
+    assert _import(client, admin_headers, content, store_id=store.id).status_code == 201
+    assert _product("Atta 5kg").cost_price == Decimal("205.5")
+
+    make_user(role="manager", username="mgr", pin="4321", store=store)
+    token = client.post("/api/v1/auth/login", json={"username": "mgr", "pin": "4321"}).get_json()["access_token"]
+    sku = _product("Atta 5kg").sku
+    update = f"name,sku,price,cost_price\nAtta 5kg,{sku},245,1\n".encode("utf-8")
+    assert _import(client, {"Authorization": f"Bearer {token}"}, update, store_id=store.id).status_code == 201
+    db.session.expire_all()
+    atta = _product("Atta 5kg")
+    assert (atta.price, atta.cost_price) == (Decimal("245.00"), Decimal("205.5"))  # manager's cost ignored

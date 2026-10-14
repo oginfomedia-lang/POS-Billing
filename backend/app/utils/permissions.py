@@ -38,6 +38,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "discounts.read",
         "discounts.manage",
         "reports.read",
+        "reports.profit",  # cost and margins: admin only
         "settings.read",
         "settings.manage",
         "backup.read",
@@ -113,6 +114,10 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         *POS_PERMISSIONS,
     },
 }
+
+
+def has_permission(role: str, permission: str) -> bool:
+    return permission in ROLE_PERMISSIONS.get(role, set())
 
 
 def require_permission(permission: str):

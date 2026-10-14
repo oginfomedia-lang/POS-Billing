@@ -56,6 +56,7 @@ class SaleReturnItem(db.Model):
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     refund_amount = db.Column(db.Numeric(12, 2), nullable=False)  # line - discount + tax
     restocked = db.Column(db.Boolean, nullable=False, default=True)  # False = damaged, not put back on the shelf
+    unit_cost = db.Column(db.Numeric(12, 4), nullable=True)  # copied from the sale item: the return reverses it
 
     sale_return = db.relationship("SaleReturn", back_populates="items")
 

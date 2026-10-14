@@ -49,7 +49,7 @@ export interface GstHsnRow {
 export interface TopProductRow {
   product_id: number;
   product_name: string;
-  qty: number;
+  qty: string; // decimal string: "3" or "2.5" (kg for loose items)
   amount: string;
 }
 
@@ -71,6 +71,56 @@ export interface SalesReportOut {
   gst_hsn: GstHsnRow[];
   top_products: TopProductRow[];
   offers: OfferRow[];
+}
+
+/** Gross profit: sales after returns (before GST) minus the purchase cost of what was sold. Admin only. */
+export interface ProfitSummary {
+  net_sales: string;
+  returns: string;
+  /** The part of net_sales whose cost is known (profit and margin are on this). */
+  costed_sales: string;
+  cogs: string;
+  gross_profit: string;
+  margin_pct: string | null;
+  /** Sales of products with no cost price: left out of profit. */
+  uncosted_sales: string;
+  uncosted_products: number;
+}
+
+export interface ProfitRow {
+  product_id: number;
+  product_name: string;
+  category: string | null;
+  qty: string;
+  net_sales: string;
+  cogs: string;
+  gross_profit: string;
+  margin_pct: string | null;
+}
+
+export interface ProfitCategoryRow {
+  category: string | null;
+  net_sales: string;
+  cogs: string;
+  gross_profit: string;
+  margin_pct: string | null;
+}
+
+export interface UncostedRow {
+  product_id: number;
+  product_name: string;
+  qty: string;
+  net_sales: string;
+}
+
+export interface ProfitReportOut {
+  store_id: number | null;
+  date_from: string;
+  date_to: string;
+  summary: ProfitSummary;
+  by_category: ProfitCategoryRow[];
+  products: ProfitRow[];
+  uncosted: UncostedRow[];
 }
 
 export interface ShiftRow {

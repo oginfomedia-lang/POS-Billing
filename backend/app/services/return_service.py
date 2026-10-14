@@ -159,6 +159,7 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
                 tax_amount=tax,
                 refund_amount=line - disc + tax,
                 restocked=ln.restock,
+                unit_cost=item.unit_cost,
             ))
 
         ret.subtotal = sum((i.line_total for i in ret.items), ZERO)

@@ -7,6 +7,7 @@ import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getReturn } from '../../services/api/returnApi';
 import type { ReturnOut } from '../../types/returns';
+import { VENDOR_CREDIT } from '../../utils/brand';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 
@@ -110,6 +111,7 @@ export function ReturnReceiptPage() {
           <div className="receipt-row"><span>{t('returns.reason')}</span><span>{ret.reason}</span></div>
           <div className="receipt-row"><span>{t('returns.approvedBy')}</span><span>{ret.approved_by_name}</span></div>
           {ret.receipt_footer && <footer className="receipt-center receipt-footer">{ret.receipt_footer}</footer>}
+          <div className="receipt-center receipt-credit">{VENDOR_CREDIT}</div>
         </article>
       )}
     </div>

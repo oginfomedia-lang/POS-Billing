@@ -74,7 +74,7 @@ class GstHsnRow(BaseModel):
 class TopProductRow(BaseModel):
     product_id: int
     product_name: str
-    qty: int
+    qty: Decimal  # loose items sold by weight have fractions (2.5 kg)
     amount: Decimal
 
 
@@ -96,6 +96,53 @@ class SalesReportOut(BaseModel):
     gst_hsn: list[GstHsnRow] = []
     top_products: list[TopProductRow]
     offers: list[OfferRow]
+
+
+class ProfitSummary(BaseModel):
+    net_sales: Decimal  # all sales after returns, before GST
+    returns: Decimal  # returned goods (before GST), already taken out of net_sales
+    costed_sales: Decimal  # the part of net_sales whose cost is known
+    cogs: Decimal  # cost of goods sold
+    gross_profit: Decimal  # costed_sales - cogs
+    margin_pct: Decimal | None  # gross_profit / costed_sales
+    uncosted_sales: Decimal  # sales of items with no cost price: not in profit
+    uncosted_products: int
+
+
+class ProfitRow(BaseModel):
+    product_id: int
+    product_name: str
+    category: str | None
+    qty: Decimal
+    net_sales: Decimal
+    cogs: Decimal
+    gross_profit: Decimal
+    margin_pct: Decimal | None
+
+
+class ProfitCategoryRow(BaseModel):
+    category: str | None  # None = no category
+    net_sales: Decimal
+    cogs: Decimal
+    gross_profit: Decimal
+    margin_pct: Decimal | None
+
+
+class UncostedRow(BaseModel):
+    product_id: int
+    product_name: str
+    qty: Decimal
+    net_sales: Decimal
+
+
+class ProfitReportOut(BaseModel):
+    store_id: int | None
+    date_from: date
+    date_to: date
+    summary: ProfitSummary
+    by_category: list[ProfitCategoryRow]
+    products: list[ProfitRow]  # highest profit first; losses (sold below cost) at the end
+    uncosted: list[UncostedRow]
 
 
 class ShiftRow(BaseModel):
