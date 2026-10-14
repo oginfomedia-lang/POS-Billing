@@ -258,6 +258,8 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         if data.method in ("card", "upi"):
             _require_paid_intent(sale, data)
         payment = payment_service.build_payment(data.method, sale.total, data.cash_tendered, data.reference)
+        for item in sale.items:  # cost as it is now, for the profit report
+            item.unit_cost = inventory_service.cost_price(sale.store_id, item.product)
         inventory_service.deduct_for_sale(sale.store_id, sale.items, sale.id)
 
         sale.payments.append(payment)

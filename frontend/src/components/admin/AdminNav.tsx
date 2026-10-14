@@ -26,6 +26,7 @@ import {
   IconX,
 } from '../common/Icons';
 import { useStoreContext, useStoreDisplayName } from '../../store/storeContext';
+import { VENDOR_NAME } from '../../utils/brand';
 import { StoreSwitcher } from './StoreSwitcher';
 
 interface LinkItem {
@@ -199,6 +200,7 @@ export function AdminNav() {
               </button>
             </div>
           )}
+          <div className="sidebar-vendor">© {VENDOR_NAME}</div>
         </div>
       </aside>
     </>

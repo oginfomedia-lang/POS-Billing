@@ -22,6 +22,8 @@ class Inventory(db.Model):
     low_stock_threshold = db.Column(db.Numeric(12, 3), nullable=True)
     # This store's own selling price (before GST). NULL = use the head-office price (products.price).
     price = db.Column(db.Numeric(12, 2), nullable=True)
+    # Weighted-average purchase cost (before GST), updated on each goods receipt. NULL = products.cost_price.
+    avg_cost = db.Column(db.Numeric(12, 4), nullable=True)
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -1,6 +1,7 @@
 # Windows installer build settings (run: npm run dist).
 appId: com.litecode.posbilling
 productName: POS Billing
+copyright: Copyright © 2026 LiteCode Software Pvt Ltd
 directories:
   output: release
 files:

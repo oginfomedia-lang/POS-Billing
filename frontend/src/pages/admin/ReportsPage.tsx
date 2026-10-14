@@ -1,17 +1,18 @@
-// Sales, GST, shift and per-cashier collection reports.
+// Sales, GST, shift, per-cashier collection and (admin only) profit reports.
 import type { ParseKeys } from 'i18next';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { getCollectionReport, getSalesReport, getShiftReport } from '../../services/api/reportApi';
-import type { CollectionReportOut, SalesReportOut, ShiftRow } from '../../types/report';
+import { getCollectionReport, getProfitReport, getSalesReport, getShiftReport } from '../../services/api/reportApi';
+import type { CollectionReportOut, ProfitReportOut, SalesReportOut, ShiftRow } from '../../types/report';
 import { downloadCsv } from '../../utils/csv';
 import { formatDateTime, isoDateIst, monthStartIst } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 import { useStoreContext, useStoreDisplayName } from '../../store/storeContext';
 
-type Tab = 'sales' | 'gst' | 'shifts' | 'collection';
+type Tab = 'sales' | 'gst' | 'shifts' | 'collection' | 'profit';
 const QUICK_RANGES: { label: ParseKeys; from: () => string; to: () => string }[] = [
   { label: 'reports.today', from: () => isoDateIst(), to: () => isoDateIst() },
   { label: 'reports.yesterday', from: () => isoDateIst(1), to: () => isoDateIst(1) },
@@ -19,8 +20,14 @@ const QUICK_RANGES: { label: ParseKeys; from: () => string; to: () => string }[]
   { label: 'reports.thisMonth', from: monthStartIst, to: () => isoDateIst() },
 ];
 
+/** "12.50%", or a dash when there were no sales to divide by. */
+function pct(value: string | null): string {
+  return value === null ? '—' : `${Number(value)}%`;
+}
+
 export function ReportsPage() {
   const { t } = useTranslation();
+  const { isAdmin } = useAuth();
   const [tab, setTab] = useState<Tab>('sales');
   const storeId = useStoreContext((s) => s.selectedId);
   const storeName = useStoreDisplayName();
@@ -30,6 +37,7 @@ export function ReportsPage() {
   const [sales, setSales] = useState<SalesReportOut | null>(null);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [collection, setCollection] = useState<CollectionReportOut | null>(null);
+  const [profit, setProfit] = useState<ProfitReportOut | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,12 +47,15 @@ export function ReportsPage() {
     let cancelled = false;
     setLoading(true);
     setError('');
-    Promise.all([getSalesReport(filter), getShiftReport(filter), getCollectionReport(filter)])
-      .then(([s, sh, c]) => { if (!cancelled) { setSales(s); setShifts(sh); setCollection(c); } })
+    Promise.all([
+      getSalesReport(filter), getShiftReport(filter), getCollectionReport(filter),
+      isAdmin ? getProfitReport(filter) : Promise.resolve(null),
+    ])
+      .then(([s, sh, c, p]) => { if (!cancelled) { setSales(s); setShifts(sh); setCollection(c); setProfit(p); } })
       .catch((err) => { if (!cancelled) setError(getErrorMessage(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [storeId, dateFrom, dateTo]);
+  }, [storeId, dateFrom, dateTo, isAdmin]);
 
   const range = dateFrom === dateTo ? dateFrom : `${dateFrom}_to_${dateTo}`;
 
@@ -59,6 +70,17 @@ export function ReportsPage() {
         [
           ...sales.gst.map((g) => ['All', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
           ...sales.gst_hsn.map((g) => [g.hsn_code ?? 'No HSN', g.tax_rate, g.taxable, g.cgst, g.sgst, g.tax]),
+        ],
+      );
+    } else if (tab === 'profit') {
+      if (!profit) return;
+      downloadCsv(
+        `profit_${range}.csv`,
+        ['Product', 'Category', 'Qty', 'Sales (excl. GST)', 'Cost of goods', 'Gross profit', 'Margin %'],
+        [
+          ...profit.products.map((r) => [r.product_name, r.category, r.qty, r.net_sales, r.cogs, r.gross_profit, r.margin_pct]),
+          ...profit.uncosted.map((r) => [r.product_name, 'No cost price', r.qty, r.net_sales, null, null, null]),
+          ['Total', null, null, profit.summary.costed_sales, profit.summary.cogs, profit.summary.gross_profit, profit.summary.margin_pct],
         ],
       );
     } else if (tab === 'collection') {
@@ -109,7 +131,7 @@ export function ReportsPage() {
       </div>
 
       <div className="tab-bar no-print" role="tablist">
-        {(['sales', 'gst', 'shifts', 'collection'] as Tab[]).map((tabKey) => (
+        {(['sales', 'gst', 'shifts', 'collection', ...(isAdmin ? ['profit'] : [])] as Tab[]).map((tabKey) => (
           <button key={tabKey} role="tab" aria-selected={tab === tabKey} className={`tab${tab === tabKey ? ' active' : ''}`} onClick={() => setTab(tabKey)}>
             {t(`reports.tabs.${tabKey}`)}
           </button>
@@ -324,6 +346,126 @@ export function ReportsPage() {
               )}
             </table>
           </div>
+        </>
+      )}
+
+      {profit && tab === 'profit' && !loading && (
+        <>
+          <p className="hint-text">{t('reports.profitHint')}</p>
+          {profit.summary.uncosted_products > 0 && (
+            <div className="notice-bar notice-warn">
+              {t('reports.uncostedNotice', {
+                count: profit.summary.uncosted_products, amount: formatRupees(profit.summary.uncosted_sales),
+              })}
+            </div>
+          )}
+          <div className="stat-grid">
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.profitSales')}</span>
+              <span className="stat-value">{formatRupees(profit.summary.costed_sales)}</span>
+              {Number(profit.summary.returns) > 0 && (
+                <span className="stat-sub">{t('reports.afterReturns', { amount: formatRupees(profit.summary.returns) })}</span>
+              )}
+            </div>
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.cogs')}</span>
+              <span className="stat-value">{formatRupees(profit.summary.cogs)}</span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.grossProfit')}</span>
+              <span className={`stat-value${Number(profit.summary.gross_profit) < 0 ? ' profit-loss' : ''}`}>
+                {formatRupees(profit.summary.gross_profit)}
+              </span>
+            </div>
+            <div className="stat-tile">
+              <span className="stat-label">{t('reports.margin')}</span>
+              <span className="stat-value">{pct(profit.summary.margin_pct)}</span>
+            </div>
+          </div>
+
+          <h3 className="section-title">{t('reports.byCategory')}</h3>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('reports.colCategory')}</th><th className="num">{t('reports.colAmountExcl')}</th><th className="num">{t('reports.cogs')}</th>
+                  <th className="num">{t('reports.grossProfit')}</th><th className="num">{t('reports.margin')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profit.by_category.length === 0 && <tr><td colSpan={5} className="empty-row">{t('reports.noSales')}</td></tr>}
+                {profit.by_category.map((c) => (
+                  <tr key={c.category ?? '-'}>
+                    <td>{c.category ?? <span className="status-muted">{t('reports.noCategory')}</span>}</td>
+                    <td className="num">{formatRupees(c.net_sales)}</td>
+                    <td className="num">{formatRupees(c.cogs)}</td>
+                    <td className={`num${Number(c.gross_profit) < 0 ? ' profit-loss' : ''}`}>{formatRupees(c.gross_profit)}</td>
+                    <td className="num">{pct(c.margin_pct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <h3 className="section-title">{t('reports.byProduct')}</h3>
+          <div className="table-card">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('reports.colProduct')}</th><th className="num">{t('reports.colQty')}</th><th className="num">{t('reports.colAmountExcl')}</th>
+                  <th className="num">{t('reports.cogs')}</th><th className="num">{t('reports.grossProfit')}</th><th className="num">{t('reports.margin')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profit.products.length === 0 && <tr><td colSpan={6} className="empty-row">{t('reports.noSales')}</td></tr>}
+                {profit.products.map((r) => {
+                  const loss = Number(r.gross_profit) < 0;
+                  return (
+                    <tr key={r.product_id}>
+                      <td>
+                        {r.product_name}
+                        {loss && <> <span className="stock-badge stock-out">{t('reports.belowCost')}</span></>}
+                      </td>
+                      <td className="num">{r.qty}</td>
+                      <td className="num">{formatRupees(r.net_sales)}</td>
+                      <td className="num">{formatRupees(r.cogs)}</td>
+                      <td className={`num${loss ? ' profit-loss' : ''}`}>{formatRupees(r.gross_profit)}</td>
+                      <td className="num">{pct(r.margin_pct)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {profit.products.length > 0 && (
+                <tfoot>
+                  <tr className="total-row">
+                    <td colSpan={2}>{t('reports.colTotal')}</td>
+                    <td className="num">{formatRupees(profit.summary.costed_sales)}</td>
+                    <td className="num">{formatRupees(profit.summary.cogs)}</td>
+                    <td className="num">{formatRupees(profit.summary.gross_profit)}</td>
+                    <td className="num">{pct(profit.summary.margin_pct)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {profit.uncosted.length > 0 && (
+            <>
+              <h3 className="section-title">{t('reports.uncostedTitle')}</h3>
+              <div className="table-card">
+                <table className="data-table">
+                  <thead>
+                    <tr><th>{t('reports.colProduct')}</th><th className="num">{t('reports.colQty')}</th><th className="num">{t('reports.colAmountExcl')}</th></tr>
+                  </thead>
+                  <tbody>
+                    {profit.uncosted.map((r) => (
+                      <tr key={r.product_id}><td>{r.product_name}</td><td className="num">{r.qty}</td><td className="num">{formatRupees(r.net_sales)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
 

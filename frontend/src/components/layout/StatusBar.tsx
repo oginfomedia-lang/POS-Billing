@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useServerStatus, type ServerStatus } from '../../hooks/useServerStatus';
 import { LanguageSwitcher } from '../common/LanguageSwitcher';
 import { useCounterStore } from '../../store/counterStore';
+import { VENDOR_NAME, VENDOR_PHONE } from '../../utils/brand';
 
 const STATUS_TEXT: Record<ServerStatus, ParseKeys> = {
   checking: 'status.checking',
@@ -23,6 +24,7 @@ export function StatusBar() {
       <span className={`status-pill status-${status}`}>{t(STATUS_TEXT[status])}</span>
       <span className="status-muted">{config?.apiUrl}</span>
       <LanguageSwitcher className="no-print" />
+      <span className="status-vendor">{VENDOR_NAME} · {VENDOR_PHONE}</span>
     </footer>
   );
 }

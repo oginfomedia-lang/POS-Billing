@@ -8,6 +8,7 @@ import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getReceipt } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { ReceiptOut } from '../../types/sale';
+import { VENDOR_CREDIT } from '../../utils/brand';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 
@@ -167,6 +168,7 @@ export function ReprintPage() {
           ))}
 
           {receipt.receipt_footer && <footer className="receipt-center receipt-footer">{receipt.receipt_footer}</footer>}
+          <div className="receipt-center receipt-credit">{VENDOR_CREDIT}</div>
         </article>
       )}
     </div>

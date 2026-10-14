@@ -24,6 +24,14 @@ def sales_report():
     return jsonify(report_service.sales_report(q).model_dump(mode="json")), 200
 
 
+@report_bp.get("/reports/profit")
+@require_permission("reports.profit")
+def profit_report():
+    q = ReportQuery.model_validate(request.args.to_dict())
+    q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
+    return jsonify(report_service.profit_report(q).model_dump(mode="json")), 200
+
+
 @report_bp.get("/reports/shifts")
 @require_permission("reports.read")
 def shift_report():

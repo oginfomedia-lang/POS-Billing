@@ -24,6 +24,8 @@ class Product(TimestampMixin, db.Model):
     description = db.Column(db.Text, nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)  # selling price, before GST
+    # Default purchase cost, before GST (for the profit report). Each store's GRNs keep inventory.avg_cost.
+    cost_price = db.Column(db.Numeric(12, 4), nullable=True)
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
     mrp = db.Column(db.Numeric(12, 2), nullable=True)  # printed MRP, incl. GST (per unit, or per kg if weighed)
     hsn_code = db.Column(db.String(8), nullable=True)  # GST HSN code, 4-8 digits

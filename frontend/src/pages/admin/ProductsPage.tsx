@@ -53,6 +53,7 @@ export function ProductsPage() {
   const [formPrice, setFormPrice] = useState('');
   const [formTax, setFormTax] = useState('0');
   const [formMrp, setFormMrp] = useState('');
+  const [formCost, setFormCost] = useState('');
   const [formHsn, setFormHsn] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formSupplier, setFormSupplier] = useState('');
@@ -151,6 +152,12 @@ export function ProductsPage() {
   const priceWithGst = Number.isFinite(priceNum) ? priceNum * (1 + (parseFloat(formTax) || 0) / 100) : null;
   const mrpNum = parseFloat(formMrp);
   const mrpTooLow = priceWithGst !== null && Number.isFinite(mrpNum) && mrpNum + 0.005 < priceWithGst;
+  // Purchase cost is admin only. The branch's average cost (from goods receipts) wins over the default cost.
+  const seesCost = user?.role === 'admin';
+  const branchAvgCost = target?.store_avg_cost ?? null;
+  const costNum = parseFloat(branchAvgCost ?? formCost);
+  const belowCost = Number.isFinite(priceNum) && Number.isFinite(costNum) && priceNum + 0.005 < costNum;
+  const costPayload = seesCost ? { cost_price: formCost.trim() ? parseFloat(formCost) : null } : {};
 
   function openCreate() {
     defaultStockStore();
@@ -161,6 +168,7 @@ export function ProductsPage() {
     setFormPrice('');
     setFormTax('0');
     setFormMrp('');
+    setFormCost('');
     setFormHsn('');
     setFormCategory('');
     setFormSupplier('');
@@ -184,6 +192,7 @@ export function ProductsPage() {
     setFormPrice(String(p.price));
     setFormTax(String(p.tax_rate));
     setFormMrp(p.mrp ?? '');
+    setFormCost(p.cost_price != null ? String(Number(p.cost_price)) : '');
     setFormHsn(p.hsn_code ?? '');
     setFormCategory(p.category_id ? String(p.category_id) : '');
     setFormSupplier(p.supplier_id ? String(p.supplier_id) : '');
@@ -275,6 +284,7 @@ export function ProductsPage() {
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
         mrp: formMrp.trim() ? parseFloat(formMrp) : null,
+        ...costPayload,
         hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
         supplier_id: formSupplier ? parseInt(formSupplier, 10) : null,
@@ -310,6 +320,7 @@ export function ProductsPage() {
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
         mrp: formMrp.trim() ? parseFloat(formMrp) : null,
+        ...costPayload,
         hsn_code: formHsn.trim() || null,
         category_id: formCategory ? parseInt(formCategory, 10) : null,
         supplier_id: formSupplier ? parseInt(formSupplier, 10) : null,
@@ -606,6 +617,27 @@ export function ProductsPage() {
                   />
                 </label>
               </div>
+
+              {seesCost && (
+                <label className="field-label">
+                  {t('products.costPrice')}
+                  <input
+                    className="field-input"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formCost}
+                    onChange={(e) => setFormCost(e.target.value)}
+                    placeholder={t('products.costPlaceholder')}
+                  />
+                  {branchAvgCost !== null && (
+                    <span className="hint-text">{t('products.branchAvgCost', { cost: formatRupees(Number(branchAvgCost).toFixed(2)) })}</span>
+                  )}
+                  {belowCost && (
+                    <span className="hint-text text-danger">{t('products.belowCost', { cost: formatRupees(costNum.toFixed(2)) })}</span>
+                  )}
+                </label>
+              )}
 
               <label className="field-label checkbox-label">
                 <input

@@ -77,6 +77,7 @@ class SaleItem(TimestampMixin, db.Model):
     manual_discount_reason = db.Column(db.String(100), nullable=True)
     manual_discount_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     tax_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)  # on (line_total - discount_amount)
+    unit_cost = db.Column(db.Numeric(12, 4), nullable=True)  # purchase cost per unit when paid (profit report)
 
     sale = db.relationship("Sale", back_populates="items")
     product = db.relationship("Product")
