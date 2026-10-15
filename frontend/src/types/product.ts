@@ -37,6 +37,10 @@ export interface ProductOut {
   /** Usual supplier (for information). */
   supplier_id: number | null;
   barcodes: BarcodeOut[];
+  /** Admin only (null for others): default purchase cost before GST. */
+  cost_price?: string | null;
+  /** Admin only: the selected branch's average purchase cost from goods receipts. */
+  store_avg_cost?: string | null;
 }
 
 export interface ProductBarcodeOut {

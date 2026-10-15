@@ -1,4 +1,4 @@
-"""Optional customer mobile on the bill: saved on the open bill, masked on the receipt, used to find bills."""
+"""Optional customer mobile on the bill: saved on the open bill, printed in full on the receipt, used to find bills."""
 import pytest
 
 from app.extensions import db
@@ -42,14 +42,14 @@ def test_set_clear_and_validate(client, cashier_headers, shift, store):
     assert _set(client, cashier_headers, sid, None).get_json()["customer_mobile"] is None
 
 
-def test_receipt_is_masked_and_bill_is_locked(client, cashier_headers, shift, store):
+def test_receipt_shows_full_mobile_and_bill_is_locked(client, cashier_headers, shift, store):
     sid = _bill(client, cashier_headers, make_product(store))
     _set(client, cashier_headers, sid, "9876543210")
     paid = _pay_cash(client, cashier_headers, sid)
     assert paid["customer_mobile"] == "9876543210"  # staff screens: full number
 
     receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
-    assert receipt["customer_mobile"] == "98XXXXX210"  # printed slip: masked
+    assert receipt["customer_mobile"] == "9876543210"  # printed slip: full number
 
     assert _set(client, cashier_headers, sid, "9123456789").status_code == 409  # paid bills can't change
 

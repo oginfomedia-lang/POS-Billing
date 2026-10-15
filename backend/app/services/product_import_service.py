@@ -46,6 +46,7 @@ from app.services.product_service import (
     mrp_error,
     next_inhouse_barcode,
 )
+from app.utils.permissions import has_permission
 from app.utils.store_scope import is_head_office, require_store_access
 from app.utils.transactions import transaction
 
@@ -55,7 +56,7 @@ OPENING_STOCK_NOTE = "Opening stock (bulk import)"
 
 COLUMNS = [
     "name", "price", "tax_rate", "mrp", "hsn_code", "uom", "category", "sku", "barcodes",
-    "is_variable_weight", "plu_code", "supplier_code", "opening_stock", "expiry_date",
+    "is_variable_weight", "plu_code", "supplier_code", "opening_stock", "expiry_date", "cost_price",
 ]
 # Other headings people commonly use for the same thing.
 ALIASES = {
@@ -71,6 +72,7 @@ ALIASES = {
     "supplier": "supplier_code",
     "stock": "opening_stock", "qty": "opening_stock", "quantity": "opening_stock",
     "expiry": "expiry_date",
+    "cost": "cost_price", "purchase_price": "cost_price", "purchase_rate": "cost_price", "cost_rate": "cost_price",
 }
 UOM_ALIASES = {
     "pc": "pcs", "piece": "pcs", "pieces": "pcs", "nos": "pcs", "no": "pcs", "unit": "pcs",
@@ -193,7 +195,7 @@ def _parse(number: int, cells: dict) -> _Row:
     if row.name:
         row.values["name"] = row.name
 
-    for col in ("price", "tax_rate", "mrp"):
+    for col in ("price", "tax_rate", "mrp", "cost_price"):
         text = raw.get(col, "").replace("₹", "").replace(",", "").rstrip("%").strip()
         if not text:
             continue
@@ -436,6 +438,9 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
     """Saves an analysed file that has no errors, all in one transaction."""
     if any(r.errors for r in rows):
         raise BadRequestError("Fix the rows with errors first.")
+    if not has_permission(actor.role, "reports.profit"):  # purchase cost is admin only
+        for row in rows:
+            row.values.pop("cost_price", None)
     look = _Lookups.load()
     inv = InventoryRepository()
     created = updated = stock_rows = 0
@@ -463,6 +468,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                     category_id=category_id,
                     supplier_id=supplier_id,
                     store_id=options.store_id if options.sold_in == "store" else None,
+                    cost_price=v.get("cost_price"),
                 )
                 db.session.add(product)
                 db.session.flush()
@@ -486,7 +492,8 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 created += 1
             else:
                 product = row.match
-                for col in ("name", "price", "tax_rate", "mrp", "hsn_code", "uom", "is_variable_weight", "plu_code"):
+                for col in ("name", "price", "tax_rate", "mrp", "hsn_code", "uom", "is_variable_weight", "plu_code",
+                            "cost_price"):
                     if col in v:
                         setattr(product, col, v[col])
                 if not product.is_variable_weight:
@@ -530,9 +537,9 @@ def _category_id(name: str | None, look: _Lookups, created: list[str]) -> int | 
 
 TEXT_COLUMNS = {"sku", "barcodes", "plu_code", "hsn_code", "supplier_code"}
 EXAMPLES = [
-    ["Parle-G 100g", 9.5, 5, 10, "1905", "pcs", "Biscuits", "", "8901719101038", "no", "", "", 50, ""],
-    ["Tata Salt 1kg", 26, 5, 28, "2501", "pcs", "Grocery", "", "", "no", "", "", 20, ""],
-    ["साखर (सुटी)", 42, 0, "", "1701", "kg", "Loose", "", "", "yes", "123", "", 100, ""],
+    ["Parle-G 100g", 9.5, 5, 10, "1905", "pcs", "Biscuits", "", "8901719101038", "no", "", "", 50, "", 8.2],
+    ["Tata Salt 1kg", 26, 5, 28, "2501", "pcs", "Grocery", "", "", "no", "", "", 20, "", 22],
+    ["साखर (सुटी)", 42, 0, "", "1701", "kg", "Loose", "", "", "yes", "123", "", 100, "", 38],
 ]
 INSTRUCTIONS = [
     ("How to fill this sheet", "ही sheet कशी भरायची"),
@@ -544,6 +551,8 @@ INSTRUCTIONS = [
     ("No barcode? Tick 'auto-generate' on the import screen and print stickers from Label Print afterwards.",
      "Barcode नाही? Import screen वर 'auto-generate' ठेवा आणि नंतर Label Print मधून stickers काढा."),
     ("uom: pcs, kg, g, ltr, ml or pack.", "uom: pcs, kg, g, ltr, ml किंवा pack."),
+    ("cost_price: what you pay the supplier per unit (or per kg), before GST. Used for the profit report; admin only.",
+     "cost_price: supplier ला दिलेली एका नगाची (किंवा किलोची) किंमत, GST आधीची. Profit report साठी; फक्त admin."),
     ("is_variable_weight: yes for loose items sold by weight (sugar, dal). plu_code = the item code set on the weighing scale.",
      "is_variable_weight: सुट्या (वजनावर) वस्तूंसाठी yes. plu_code = वजन काट्यावर सेट केलेला item code."),
     ("category: the category name. A new name creates the category.", "category: category चं नाव. नवीन नाव असेल तर category तयार होते."),

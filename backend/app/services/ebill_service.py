@@ -21,7 +21,7 @@ from app.models.notification import NotificationLog
 from app.models.sale import Sale
 from app.models.user import User
 from app.repositories.notification_repository import NotificationRepository
-from app.services import audit_service, ebill_pdf, settings_service, whatsapp_gateway
+from app.services import audit_service, ebill_pdf, integration_settings_service, settings_service, whatsapp_gateway
 from app.services.daily_report_service import SendResult, inr
 from app.utils.dates import IST
 from app.utils.phone import mask_mobile, normalize_mobile
@@ -86,11 +86,11 @@ def send(sale_id: int, recipient: str, force: bool = False) -> SendResult | None
         params = message_params(receipt)
         filename = f"Bill-{receipt.bill_number}.pdf"
         pdf = ebill_pdf.render(receipt)
-        if current_app.config["WHATSAPP_MOCK"] and not current_app.testing:
+        if integration_settings_service.value("WHATSAPP_MOCK") and not current_app.testing:
             _save_mock_copy(filename, pdf)
         media_id = whatsapp_gateway.upload_media(pdf, filename)
         log.provider_message_id = whatsapp_gateway.send_template(
-            recipient, params, template=current_app.config["WHATSAPP_EBILL_TEMPLATE_NAME"],
+            recipient, params, template=integration_settings_service.value("WHATSAPP_EBILL_TEMPLATE_NAME"),
             document=(media_id, filename),
         )
         log.status, log.error, log.sent_at = NotificationStatus.SENT, None, datetime.now(timezone.utc)

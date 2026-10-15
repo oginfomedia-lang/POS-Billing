@@ -55,6 +55,30 @@ def selling_price(store_id: int, product: Product) -> Decimal:
     return row.price if row is not None and row.price is not None else product.price
 
 
+def cost_price(store_id: int, product: Product) -> Decimal | None:
+    """Purchase cost per unit (before GST): this store's weighted average, else the product's default cost."""
+    row = InventoryRepository().get_for_store_product(store_id, product.id)
+    return row.avg_cost if row is not None and row.avg_cost is not None else product.cost_price
+
+
+COST_PLACES = Decimal("0.0001")
+
+
+def add_purchase_cost(row: Inventory, product: Product, qty: Decimal, unit_cost: Decimal) -> None:
+    """Weighted-average cost after `qty` units arrive at `unit_cost`. Call before qty_on_hand goes up."""
+    on_hand = Decimal(str(row.qty_on_hand))
+    old = row.avg_cost if row.avg_cost is not None else product.cost_price
+    if on_hand <= 0 or old is None:
+        row.avg_cost = unit_cost.quantize(COST_PLACES)
+    else:
+        row.avg_cost = ((on_hand * old + qty * unit_cost) / (on_hand + qty)).quantize(COST_PLACES)
+
+
+def store_avg_costs(store_id: int, product_ids: list[int]) -> dict[int, Decimal]:
+    """{product_id: weighted-average cost} for this store (one query)."""
+    return InventoryRepository().avg_costs(store_id, product_ids)
+
+
 def store_prices(store_id: int, product_ids: list[int]) -> dict[int, Decimal]:
     """{product_id: store price} for products this store has its own price for (one query)."""
     return InventoryRepository().price_overrides(store_id, product_ids)

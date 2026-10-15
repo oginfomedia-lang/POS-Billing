@@ -17,7 +17,7 @@ from app.schemas.product_schemas import (
 )
 from app.schemas.product_import_schemas import ImportOptions
 from app.services import auth_service, inventory_service, product_import_service, product_service
-from app.utils.permissions import require_permission
+from app.utils.permissions import has_permission, require_permission
 from app.utils.store_scope import require_store_access, scoped_store_id
 
 product_bp = Blueprint("products", __name__)
@@ -68,13 +68,32 @@ def list_products():
     return jsonify(resp.model_dump()), 200
 
 
+def _sees_cost() -> bool:
+    """Purchase cost and margins are for admins only (the same users as the profit report)."""
+    return has_permission(auth_service.current_user().role, "reports.profit")
+
+
+def _without_cost(data):
+    """Drops a cost_price sent by someone who may not set it."""
+    if not _sees_cost():
+        data.cost_price = None
+        data.model_fields_set.discard("cost_price")
+    return data
+
+
 def _with_store_prices(products: list, store_id: int | None) -> list[dict]:
-    """ProductOut dicts, with store_price filled in when a store is selected."""
-    overrides = inventory_service.store_prices(store_id, [p.id for p in products]) if store_id else {}
+    """ProductOut dicts, with store_price filled in when a store is selected (and costs for admins)."""
+    ids = [p.id for p in products]
+    overrides = inventory_service.store_prices(store_id, ids) if store_id else {}
+    show_cost = _sees_cost()
+    avg_costs = inventory_service.store_avg_costs(store_id, ids) if store_id and show_cost else {}
     out = []
     for p in products:
         item = ProductOut.model_validate(p)
         item.store_price = overrides.get(p.id)
+        if show_cost:
+            item.cost_price = p.cost_price
+            item.store_avg_cost = avg_costs.get(p.id)
         out.append(item.model_dump(mode="json"))
     return out
 
@@ -82,9 +101,9 @@ def _with_store_prices(products: list, store_id: int | None) -> list[dict]:
 @product_bp.post("/products")
 @require_permission("products.create")
 def create_product():
-    data = ProductCreate.model_validate(request.get_json(force=True))
+    data = _without_cost(ProductCreate.model_validate(request.get_json(force=True)))
     product = product_service.create_product(data)
-    return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 201
+    return jsonify(_with_store_prices([product], None)[0]), 201
 
 
 # ── Bulk import (CSV / Excel) ────────────────────────────────────────────────
@@ -159,9 +178,9 @@ def update_product(product_id: int):
     existing = product_service.get_product(product_id)
     if existing.store_id is not None:
         require_store_access(auth_service.current_user(), existing.store_id)
-    data = ProductUpdate.model_validate(request.get_json(force=True))
+    data = _without_cost(ProductUpdate.model_validate(request.get_json(force=True)))
     product = product_service.update_product(product_id, data)
-    return jsonify(ProductOut.model_validate(product).model_dump(mode="json")), 200
+    return jsonify(_with_store_prices([product], None)[0]), 200
 
 
 # ── Barcodes & POS Scanner ───────────────────────────────────────────────────

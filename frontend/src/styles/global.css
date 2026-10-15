@@ -255,6 +255,13 @@ code {
   height: 30px;
 }
 
+.status-vendor {
+  flex: none;
+  white-space: nowrap;
+  font-size: 11.5px;
+  color: var(--muted-light);
+}
+
 .status-bar .status-muted {
   margin-left: auto;
   min-width: 0;
@@ -510,6 +517,12 @@ code {
   gap: 12px;
   padding: 14px 14px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-vendor {
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .user-card {
@@ -800,6 +813,15 @@ code {
   border-color: #bae6fd;
   border-left-color: var(--info);
 }
+
+.notice-bar.notice-warn {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  border-left-color: var(--warn);
+}
+
+.profit-loss { color: var(--danger); }
 
 .notice-bar.notice-info .filter-input {
   flex: 0 1 240px;
@@ -2860,7 +2882,7 @@ button.stat-tile:hover {
   padding: 14px 12px;
   background: #fff;
   color: #000;
-  font-family: 'Consolas', 'Courier New', 'Noto Sans Devanagari Variable', 'Nirmala UI', monospace;
+  font-family: Arial, 'Noto Sans Devanagari Variable', 'Nirmala UI', sans-serif;
   font-size: 12px;
   line-height: 1.45;
   border: 1px solid var(--border);
@@ -2875,13 +2897,25 @@ button.stat-tile:hover {
 }
 
 .receipt-center { text-align: center; }
-.receipt-store { font-size: 15px; }
+.receipt-store,
+.receipt-doc-title { font-family: 'Times New Roman', Georgia, 'Noto Sans Devanagari Variable', 'Nirmala UI', serif; }
+.receipt-store { font-size: 17px; letter-spacing: 0.03em; }
 .receipt-row { display: flex; justify-content: space-between; gap: 8px; }
-.receipt-total { font-size: 15px; font-weight: 700; }
+/* Bill total: bold, in a box like the "You saved" box below it. */
+.receipt-total {
+  margin: 8px 0 2px;
+  padding: 5px 6px;
+  border: 1.5px solid #000;
+  border-radius: 3px;
+  font-size: 16px;
+  font-weight: 700;
+}
 .receipt-items { width: 100%; border-collapse: collapse; }
 .receipt-items th,
 .receipt-items td { padding: 1px 0; text-align: left; font-weight: normal; }
 .receipt-footer { margin-top: 8px; }
+.receipt-items-qty { font-weight: 700; }
+.receipt-credit { margin-top: 10px; padding-top: 4px; border-top: 1px solid #000; font-size: 10.5px; }
 .receipt-small { font-size: 10.5px; }
 .receipt-saved-box {
   margin: 8px 0 2px;
@@ -2989,9 +3023,15 @@ button.stat-tile:hover {
 
 /* ───────────────────────── Printer settings ───────────────────────── */
 .printer-card,
-.daily-report-card { margin-top: 20px; }
+.daily-report-card,
+.integrations-card { margin-top: 20px; }
 .printer-card h3,
-.daily-report-card h3 { margin: 0; font-size: 16px; }
+.daily-report-card h3,
+.integrations-card h3 { margin: 0; font-size: 16px; }
+.integration-section .section-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 20px; }
+.integration-badge { padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.integration-remove { align-self: flex-start; font-size: 12.5px; }
+.integration-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .daily-report-card .section-title { margin-top: 20px; }
 
 /* ───────────────────────── Shift pages ───────────────────────── */
@@ -3146,6 +3186,11 @@ button.stat-tile:hover {
   text-align: center;
   font-size: 12px;
   color: var(--muted-light);
+}
+
+.login-footer-hint .vendor-credit {
+  margin-top: 6px;
+  font-size: 11px;
 }
 
 /* ───────────────────────── Responsive ───────────────────────── */

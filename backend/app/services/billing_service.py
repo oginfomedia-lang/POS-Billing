@@ -255,9 +255,12 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
             raise AppError("Cannot complete an empty bill.")
 
         _recalculate(sale)
-        if data.method in ("card", "upi"):
+        manual = data.method in ("card", "upi") and settings_service.get_settings().card_upi_mode == "manual"
+        if data.method in ("card", "upi") and not manual:
             _require_paid_intent(sale, data)
         payment = payment_service.build_payment(data.method, sale.total, data.cash_tendered, data.reference)
+        for item in sale.items:  # cost as it is now, for the profit report
+            item.unit_cost = inventory_service.cost_price(sale.store_id, item.product)
         inventory_service.deduct_for_sale(sale.store_id, sale.items, sale.id)
 
         sale.payments.append(payment)
@@ -268,7 +271,8 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         ebill_queued = ebill_service.queue(sale)  # same transaction: a paid bill always has its e-bill on record
         audit_service.log(
             actor, "sale.complete", "sale", sale.id, None,
-            {"bill_number": sale.bill_number, "total": str(sale.total), "method": data.method},
+            {"bill_number": sale.bill_number, "total": str(sale.total), "method": data.method,
+             **({"manual": True} if manual else {})},  # manual = confirmed by the cashier, not Razorpay
         )
     if ebill_queued:
         # After the commit, and whether or not the receipt prints: WhatsApp is sent from the server.

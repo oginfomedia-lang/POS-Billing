@@ -96,6 +96,7 @@ def create_product(data: ProductCreate) -> Product:
         plu_code=data.plu_code,
         store_id=data.store_id,
         supplier_id=data.supplier_id,
+        cost_price=data.cost_price,
     )
     _check_mrp(product)
     _check_plu(product)
@@ -163,6 +164,8 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
         product.mrp = data.mrp
     if "hsn_code" in data.model_fields_set:
         product.hsn_code = data.hsn_code
+    if "cost_price" in data.model_fields_set:
+        product.cost_price = data.cost_price
     _check_mrp(product)
     if data.uom is not None:
         product.uom = data.uom

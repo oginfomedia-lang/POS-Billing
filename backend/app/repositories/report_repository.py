@@ -6,8 +6,11 @@ by the day the cash went out (SaleReturn.created_at). store_id=None means all st
 from datetime import datetime
 
 from app.extensions import db
+from app.models.category import Category
 from app.models.enums import PaymentMethod, SaleStatus, ShiftStatus
+from app.models.inventory import Inventory
 from app.models.payment import Payment
+from app.models.product import Product
 from app.models.returns import SaleReturn, SaleReturnItem
 from app.models.sale import Sale, SaleItem
 from app.models.shift import CashierShift
@@ -155,6 +158,49 @@ class ReportRepository:
             .limit(limit)
         )
         return db.session.execute(q).all()
+
+    @staticmethod
+    def _profit_lines(item, store_col, conds, join):
+        """(product_id, name, category, qty, net, cogs, uncosted_qty, uncosted_net) per product.
+
+        net = line_total - discount (before GST). Cost = the cost saved on the line, else (bills from before
+        costs were kept) the product's current cost in that store. Lines with no cost at all are counted in
+        uncosted_* and left out of cogs.
+        """
+        f = db.func
+        cost = f.coalesce(item.unit_cost, Inventory.avg_cost, Product.cost_price)
+        net = item.line_total - item.discount_amount
+        no_cost = cost.is_(None)
+        q = (
+            db.select(
+                item.product_id,
+                f.max(item.product_name),
+                f.max(Category.name),
+                f.sum(item.qty),
+                f.sum(net),
+                f.coalesce(f.sum(item.qty * cost), 0),
+                f.coalesce(f.sum(db.case((no_cost, item.qty), else_=0)), 0),
+                f.coalesce(f.sum(db.case((no_cost, net), else_=0)), 0),
+            )
+            .join(*join)
+            .join(Product, Product.id == item.product_id)
+            .outerjoin(Category, Category.id == Product.category_id)
+            .outerjoin(Inventory, (Inventory.product_id == item.product_id) & (Inventory.store_id == store_col))
+            .where(*conds)
+            .group_by(item.product_id)
+        )
+        return db.session.execute(q).all()
+
+    def profit_sales(self, store_id: int | None, start: datetime, end: datetime):
+        return self._profit_lines(
+            SaleItem, Sale.store_id, self._paid(store_id, start, end), (Sale, Sale.id == SaleItem.sale_id)
+        )
+
+    def profit_returns(self, store_id: int | None, start: datetime, end: datetime):
+        return self._profit_lines(
+            SaleReturnItem, SaleReturn.store_id, self._returned(store_id, start, end),
+            (SaleReturn, SaleReturn.id == SaleReturnItem.return_id),
+        )
 
     def offer_usage(self, store_id: int | None, start: datetime, end: datetime):
         """(kind, name, bills, amount) for item offers, bill offers and manual discounts on paid bills."""

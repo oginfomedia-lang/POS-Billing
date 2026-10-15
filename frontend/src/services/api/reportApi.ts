@@ -1,6 +1,6 @@
 // Report, discount and settings API calls (admin / manager screens).
 import type {
-  CollectionReportOut, DailyReportLog, DailyReportSendResult, DashboardOut, DiscountIn, DiscountOut, SalesReportOut, SettingsData, ShiftRow,
+  CollectionReportOut, DailyReportLog, DailyReportSendResult, DashboardOut, DiscountIn, DiscountOut, ProfitReportOut, SalesReportOut, SettingsData, ShiftRow,
 } from '../../types/report';
 import { httpClient } from './httpClient';
 
@@ -22,6 +22,12 @@ export async function getDashboard(storeId?: number | null): Promise<DashboardOu
 
 export async function getSalesReport(f: ReportFilter): Promise<SalesReportOut> {
   const resp = await httpClient.get<SalesReportOut>('/reports/sales', { params: params(f) });
+  return resp.data;
+}
+
+/** Admin only (403 for others). */
+export async function getProfitReport(f: ReportFilter): Promise<ProfitReportOut> {
+  const resp = await httpClient.get<ProfitReportOut>('/reports/profit', { params: params(f) });
   return resp.data;
 }
 

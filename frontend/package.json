@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Supermarket POS counter app (Electron + React + TypeScript).",
+  "author": "LiteCode Software Pvt Ltd",
   "main": "out/main/main.js",
   "scripts": {
     "dev": "electron-vite dev",

@@ -17,12 +17,17 @@ from app.schemas.report_schemas import (
     GstRow,
     MethodRow,
     OfferRow,
+    ProfitCategoryRow,
+    ProfitReportOut,
+    ProfitRow,
+    ProfitSummary,
     RecentSale,
     ReportQuery,
     SalesReportOut,
     SalesSummary,
     ShiftRow,
     TopProductRow,
+    UncostedRow,
 )
 from app.services import inventory_service, pricing_service
 from app.utils.dates import IST, business_date
@@ -75,6 +80,11 @@ def _methods(repo: ReportRepository, store_id: int | None, start: datetime, end:
     return [MethodRow(method=m, bills=b, amount=a) for m, b, a in repo.by_payment_method(store_id, start, end)]
 
 
+def _trim_qty(qty: Decimal) -> Decimal:
+    """3.000 -> 3, 2.500 -> 2.5 (normalize() alone would turn 100 into 1E+2)."""
+    return qty.quantize(Decimal(1)) if qty == qty.to_integral_value() else qty.normalize()
+
+
 def sales_report(q: ReportQuery) -> SalesReportOut:
     repo = ReportRepository()
     d_from, d_to, start, end = _range(q)
@@ -99,13 +109,77 @@ def sales_report(q: ReportQuery) -> SalesReportOut:
         gst=gst,
         gst_hsn=gst_hsn,
         top_products=[
-            TopProductRow(product_id=pid, product_name=name, qty=qty, amount=amt)
+            TopProductRow(product_id=pid, product_name=name, qty=_trim_qty(qty), amount=amt)
             for pid, name, qty, amt in repo.top_products(q.store_id, start, end)
         ],
         offers=[
             OfferRow(kind=k, name=n, bills=b, amount=a)
             for k, n, b, a in repo.offer_usage(q.store_id, start, end)
         ],
+    )
+
+
+def _margin(profit: Decimal, sales: Decimal) -> Decimal | None:
+    return round_money(profit * 100 / sales) if sales else None
+
+
+def profit_report(q: ReportQuery) -> ProfitReportOut:
+    """Gross profit: sales minus returns (before GST) against the purchase cost of what was sold."""
+    d_from, d_to, start, end = _range(q)
+    repo = ReportRepository()
+    zero = Decimal("0")
+    # product_id -> [name, category, qty, net, cogs, uncosted_qty, uncosted_net]; returns are subtracted.
+    lines: dict[int, list] = {}
+    returns = zero
+    for sign, rows in ((1, repo.profit_sales(q.store_id, start, end)), (-1, repo.profit_returns(q.store_id, start, end))):
+        for pid, name, category, *nums in rows:
+            row = lines.setdefault(pid, [name, category, zero, zero, zero, zero, zero])
+            for i, n in enumerate(nums):
+                row[2 + i] += sign * Decimal(n)
+            if sign < 0:
+                returns += Decimal(nums[1])
+
+    products: list[ProfitRow] = []
+    uncosted: list[UncostedRow] = []
+    categories: dict[str | None, list[Decimal]] = {}
+    for pid, (name, category, qty, net, cogs, u_qty, u_net) in lines.items():
+        if u_qty or u_net:
+            uncosted.append(UncostedRow(
+                product_id=pid, product_name=name, qty=_trim_qty(u_qty), net_sales=round_money(u_net),
+            ))
+        sales, cost = round_money(net - u_net), round_money(cogs)
+        if qty == u_qty and not sales and not cost:
+            continue  # nothing with a known cost
+        profit = sales - cost
+        products.append(ProfitRow(
+            product_id=pid, product_name=name, category=category, qty=_trim_qty(qty - u_qty),
+            net_sales=sales, cogs=cost, gross_profit=profit, margin_pct=_margin(profit, sales),
+        ))
+        cat = categories.setdefault(category, [zero, zero])
+        cat[0] += sales
+        cat[1] += cost
+    products.sort(key=lambda r: r.gross_profit, reverse=True)
+    uncosted.sort(key=lambda r: r.net_sales, reverse=True)
+
+    costed = sum((r.net_sales for r in products), zero)
+    cogs = sum((r.cogs for r in products), zero)
+    unc = sum((r.net_sales for r in uncosted), zero)
+    return ProfitReportOut(
+        store_id=q.store_id,
+        date_from=d_from,
+        date_to=d_to,
+        summary=ProfitSummary(
+            net_sales=costed + unc, returns=round_money(returns), costed_sales=costed, cogs=cogs,
+            gross_profit=costed - cogs, margin_pct=_margin(costed - cogs, costed),
+            uncosted_sales=unc, uncosted_products=len(uncosted),
+        ),
+        by_category=sorted(
+            (ProfitCategoryRow(category=c, net_sales=s, cogs=k, gross_profit=s - k, margin_pct=_margin(s - k, s))
+             for c, (s, k) in categories.items()),
+            key=lambda r: r.gross_profit, reverse=True,
+        ),
+        products=products,
+        uncosted=uncosted,
     )
 
 

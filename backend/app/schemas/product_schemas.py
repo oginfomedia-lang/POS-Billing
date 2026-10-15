@@ -53,6 +53,14 @@ def _optional_decimal(v):
     return Decimal(str(v))
 
 
+def _optional_cost(v):
+    """Blank = no cost. A cost can't be negative."""
+    value = _optional_decimal(v)
+    if value is not None and value < 0:
+        raise ValueError("Cost price can't be negative.")
+    return value
+
+
 def _optional_hsn(v):
     """HSN codes are 4, 6 or 8 digits. "" or None = no HSN."""
     if v is None:
@@ -98,6 +106,15 @@ class ProductOut(BaseModel):
     barcodes: list[BarcodeOut] = []
     # Only when the request names a store: that store's own selling price (None = sells at `price`).
     store_price: Decimal | None = None
+    # Admin only (filled in by the product routes, never from the model): default cost before GST, and
+    # the selected store's weighted-average cost from goods receipts.
+    cost_price: Decimal | None = None
+    store_avg_cost: Decimal | None = None
+
+    @field_validator("cost_price", mode="before")
+    @classmethod
+    def _hide_cost(cls, v):
+        return None  # see the comment above: the route sets it after validation for admins
 
 
 class ProductCreate(BaseModel):
@@ -115,6 +132,7 @@ class ProductCreate(BaseModel):
     store_id: int | None = None
     supplier_id: int | None = None  # usual supplier (for information; any supplier can be used on a PO)
     barcodes: list[str | BarcodeCreatePayload] = []
+    cost_price: Decimal | None = None  # purchase cost before GST (admin only; ignored for others)
 
     @field_validator("price", "tax_rate", mode="before")
     @classmethod
@@ -126,6 +144,7 @@ class ProductCreate(BaseModel):
     _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
     _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
+    _cost = field_validator("cost_price", mode="before")(classmethod(lambda cls, v: _optional_cost(v)))
 
 
 class ProductUpdate(BaseModel):
@@ -147,10 +166,13 @@ class ProductUpdate(BaseModel):
     # Leave out to keep; null removes the supplier.
     supplier_id: int | None = None
     barcodes: list[str | BarcodeCreatePayload] | None = None
+    # Leave out to keep; null or "" clears. Admin only (ignored for others).
+    cost_price: Decimal | None = None
 
     _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
     _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
+    _cost = field_validator("cost_price", mode="before")(classmethod(lambda cls, v: _optional_cost(v)))
 
     @field_validator("price", "tax_rate", mode="before")
     @classmethod

@@ -37,7 +37,7 @@ from app.services import (
 from app.services.shift_service import require_active_shift
 from app.utils.dates import IST, now_ist
 from app.utils.money import round_money
-from app.utils.phone import mask_mobile, normalize_mobile
+from app.utils.phone import normalize_mobile
 from app.utils.transactions import transaction
 
 ZERO = Decimal("0")
@@ -159,6 +159,7 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
                 tax_amount=tax,
                 refund_amount=line - disc + tax,
                 restocked=ln.restock,
+                unit_cost=item.unit_cost,
             ))
 
         ret.subtotal = sum((i.line_total for i in ret.items), ZERO)
@@ -199,6 +200,7 @@ def get_return(return_id: int) -> SaleReturn:
 
 def to_out(ret: SaleReturn) -> ReturnOut:
     sale = ret.sale
+    settings = settings_service.get_settings()
     return ReturnOut(
         id=ret.id,
         return_number=ret.return_number,
@@ -212,7 +214,7 @@ def to_out(ret: SaleReturn) -> ReturnOut:
         store_gstin=ret.store.gstin,
         counter_code=sale.counter.code if sale.counter else None,
         cashier_name=ret.cashier.full_name,
-        customer_mobile=mask_mobile(sale.customer_mobile),
+        customer_mobile=sale.customer_mobile,
         approved_by_name=ret.approved_by.full_name,
         reason=ret.reason,
         refund_method=ret.refund_method,
@@ -222,7 +224,8 @@ def to_out(ret: SaleReturn) -> ReturnOut:
         refund_amount=ret.refund_amount,
         items=[ReturnItemOut.model_validate(i) for i in ret.items],
         gst_summary=[GstSummaryRow(**row) for row in pricing_service.gst_summary(ret.items)],
-        receipt_footer=settings_service.get_settings().receipt_footer,
+        receipt_footer=settings.receipt_footer,
+        receipt_footer_mr=settings.receipt_footer_mr,
     )
 
 

@@ -8,11 +8,12 @@ import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getReceipt } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { ReceiptOut } from '../../types/sale';
+import { VENDOR_CREDIT } from '../../utils/brand';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 
 export function ReprintPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { saleId } = useParams();
   // ?print=1 (straight after payment) prints automatically; reopening a past bill doesn't.
   const [searchParams] = useSearchParams();
@@ -47,6 +48,12 @@ export function ReprintPage() {
     ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) - toPaise(receipt.reward_discount)
     : 0;
 
+  // "Items / Qty" line: number of different products, and total pieces (a loose item weighed in kg counts as 1).
+  const itemCount = receipt?.items.length ?? 0;
+  const totalQty = receipt
+    ? receipt.items.reduce((sum, i) => sum + (i.is_variable_weight ? 1 : Number(i.qty)), 0)
+    : 0;
+
   return (
     <div className="reprint-page">
       {/* No page margins: stops the browser printing its own header/footer (window title, file path, date). */}
@@ -73,6 +80,7 @@ export function ReprintPage() {
             {receipt.store_address && <div>{receipt.store_address}</div>}
             {receipt.store_phone && <div>{t('receipt.phone', { phone: receipt.store_phone })}</div>}
             {receipt.store_gstin && <div>{t('receipt.gstin', { gstin: receipt.store_gstin })}</div>}
+            {receipt.fssai_number && <div>{t('receipt.fssai', { number: receipt.fssai_number })}</div>}
             {receipt.receipt_header && <div>{receipt.receipt_header}</div>}
           </header>
 
@@ -126,6 +134,12 @@ export function ReprintPage() {
               ))}
             </tbody>
           </table>
+          
+
+            <div className="receipt-row receipt-items-qty">
+              <span>{t('receipt.item')} / {t('receipt.qty')}</span>
+              <span>{itemCount} / {totalQty}</span>
+            </div>
           <hr />
 
           <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(receipt.subtotal)}</span></div>
@@ -166,7 +180,12 @@ export function ReprintPage() {
             </div>
           ))}
 
-          {receipt.receipt_footer && <footer className="receipt-center receipt-footer">{receipt.receipt_footer}</footer>}
+          {(() => {
+            // Marathi bills use the Marathi footer when one is set.
+            const footer = i18n.language === 'mr' && receipt.receipt_footer_mr ? receipt.receipt_footer_mr : receipt.receipt_footer;
+            return footer && <footer className="receipt-center receipt-footer">{footer}</footer>;
+          })()}
+          <div className="receipt-center receipt-credit">{VENDOR_CREDIT}</div>
         </article>
       )}
     </div>

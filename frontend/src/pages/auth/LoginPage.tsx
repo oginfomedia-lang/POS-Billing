@@ -7,6 +7,7 @@ import { IconLogOut, IconShoppingCart } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { lastStoreName } from '../../store/storeContext';
+import { VENDOR_NAME } from '../../utils/brand';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -94,6 +95,7 @@ export function LoginPage() {
 
         <div className="login-footer-hint">
           <span>🔒 {t('login.secured', { store: lastStoreName() })}</span>
+          <div className="vendor-credit">Powered by {VENDOR_NAME}</div>
         </div>
       </div>
     </section>

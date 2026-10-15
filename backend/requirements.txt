@@ -19,3 +19,5 @@ openpyxl>=3.1,<4
 APScheduler>=3.10,<4
 # VPS/SFTP backup upload (SSH file transfer to your own server)
 paramiko>=3.4,<4
+# Encrypts payment / WhatsApp secrets saved in the app (Settings → Integrations).
+cryptography>=42,<47

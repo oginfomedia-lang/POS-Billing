@@ -30,7 +30,7 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderUpdate,
     SupplierGRNOut,
 )
-from app.services import audit_service
+from app.services import audit_service, inventory_service
 from app.utils.transactions import transaction
 
 
@@ -614,6 +614,9 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
             # Stock: accepted goods only
             if good > 0:
                 inv_row = inv_repo.lock_or_create(po.store_id, poi.product_id)
+                # Cost before GST (claimed back as input credit), after the line's discount.
+                unit_cost = Decimal(str(poi.unit_price)) * (1 - Decimal(str(poi.discount_percent)) / 100)
+                inventory_service.add_purchase_cost(inv_row, poi.product, good, unit_cost)
                 inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + good
                 note = f"Goods receipt {receipt.receipt_number}"
                 if good != qty:

@@ -168,4 +168,6 @@ class ReceiptOut(BaseModel):
     payments: list[PaymentOut]
     receipt_header: str
     receipt_footer: str
+    receipt_footer_mr: str = ""
+    fssai_number: str = ""
     ebill: EbillStatusOut | None = None
