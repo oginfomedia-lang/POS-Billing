@@ -70,8 +70,18 @@ class BaseConfig:
     AWS_S3_REGION         = os.environ.get("AWS_S3_REGION", "ap-south-1")
     AWS_S3_PREFIX         = os.environ.get("AWS_S3_PREFIX", "backups/")
 
+    # --- VPS/SFTP backup (your own server) ---
+    VPS_HOST              = os.environ.get("VPS_HOST", "")
+    VPS_PORT              = int(os.environ.get("VPS_PORT", "22"))
+    VPS_USERNAME          = os.environ.get("VPS_USERNAME", "")
+    VPS_PASSWORD          = os.environ.get("VPS_PASSWORD", "")
+    VPS_SSH_KEY_PATH      = os.environ.get("VPS_SSH_KEY_PATH", "")
+    VPS_BACKUP_PATH       = os.environ.get("VPS_BACKUP_PATH", "/backups/pos/")
+
     # --- Backup scheduler (cron expression: minute hour dom month dow) ---
-    BACKUP_CRON_SCHEDULE  = os.environ.get("BACKUP_CRON_SCHEDULE", "0 2 * * *")
+    BACKUP_CRON_SCHEDULE    = os.environ.get("BACKUP_CRON_SCHEDULE", "0 2 * * *")
+    # Backups older than this many days are auto-deleted from local disk and VPS
+    BACKUP_RETENTION_DAYS   = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
 
     # --- Supplier document uploads ---
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None

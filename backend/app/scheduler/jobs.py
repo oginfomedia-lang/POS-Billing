@@ -25,6 +25,18 @@ def run_scheduled_backup(app) -> None:
 
             run = backup_service.create_backup(system_user)
             logger.info("Scheduled backup complete: %s (status=%s)", run.filename, run.status)
+
+            # Auto-upload to VPS if configured
+            if run.status == "success" and app.config.get("VPS_HOST"):
+                from app.services import cloud_upload_service
+                attempt = cloud_upload_service.upload_backup(run.id, provider="sftp")
+                logger.info("Auto VPS upload: backup #%s → %s", run.id, attempt.status)
+
+            # Auto-delete backups older than retention period
+            retention_days = app.config.get("BACKUP_RETENTION_DAYS", 30)
+            cleaned = backup_service.cleanup_old_backups(days=retention_days)
+            if cleaned:
+                logger.info("Auto-cleanup: removed %s backup(s) older than %s days", cleaned, retention_days)
         except Exception:  # noqa: BLE001
             logger.exception("Scheduled backup failed")
 

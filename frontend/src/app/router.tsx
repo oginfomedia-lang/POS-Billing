@@ -28,10 +28,11 @@ import { ReprintPage } from '../pages/pos/ReprintPage';
 import { ReturnReceiptPage } from '../pages/pos/ReturnReceiptPage';
 import { ReturnsPage } from '../pages/pos/ReturnsPage';
 import { ProtectedRoute } from './ProtectedRoute';
+import { LicenseGuard } from '../components/LicenseGuard';
 
 export const router = createHashRouter([
   {
-    element: <PosLayout />,
+    element: <LicenseGuard><PosLayout /></LicenseGuard>,
     children: [
       { path: '/', element: <LoginPage /> },
 

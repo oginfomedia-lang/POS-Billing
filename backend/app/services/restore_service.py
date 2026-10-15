@@ -78,24 +78,26 @@ def restore_backup(backup_run_id: int, target_db: str, user: User) -> RestoreRec
     if not source_path.exists():
         raise BadRequestError("Backup file is missing from disk.")
 
+    # Save primitives — pg_restore will wipe the DB so ORM objects become stale
+    triggered_by_id = user.id
+
     record = RestoreRecord(
         backup_run_id=backup_run_id,
         target_db=target_db,
         status="running",
-        triggered_by_id=user.id,
+        triggered_by_id=triggered_by_id,
     )
     db.session.add(record)
     db.session.commit()
 
-    try:
-        # 1. Safety dump of the target DB before we overwrite it
-        from app.services.backup_service import _backup_dir
-        backup_dir = _backup_dir()
-        safety_path = _safety_dump(target_db, backup_dir)
-        record.safety_backup_path = safety_path
-        db.session.commit()
+    safety_path = None
+    restore_status = "failed"
+    restore_error = None
 
-        # 2. Run pg_restore
+    try:
+        from app.services.backup_service import _backup_dir
+        safety_path = _safety_dump(target_db, _backup_dir())
+
         p = _parse_db_url(current_app.config["SQLALCHEMY_DATABASE_URI"])
         env = os.environ.copy()
         env["PGPASSWORD"] = p["password"]
@@ -112,23 +114,42 @@ def restore_backup(backup_run_id: int, target_db: str, user: User) -> RestoreRec
         )
 
         if result.returncode != 0:
-            record.status = "failed"
-            record.error_message = (result.stderr or result.stdout or "pg_restore failed")[:2000]
+            restore_error = (result.stderr or result.stdout or "pg_restore failed")[:2000]
         else:
-            record.status = "success"
+            restore_status = "success"
 
-        record.completed_at = datetime.now(timezone.utc)
+    except Exception as exc:  # noqa: BLE001
+        restore_error = str(exc)[:2000]
+
+    # pg_restore dropped and recreated every table in pos_db — the RestoreRecord
+    # row inserted above is now gone. Reset the session and re-insert fresh.
+    try:
+        db.session.rollback()
+    except Exception:  # noqa: BLE001
+        pass
+    db.session.expunge_all()
+
+    record = RestoreRecord(
+        backup_run_id=backup_run_id,
+        target_db=target_db,
+        status=restore_status,
+        triggered_by_id=triggered_by_id,
+        safety_backup_path=safety_path,
+        completed_at=datetime.now(timezone.utc),
+        error_message=restore_error,
+    )
+    db.session.add(record)
+    db.session.commit()
+
+    try:
+        fresh_user = db.session.get(User, triggered_by_id) or user
         audit_service.log(
-            user, "backup.restore", "restore_record", record.id,
+            fresh_user, "backup.restore", "restore_record", record.id,
             new_values={"backup_run_id": backup_run_id, "target_db": target_db, "status": record.status},
         )
         db.session.commit()
-
-    except Exception as exc:  # noqa: BLE001
-        record.status = "failed"
-        record.error_message = str(exc)[:2000]
-        record.completed_at = datetime.now(timezone.utc)
-        db.session.commit()
+    except Exception:  # noqa: BLE001
+        pass
 
     return record
 

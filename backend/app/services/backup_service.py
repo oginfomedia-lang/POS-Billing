@@ -200,6 +200,57 @@ def verify_backup(backup_id: int, user: User) -> BackupRun:
     return run
 
 
+def cleanup_old_backups(days: int = 30) -> int:
+    """Delete local files and VPS copies for backups older than `days` days.
+    Returns the number of records cleaned up."""
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    old_runs = (
+        db.session.execute(
+            db.select(BackupRun).where(
+                BackupRun.status != "deleted",
+                BackupRun.completed_at < cutoff,
+            )
+        ).scalars().all()
+    )
+
+    cleaned = 0
+    for run in old_runs:
+        # Delete local file
+        if run.file_path:
+            p = Path(run.file_path)
+            if p.exists():
+                try:
+                    p.unlink()
+                except OSError:
+                    pass
+
+        # Delete from VPS if uploaded there
+        if run.storage_location == "sftp" and current_app.config.get("VPS_HOST"):
+            try:
+                from app.services.storage.sftp import SFTPStorage
+                storage = SFTPStorage(
+                    host=current_app.config["VPS_HOST"],
+                    port=current_app.config.get("VPS_PORT", 22),
+                    username=current_app.config.get("VPS_USERNAME", ""),
+                    remote_dir=current_app.config.get("VPS_BACKUP_PATH", "/backups/pos/"),
+                    password=current_app.config.get("VPS_PASSWORD", ""),
+                    key_path=current_app.config.get("VPS_SSH_KEY_PATH", ""),
+                )
+                storage.delete(run.filename)
+            except Exception:  # noqa: BLE001
+                pass  # Don't block cleanup if VPS delete fails
+
+        run.status = "deleted"
+        run.file_path = None
+        cleaned += 1
+
+    if cleaned:
+        db.session.commit()
+    return cleaned
+
+
 def delete_backup(backup_id: int, user: User) -> BackupRun:
     run = get_backup(backup_id)
     if run.status == "deleted":

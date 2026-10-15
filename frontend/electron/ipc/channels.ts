@@ -5,4 +5,7 @@ export const IPC = {
   printReceipt: 'printer:print',
   listPrinters: 'printer:list',
   openDrawer: 'drawer:open',
+  getMachineId: 'license:get-machine-id',
+  checkLicense: 'license:check',
+  activateLicense: 'license:activate',
 } as const;

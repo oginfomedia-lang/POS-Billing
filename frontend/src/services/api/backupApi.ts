@@ -41,6 +41,10 @@ export const backupApi = {
     return httpClient.post<CloudUploadAttemptOut>(`/backups/${id}/upload`, { provider });
   },
 
+  fetchFromVps(id: number) {
+    return httpClient.post<BackupRunOut>(`/backups/${id}/fetch`);
+  },
+
   listUploads(id: number) {
     return httpClient.get<CloudUploadAttemptOut[]>(`/backups/${id}/uploads`);
   },
