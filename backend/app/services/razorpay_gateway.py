@@ -12,6 +12,7 @@ import requests
 from flask import current_app
 
 from app.errors.exceptions import AppError
+from app.services import integration_settings_service
 
 RZP_API = "https://api.razorpay.com/v1"
 TIMEOUT = 15  # seconds
@@ -27,7 +28,8 @@ class GatewayStatus:
 
 
 def _cfg(key: str):
-    return current_app.config[key]
+    """Settings → Integrations, else backend/.env."""
+    return integration_settings_service.value(key)
 
 
 def _mock() -> bool:
@@ -98,6 +100,16 @@ def _rzp(method: str, path: str, **kw) -> dict:
         msg = r.json().get("error", {}).get("description", r.text) if r.content else r.reason
         raise AppError(f"Razorpay error: {msg}")
     return r.json()
+
+
+def check_credentials() -> str:
+    """Settings → Integrations "Test connection": a read-only call that fails if the keys are wrong."""
+    if _mock():
+        return "Test mode is on: nothing was checked."
+    if not _cfg("RAZORPAY_KEY_ID") or not _cfg("RAZORPAY_KEY_SECRET"):
+        raise AppError("Enter the Razorpay Key ID and Key Secret first.")
+    _rzp("GET", "/payments", params={"count": 1})
+    return "Razorpay keys are working."
 
 
 # ---------- Card (Razorpay POS / Ezetap P2P push-to-pay) ----------

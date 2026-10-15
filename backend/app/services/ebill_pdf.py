@@ -79,6 +79,8 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
         pdf.center(f"Ph: {r.store_phone}")
     if r.store_gstin:
         pdf.center(f"GSTIN: {r.store_gstin}")
+    if r.fssai_number:
+        pdf.center(f"FSSAI Lic. No: {r.fssai_number}")
     if r.receipt_header:
         pdf.center(r.receipt_header)
     pdf.rule()

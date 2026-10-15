@@ -212,6 +212,9 @@ export type DiscountIn = Omit<DiscountOut, 'id' | 'product_name' | 'category_nam
 export interface SettingsData {
   receipt_header: string;
   receipt_footer: string;
+  /** Footer when the till prints in Marathi ('' = use receipt_footer). */
+  receipt_footer_mr: string;
+  fssai_number: string;
   low_stock_threshold: string;
   /** Bills older than this many days can't be returned. */
   return_window_days: number;
@@ -237,6 +240,8 @@ export interface SettingsData {
   scale_plu_digits: number;
   /** What the rest of the sticker holds: weight in grams or price in paise. */
   scale_value: 'weight' | 'price';
+  /** Card/UPI: confirmed by Razorpay, or taken on the shop's own machine / QR and confirmed by the cashier. */
+  card_upi_mode: 'razorpay' | 'manual';
 }
 
 export type NotificationStatus = 'pending' | 'sent' | 'failed';

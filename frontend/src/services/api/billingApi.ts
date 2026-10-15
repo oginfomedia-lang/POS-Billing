@@ -79,6 +79,14 @@ export async function completeSale(
 }
 
 /** Card: pushes the bill total to this counter's card machine. UPI: creates a Razorpay QR for exactly the total. */
+export type CardUpiMode = 'razorpay' | 'manual';
+
+/** Card/UPI through Razorpay, or manually on the shop's own card machine / UPI QR (admin setting). */
+export async function getPaymentMode(): Promise<CardUpiMode> {
+  const resp = await httpClient.get<{ card_upi_mode: CardUpiMode }>('/sales/payment-mode');
+  return resp.data.card_upi_mode;
+}
+
 export async function startPayment(saleId: number, method: DigitalMethod): Promise<PaymentIntentOut> {
   const resp = await httpClient.post<PaymentIntentOut>(`/sales/${saleId}/payment-intents`, { method });
   return resp.data;

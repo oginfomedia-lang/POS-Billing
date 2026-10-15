@@ -7,7 +7,7 @@ from app.models.enums import PaymentIntentStatus, PaymentMethod, SaleStatus
 from app.models.payment_intent import PaymentIntent
 from app.models.user import User
 from app.schemas.sale_schemas import CompleteSaleRequest
-from app.services import billing_service, razorpay_gateway as gw
+from app.services import billing_service, razorpay_gateway as gw, settings_service
 from app.utils.transactions import transaction
 
 
@@ -16,6 +16,8 @@ def _paise(amount) -> int:
 
 
 def start(sale_id: int, method: str, actor: User) -> PaymentIntent:
+    if settings_service.get_settings().card_upi_mode == "manual":
+        raise AppError("Card/UPI is set to manual in Admin → Settings.")
     with transaction():
         sale = billing_service._lock_owned_sale(sale_id, actor)
         billing_service._require_status(sale, SaleStatus.OPEN)

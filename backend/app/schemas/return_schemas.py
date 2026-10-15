@@ -123,3 +123,4 @@ class ReturnOut(BaseModel):
     items: list[ReturnItemOut]
     gst_summary: list[GstSummaryRow]
     receipt_footer: str
+    receipt_footer_mr: str = ""

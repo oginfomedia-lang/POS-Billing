@@ -36,6 +36,8 @@ class BaseConfig:
 
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_FILE = os.environ.get("LOG_FILE") or None
+    # Razorpay / Paytm / WhatsApp values below are fallbacks: the admin normally enters them in
+    # Settings → Integrations (services/integration_settings_service.py), which wins over .env.
     # --- Razorpay (card + UPI) ---
     RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
@@ -46,6 +48,13 @@ class BaseConfig:
     RAZORPAY_MOCK = os.environ.get("RAZORPAY_MOCK", "0") == "1"
     # A UPI QR closes itself after this many seconds (Razorpay minimum is 120)
     UPI_QR_EXPIRY_SECONDS = int(os.environ.get("UPI_QR_EXPIRY_SECONDS") or "300")  # empty in .env = default
+
+    # --- Paytm card machine: saved for a future integration, not used yet ---
+    PAYTM_MID = os.environ.get("PAYTM_MID", "")
+    PAYTM_CLIENT_ID = os.environ.get("PAYTM_CLIENT_ID", "")
+    PAYTM_MERCHANT_KEY = os.environ.get("PAYTM_MERCHANT_KEY", "")
+    PAYTM_BASE_URL = os.environ.get("PAYTM_BASE_URL", "")
+    PAYTM_MOCK = os.environ.get("PAYTM_MOCK", "1") == "1"
 
     # --- WhatsApp Business Cloud API (nightly collection summary to the owner, e-bill to the customer) ---
     # Directory where pg_dump files are stored.  Defaults to <project_root>/backups/daily.

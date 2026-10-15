@@ -14,3 +14,4 @@ class TestingConfig(BaseConfig):
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     RAZORPAY_MOCK = True  # no real money, no real machine
     WHATSAPP_MOCK = True  # no real messages
+    PAYTM_MOCK = True

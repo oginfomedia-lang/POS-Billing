@@ -12,7 +12,7 @@ import { formatDateTime } from '../../utils/format';
 import { formatRupees } from '../../utils/money';
 
 export function ReturnReceiptPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { returnId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -110,7 +110,10 @@ export function ReturnReceiptPage() {
 
           <div className="receipt-row"><span>{t('returns.reason')}</span><span>{ret.reason}</span></div>
           <div className="receipt-row"><span>{t('returns.approvedBy')}</span><span>{ret.approved_by_name}</span></div>
-          {ret.receipt_footer && <footer className="receipt-center receipt-footer">{ret.receipt_footer}</footer>}
+          {(() => {
+            const footer = i18n.language === 'mr' && ret.receipt_footer_mr ? ret.receipt_footer_mr : ret.receipt_footer;
+            return footer && <footer className="receipt-center receipt-footer">{footer}</footer>;
+          })()}
           <div className="receipt-center receipt-credit">{VENDOR_CREDIT}</div>
         </article>
       )}

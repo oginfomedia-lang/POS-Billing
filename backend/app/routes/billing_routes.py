@@ -12,7 +12,7 @@ from app.schemas.sale_schemas import (
     SaleOut,
     UpdateItemRequest,
 )
-from app.services import auth_service, billing_service, payment_intent_service
+from app.services import auth_service, billing_service, payment_intent_service, settings_service
 from app.utils.permissions import require_permission
 
 billing_bp = Blueprint("billing", __name__)
@@ -126,6 +126,13 @@ def void_sale(sale_id: int):
     actor = auth_service.current_user()
     sale = billing_service.void(sale_id, actor)
     return jsonify(_sale_json(sale)), 200
+
+
+@billing_bp.get("/sales/payment-mode")
+@require_permission("sales.create")
+def payment_mode():
+    """How the payment screen takes card/UPI: through Razorpay, or manually on the shop's own machine / QR."""
+    return jsonify({"card_upi_mode": settings_service.get_settings().card_upi_mode}), 200
 
 
 @billing_bp.post("/sales/<int:sale_id>/payment-intents")
