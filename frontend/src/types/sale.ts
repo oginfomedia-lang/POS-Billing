@@ -86,7 +86,7 @@ export interface ReceiptOut {
   store_gstin: string | null;
   counter_code: string | null;
   cashier_name: string;
-  /** Masked for printing, e.g. 98XXXXX210. */
+  /** Full 10-digit number, printed on the bill. */
   customer_mobile: string | null;
   completed_at: string;
   items: SaleItemOut[];
@@ -106,6 +106,9 @@ export interface ReceiptOut {
   payments: PaymentOut[];
   receipt_header: string;
   receipt_footer: string;
+  receipt_footer_mr: string;
+  /** FSSAI food licence number ('' = not printed). */
+  fssai_number: string;
   /** Latest WhatsApp e-bill for this bill; null = none sent or queued. */
   ebill: EbillStatus | null;
 }

@@ -83,7 +83,7 @@ export interface ReturnOut {
   store_gstin: string | null;
   counter_code: string | null;
   cashier_name: string;
-  customer_mobile: string | null; // masked
+  customer_mobile: string | null; // full number, printed on the slip
   approved_by_name: string;
   reason: string;
   refund_method: PaymentMethod;
@@ -94,4 +94,5 @@ export interface ReturnOut {
   items: ReturnItemOut[];
   gst_summary: GstSummaryRow[];
   receipt_footer: string;
+  receipt_footer_mr: string;
 }

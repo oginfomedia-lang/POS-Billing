@@ -85,6 +85,9 @@ def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_hea
         "daily_report_enabled": False, "daily_report_time": "22:30", "daily_report_mobiles": "",
         "ebill_enabled": False,
         "scale_prefix": "20", "scale_plu_digits": 5, "scale_value": "weight",
+        "card_upi_mode": "razorpay",
+        "fssai_number": "",
+        "receipt_footer_mr": "धन्यवाद! पुन्हा भेट द्या.",
     }
 
     resp = client.put("/api/v1/settings", json={**s, "receipt_footer": "No returns after 7 days", "low_stock_threshold": "2"}, headers=admin_headers)
@@ -112,3 +115,23 @@ def test_low_stock_threshold_per_product(client, admin_headers, store):
     client.post("/api/v1/inventory/threshold", json={"store_id": store.id, "product_id": p.id, "threshold": None}, headers=admin_headers)
     row = level()
     assert row["low_stock_threshold"] is None and row["effective_threshold"] == "5" and row["is_low"] is False
+
+
+def test_fssai_number_on_bill(client, admin_headers, cashier_headers, shift, store):
+    s = client.get("/api/v1/settings", headers=admin_headers).get_json()
+    assert client.put("/api/v1/settings", json={**s, "fssai_number": "12345"}, headers=admin_headers).status_code == 422
+    saved = client.put("/api/v1/settings", json={**s, "fssai_number": "1152 1999 000123"}, headers=admin_headers)
+    assert saved.status_code == 200 and saved.get_json()["fssai_number"] == "11521999000123"
+
+    sid = _sell(client, cashier_headers, make_product(store), 1)["id"]
+    receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
+    assert receipt["fssai_number"] == "11521999000123"
+
+
+def test_marathi_footer_on_bill(client, admin_headers, cashier_headers, shift, store):
+    s = client.get("/api/v1/settings", headers=admin_headers).get_json()
+    client.put("/api/v1/settings", json={**s, "receipt_footer_mr": "पुन्हा या!"}, headers=admin_headers)
+    sid = _sell(client, cashier_headers, make_product(store), 1)["id"]
+    receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
+    # Both are sent; the till prints the one for its language.
+    assert (receipt["receipt_footer"], receipt["receipt_footer_mr"]) == ("Thank you! Visit again.", "पुन्हा या!")

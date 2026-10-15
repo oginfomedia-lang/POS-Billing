@@ -6,7 +6,6 @@ from app.models.enums import SaleStatus
 from app.schemas.payment_schemas import PaymentOut
 from app.schemas.sale_schemas import EbillStatusOut, GstSummaryRow, ReceiptOut, SaleItemOut
 from app.services import ebill_service, pricing_service, settings_service
-from app.utils.phone import mask_mobile
 from app.services.billing_service import get_sale
 
 
@@ -25,7 +24,7 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         store_gstin=sale.store.gstin,
         counter_code=sale.counter.code if sale.counter else None,
         cashier_name=sale.cashier.full_name,
-        customer_mobile=mask_mobile(sale.customer_mobile),
+        customer_mobile=sale.customer_mobile,
         completed_at=sale.completed_at,
         items=[SaleItemOut.model_validate(i) for i in sale.items],
         subtotal=sale.subtotal,
@@ -43,5 +42,7 @@ def build_receipt(sale_id: int) -> ReceiptOut:
         payments=[PaymentOut.model_validate(p) for p in sale.payments],
         receipt_header=settings.receipt_header,
         receipt_footer=settings.receipt_footer,
+        receipt_footer_mr=settings.receipt_footer_mr,
+        fssai_number=settings.fssai_number,
         ebill=EbillStatusOut(**ebill) if (ebill := ebill_service.status_for_sale(sale.id)) else None,
     )

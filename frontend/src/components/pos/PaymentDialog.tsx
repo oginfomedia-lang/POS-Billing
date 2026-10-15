@@ -1,14 +1,17 @@
-// Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself.
+// Cash: enter amount, show change. Card/UPI: Razorpay pushes the exact total and the bill closes itself,
+// or (manual mode) the cashier takes it on the shop's own machine / QR and confirms.
 import type { ParseKeys } from 'i18next';
 import React, { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { type CardUpiMode, getPaymentMode } from '../../services/api/billingApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { SaleOut, TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { normalizeMobile } from '../../utils/phone';
 import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
 import { DigitalPaymentPanel } from './DigitalPaymentPanel';
+import { ManualPaymentPanel } from './ManualPaymentPanel';
 import { RewardsStrip } from './RewardsStrip';
 
 const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
@@ -33,7 +36,7 @@ interface Props {
   onRedeem: (blocks: number) => Promise<void>;
   busy: boolean;
   error: string;
-  /** Cash only: card/UPI are confirmed by Razorpay and reported through onDigitalPaid. */
+  /** Cash, and card/UPI in manual mode. Razorpay card/UPI are reported through onDigitalPaid. */
   onConfirm: (method: TenderMethod, cashTendered?: string, reference?: string) => void;
   onDigitalPaid: (sale: SaleOut) => void;
   onClose: () => void;
@@ -48,7 +51,16 @@ export function PaymentDialog({
   const [mobile, setMobile] = useState(customerMobile ?? '');
   const [mobileError, setMobileError] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
+  const [cardUpiMode, setCardUpiMode] = useState<CardUpiMode | null>(null);
+  const [reference, setReference] = useState('');
   useKeyboardShortcuts({ Escape: onClose });
+  useEffect(() => {
+    let cancelled = false;
+    getPaymentMode()
+      .then((mode) => { if (!cancelled) setCardUpiMode(mode); })
+      .catch(() => { if (!cancelled) setCardUpiMode('razorpay'); }); // Razorpay panel shows its own error
+    return () => { cancelled = true; };
+  }, []);
   // Redeeming points changes the total: keep the cash box in step.
   useEffect(() => { setTendered(total); }, [total]);
 
@@ -57,7 +69,8 @@ export function PaymentDialog({
   const cashValid = Number.isFinite(tenderedPaise) && tenderedPaise >= totalPaise;
   const normalizedMobile = normalizeMobile(mobile); // '' = none, null = invalid
   const mobileInvalid = normalizedMobile === null;
-  const canConfirm = !busy && !savingMobile && method === 'cash' && cashValid && !mobileInvalid;
+  const manualDigital = method !== 'cash' && cardUpiMode === 'manual';
+  const canConfirm = !busy && !savingMobile && !mobileInvalid && (method === 'cash' ? cashValid : manualDigital);
 
   /** Saves the mobile on the bill if it changed. Returns false when it couldn't be saved. */
   async function saveMobile(): Promise<boolean> {
@@ -80,13 +93,15 @@ export function PaymentDialog({
     e.preventDefault();
     if (!(await saveMobile())) return;
     if (!canConfirm) return;
-    onConfirm('cash', paiseToString(tenderedPaise));
+    if (method === 'cash') onConfirm('cash', paiseToString(tenderedPaise));
+    else onConfirm(method, undefined, reference.trim() || undefined);
   }
 
   function chooseMethod(next: TenderMethod) {
     // Card/UPI complete on the server as soon as the customer pays: save the number before that starts.
     saveMobile();
     setMethod(next);
+    setReference('');
   }
 
   function handleQuickCash(amount: number) {
@@ -194,6 +209,10 @@ export function PaymentDialog({
                 )}
               </div>
             </div>
+          ) : cardUpiMode === null ? (
+            <p className="digital-wait">{t('common.loading')}</p>
+          ) : manualDigital ? (
+            <ManualPaymentPanel method={method} total={total} reference={reference} onReferenceChange={setReference} />
           ) : (
             <DigitalPaymentPanel
               key={method} // switching Card <-> UPI cancels the old request and starts a new one
@@ -208,10 +227,10 @@ export function PaymentDialog({
             <button type="button" className="btn-secondary" onClick={onClose}>
               {t('common.cancel')}
             </button>
-            {method === 'cash' && (
+            {(method === 'cash' || manualDigital) && (
               <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
                 <IconCheck size={18} />
-                <span>{busy ? t('pay.processing') : t('pay.complete')}</span>
+                <span>{busy ? t('pay.processing') : t(method === 'cash' ? 'pay.complete' : 'pay.manualReceived')}</span>
               </button>
             )}
           </div>

@@ -41,6 +41,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "reports.profit",  # cost and margins: admin only
         "settings.read",
         "settings.manage",
+        "integrations.manage",  # payment / WhatsApp credentials: admin only
         "backup.read",
         "backup.manage",
         "backup.upload",

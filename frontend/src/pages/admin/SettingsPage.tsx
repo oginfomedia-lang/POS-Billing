@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { DailyReportCard } from '../../components/admin/DailyReportCard';
+import { IntegrationsCard } from '../../components/admin/IntegrationsCard';
 import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
 import { ScaleTestBox } from '../../components/admin/ScaleTestBox';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,6 +15,8 @@ import type { SettingsData } from '../../types/report';
 const DEFAULTS: SettingsData = {
   receipt_header: '',
   receipt_footer: 'Thank you! Visit again.',
+  receipt_footer_mr: 'धन्यवाद! पुन्हा भेट द्या.',
+  fssai_number: '',
   low_stock_threshold: '5',
   return_window_days: 30,
   rewards_enabled: false,
@@ -27,6 +30,7 @@ const DEFAULTS: SettingsData = {
   scale_prefix: '20',
   scale_plu_digits: 5,
   scale_value: 'weight',
+  card_upi_mode: 'razorpay',
 };
 
 export function SettingsPage() {
@@ -102,6 +106,30 @@ export function SettingsPage() {
               disabled={!isAdmin || saving}
               onChange={(e) => update('receipt_footer', e.target.value)}
             />
+          </label>
+          <label className="field-label">
+            {t('settings.footerMr')}
+            <input
+              className="field-input"
+              maxLength={200}
+              value={settings.receipt_footer_mr}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('receipt_footer_mr', e.target.value)}
+            />
+            <span className="hint-text">{t('settings.footerMrHint')}</span>
+          </label>
+          <label className="field-label">
+            {t('settings.fssai')}
+            <input
+              className="field-input"
+              inputMode="numeric"
+              maxLength={14}
+              value={settings.fssai_number}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('fssai_number', e.target.value.replace(/\D/g, ''))}
+              placeholder={t('settings.fssaiPlaceholder')}
+            />
+            <span className="hint-text">{t('settings.fssaiHint')}</span>
           </label>
           <label className="field-label">
             {t('settings.threshold')}
@@ -193,6 +221,19 @@ export function SettingsPage() {
             {t('settings.ebill.enabled')}
           </label>
           <p className="hint-text">{t('settings.ebill.hint')}</p>
+          <h3 className="section-title">{t('settings.cardUpi.title')}</h3>
+          {(['manual', 'razorpay'] as const).map((mode) => (
+            <label key={mode} className="field-label checkbox-label">
+              <input
+                type="radio"
+                name="card_upi_mode"
+                checked={settings.card_upi_mode === mode}
+                disabled={!isAdmin || saving}
+                onChange={() => update('card_upi_mode', mode)}
+              />
+              <span><strong>{t(`settings.cardUpi.${mode}`)}</strong> — {t(`settings.cardUpi.${mode}Hint`)}</span>
+            </label>
+          ))}
           <h3 className="section-title">{t('settings.scale.title')}</h3>
           <p className="hint-text">{t('settings.scale.hint')}</p>
           <div className="form-row-3">
@@ -263,6 +304,7 @@ export function SettingsPage() {
           disabled={saving}
         />
       )}
+      {!loading && isAdmin && <IntegrationsCard />}
       {hasPrinterBridge() && <PrinterSettingsCard />}
     </div>
   );

@@ -11,6 +11,7 @@ import requests
 from flask import current_app
 
 from app.errors.exceptions import AppError
+from app.services import integration_settings_service
 
 GRAPH_API = "https://graph.facebook.com/v21.0"
 TIMEOUT = 15  # seconds
@@ -19,7 +20,8 @@ MAX_PARAM_LEN = 1024  # Meta's limit for one template variable
 
 
 def _cfg(key: str):
-    return current_app.config[key]
+    """Settings → Integrations, else backend/.env."""
+    return integration_settings_service.value(key)
 
 
 def clean_param(text: str) -> str:
@@ -29,7 +31,7 @@ def clean_param(text: str) -> str:
 
 def _require_setup() -> None:
     if not _cfg("WHATSAPP_TOKEN") or not _cfg("WHATSAPP_PHONE_NUMBER_ID"):
-        raise AppError("WhatsApp is not set up. Add WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID to backend/.env.")
+        raise AppError("WhatsApp is not set up. Add the token and phone number ID in Admin → Settings → Integrations.")
 
 
 def _post(path: str, timeout: int, **kwargs) -> dict:
@@ -46,6 +48,26 @@ def _post(path: str, timeout: int, **kwargs) -> dict:
     if r.status_code >= 400:
         raise AppError(f"WhatsApp error: {data.get('error', {}).get('message') or r.reason}")
     return data
+
+
+def check_credentials() -> str:
+    """Settings → Integrations "Test connection": reads the sending number's details from Meta."""
+    if _cfg("WHATSAPP_MOCK"):
+        return "Test mode is on: nothing was checked."
+    _require_setup()
+    try:
+        r = requests.get(
+            f"{GRAPH_API}/{_cfg('WHATSAPP_PHONE_NUMBER_ID')}",
+            params={"fields": "display_phone_number,verified_name"},
+            headers={"Authorization": f"Bearer {_cfg('WHATSAPP_TOKEN')}"},
+            timeout=TIMEOUT,
+        )
+        data = r.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise AppError("Cannot reach WhatsApp. Check the internet connection.") from exc
+    if r.status_code >= 400:
+        raise AppError(f"WhatsApp error: {data.get('error', {}).get('message') or r.reason}")
+    return f"Connected: {data.get('verified_name', '')} ({data.get('display_phone_number', '')})"
 
 
 def upload_media(data: bytes, filename: str, mime: str = "application/pdf") -> str:
