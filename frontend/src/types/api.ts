@@ -68,7 +68,7 @@ export interface PagedResponse<T> {
 }
 
 export type BackupStatus = 'running' | 'success' | 'failed' | 'deleted';
-export type BackupStorageLocation = 'local' | 's3';
+export type BackupStorageLocation = 'local' | 's3' | 'sftp';
 export type CloudUploadStatus = 'pending' | 'success' | 'failed';
 export type RestoreStatus = 'running' | 'success' | 'failed';
 

@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LanguageSwitcher } from '../../components/common/LanguageSwitcher';
-import { IconLogOut, IconShoppingCart } from '../../components/common/Icons';
+import { IconEye, IconEyeOff, IconLogOut, IconShoppingCart } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { lastStoreName } from '../../store/storeContext';
@@ -16,6 +16,7 @@ export function LoginPage() {
 
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -73,18 +74,29 @@ export function LoginPage() {
 
           <label className="field-label">
             <span>{t('login.pin')}</span>
-            <input
-              className="field-input"
-              type="password"
-              inputMode="numeric"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              minLength={4}
-              maxLength={8}
-              required
-            />
+            <div className="password-field">
+              <input
+                className="field-input"
+                type={showPin ? 'text' : 'password'}
+                inputMode="numeric"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                minLength={4}
+                maxLength={8}
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPin((v) => !v)}
+                aria-label={showPin ? 'Hide password' : 'Show password'}
+                title={showPin ? 'Hide password' : 'Show password'}
+              >
+                {showPin ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+              </button>
+            </div>
           </label>
 
           <button className="btn-primary btn-login-submit" type="submit" disabled={busy}>
