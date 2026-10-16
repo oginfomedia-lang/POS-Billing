@@ -15,6 +15,16 @@ const posBridge = {
   listPrinters: (): Promise<PrinterListItem[]> => ipcRenderer.invoke(IPC.listPrinters),
   /** Kicks the cash drawer through the receipt printer (no-op when switched off). */
   openDrawer: (): Promise<HardwareResult> => ipcRenderer.invoke(IPC.openDrawer),
+  /** Returns the 16-char machine fingerprint for license generation. */
+  getMachineId: (): Promise<string> => ipcRenderer.invoke(IPC.getMachineId),
+  /** Checks the stored license key; returns validity, reason, expiry and days left. */
+  checkLicense: (): Promise<{
+    valid: boolean; reason?: string; expiresAt?: string; daysLeft?: number; customerName?: string;
+  }> => ipcRenderer.invoke(IPC.checkLicense),
+  /** Validates and stores a new license key. Returns ok + error on failure. */
+  activateLicense: (key: string): Promise<{
+    ok: boolean; error?: string; expiresAt?: string; customerName?: string; daysLeft?: number;
+  }> => ipcRenderer.invoke(IPC.activateLicense, key),
 };
 
 export type PosBridge = typeof posBridge;

@@ -84,6 +84,7 @@ function BackupsTab() {
   const [actionError, setActionError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
+  const [fetchingId, setFetchingId] = useState<number | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const perPage = 20;
 
@@ -128,9 +129,16 @@ function BackupsTab() {
 
   async function handleUploadCloud(b: BackupRunOut) {
     setUploadingId(b.id); setActionError('');
-    try { await backupApi.uploadToCloud(b.id); await load(page); }
+    try { await backupApi.uploadToCloud(b.id, 'sftp'); await load(page); }
     catch (e) { setActionError(getErrorMessage(e)); }
     finally { setUploadingId(null); }
+  }
+
+  async function handleFetchFromVps(b: BackupRunOut) {
+    setFetchingId(b.id); setActionError('');
+    try { await backupApi.fetchFromVps(b.id); await load(page); }
+    catch (e) { setActionError(getErrorMessage(e)); }
+    finally { setFetchingId(null); }
   }
 
   async function handleDelete(id: number) {
@@ -171,6 +179,7 @@ function BackupsTab() {
         <table className="data-table">
           <thead>
             <tr>
+              <th>#</th>
               <th>{t('backup.colStarted')}</th>
               <th>{t('backup.colFilename')}</th>
               <th>{t('backup.colSize')}</th>
@@ -184,6 +193,7 @@ function BackupsTab() {
           <tbody>
             {backups.map((b) => (
               <tr key={b.id}>
+                <td style={{ color: 'var(--muted)', fontWeight: 600 }}>{b.id}</td>
                 <td className="ts-cell">{b.started_at ? formatDateTime(b.started_at) : '—'}</td>
                 <td>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{b.filename}</span>
@@ -198,7 +208,7 @@ function BackupsTab() {
                 </td>
                 <td>{formatBytes(b.file_size_bytes)}</td>
                 <td><Pill label={b.status} ok={b.status === 'success' ? true : b.status === 'failed' ? false : undefined} /></td>
-                <td><Pill label={b.storage_location} ok={b.storage_location === 's3' ? true : undefined} /></td>
+                <td><Pill label={b.storage_location} ok={b.storage_location === 's3' || b.storage_location === 'sftp' ? true : undefined} /></td>
                 <td>
                   {b.verified
                     ? <span style={{ color: 'var(--ok)', fontWeight: 700 }}>✓ {b.verified_at ? formatDateTime(b.verified_at) : ''}</span>
@@ -221,11 +231,22 @@ function BackupsTab() {
                           <button
                             className="btn-sm"
                             style={{ fontSize: 11 }}
-                            title="Upload to S3"
+                            title="Upload to VPS"
                             disabled={uploadingId === b.id}
                             onClick={() => handleUploadCloud(b)}
                           >
-                            {uploadingId === b.id ? '…' : '☁ S3'}
+                            {uploadingId === b.id ? '…' : '☁ VPS'}
+                          </button>
+                        )}
+                        {b.storage_location === 'sftp' && (
+                          <button
+                            className="btn-sm"
+                            style={{ fontSize: 11 }}
+                            title="Fetch backup file from VPS to local machine (needed before restore)"
+                            disabled={fetchingId === b.id}
+                            onClick={() => handleFetchFromVps(b)}
+                          >
+                            {fetchingId === b.id ? '…' : '⬇ Fetch'}
                           </button>
                         )}
                       </>

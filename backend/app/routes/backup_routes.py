@@ -121,6 +121,13 @@ def upload_backup(backup_id: int):
     return jsonify(_serialize_upload(attempt)), 201
 
 
+@backup_bp.post("/backups/<int:backup_id>/fetch")
+@require_permission("backup.manage")
+def fetch_backup(backup_id: int):
+    run = cloud_upload_service.fetch_backup(backup_id)
+    return jsonify(_serialize(run)), 200
+
+
 @backup_bp.get("/backups/<int:backup_id>/uploads")
 @require_permission("backup.read")
 def list_uploads(backup_id: int):

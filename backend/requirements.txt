@@ -17,3 +17,5 @@ uharfbuzz>=0.39
 openpyxl>=3.1,<4
 # Nightly automatic backup (BACKUP_CRON_SCHEDULE). Cloud copies to S3 also need: pip install boto3
 APScheduler>=3.10,<4
+# VPS/SFTP backup upload (SSH file transfer to your own server)
+paramiko>=3.4,<4

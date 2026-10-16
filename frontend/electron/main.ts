@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { registerConfigHandlers } from './ipc/configHandlers';
 import { registerPrinterHandlers } from './ipc/printerHandlers';
+import { registerLicenseHandlers } from './ipc/licenseHandlers';
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -53,6 +54,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     registerConfigHandlers();
     registerPrinterHandlers();
+    registerLicenseHandlers();
     createWindow();
   });
 
