@@ -35,7 +35,7 @@ export function ReprintPage() {
   }, [saleId]);
 
   // The print job (and any print header the printer driver adds) is titled with the store name,
-  // not the app's window title ("POS Billing"). Restored when leaving the page.
+  // not the app's window title ("LiteRetailer"). Restored when leaving the page.
   useEffect(() => {
     if (!receipt) return;
     const previous = document.title;

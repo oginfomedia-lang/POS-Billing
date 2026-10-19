@@ -31,14 +31,36 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_blueprints(app)
     register_error_handlers(app)
+    _require_shop_license(app)
     register_cli(app)
 
-    if not app.config.get("TESTING"):
+    # The installer's one-off commands (setup, flask ...) set LITERETAILER_NO_SCHEDULER so no backup job starts.
+    if not app.config.get("TESTING") and not os.environ.get("LITERETAILER_NO_SCHEDULER"):
         from app.scheduler.setup import init_scheduler
         init_scheduler(app)
 
-    app.logger.info("POS backend started (%s)", config_class.ENV_NAME)
+    app.logger.info("LiteRetailer backend started (%s)", config_class.ENV_NAME)
     return app
+
+
+def _require_shop_license(app: Flask) -> None:
+    """Every counter goes through this server, so checking here covers the whole shop."""
+    from flask import request
+
+    from app.services import license_service
+
+    open_paths = {f"{app.config['API_PREFIX']}/{p}" for p in ("health", "license", "license/activate")}
+
+    @app.before_request
+    def check_license():
+        if not app.config.get("LICENSE_REQUIRED") or request.method == "OPTIONS" or request.path in open_paths:
+            return None
+        status = license_service.current_status()
+        if not status.valid:
+            return error_response(403, "LICENSE_REQUIRED",
+                                  "This shop's LiteRetailer licence is not active. Activate it on any PC.",
+                                  status.to_dict())
+        return None
 
 
 def _configure_jwt_handlers(jwt_manager) -> None:

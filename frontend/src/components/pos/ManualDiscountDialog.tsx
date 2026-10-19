@@ -83,7 +83,7 @@ export function ManualDiscountDialog({ item, busy, error, onConfirm, onClose }: 
             </label>
             <label className="field-label">
               {t('manualDiscount.managerPin')}
-              <input className="field-input" type="password" inputMode="numeric" autoComplete="off" maxLength={8} value={pin} onChange={(e) => setPin(e.target.value)} />
+              <input className="field-input" type="password" autoComplete="off" maxLength={12} value={pin} onChange={(e) => setPin(e.target.value)} />
             </label>
           </div>
 

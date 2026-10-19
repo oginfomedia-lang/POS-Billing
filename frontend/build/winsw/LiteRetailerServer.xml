@@ -1,0 +1,26 @@
+<!--
+  Windows service for the LiteRetailer backend (WinSW v2). The installer copies this file next to
+  LiteRetailerServer.exe (WinSW-x64.exe renamed) in resources\backend\winsw and runs "LiteRetailerServer.exe install".
+  The backend reads C:\ProgramData\LiteRetailer\backend.env.
+-->
+<service>
+  <id>LiteRetailerServer</id>
+  <name>LiteRetailer Server</name>
+  <description>LiteRetailer billing server (API for all counters). Settings: C:\ProgramData\LiteRetailer\backend.env</description>
+  <executable>%BASE%\..\literetailer-backend.exe</executable>
+  <arguments>serve</arguments>
+  <workingdirectory>%BASE%\..</workingdirectory>
+  <startmode>Automatic</startmode>
+  <!-- Starts a little after boot so PostgreSQL is already running. -->
+  <delayedAutoStart>true</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="20 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+  <logpath>%ProgramData%\LiteRetailer\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+</service>

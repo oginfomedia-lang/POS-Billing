@@ -17,7 +17,7 @@ Any USB scanner in **keyboard (HID) mode** works. It types the barcode and press
    - Click **Save printer settings**, then **Test print**. A small "PRINTER TEST" slip should come
      out with Marathi letters (अ आ इ ई) printed correctly.
 
-These settings are saved on **this PC only**, in `%APPDATA%\pos-billing-frontend\counter.json`
+These settings are saved on **this PC only**, in `C:\ProgramData\LiteRetailer\counter.json`
 (`printerName`, `autoPrint`, `drawerEnabled`), so every counter can use its own printer.
 
 How it works: the receipt is printed by Windows, the same as from any program, but without the print
