@@ -10,7 +10,7 @@ from app.models.enums import UserRole
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1)
-    pin: str = Field(..., min_length=4, max_length=8)
+    pin: str = Field(..., min_length=4, max_length=12)
 
 
 class UserOut(BaseModel):

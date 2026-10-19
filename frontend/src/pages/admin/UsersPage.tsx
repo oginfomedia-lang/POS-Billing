@@ -193,7 +193,7 @@ export function UsersPage() {
                     <input className="field-input" value={formFullName} onChange={e => setFormFullName(e.target.value)} required />
                   </label>
                   <label className="field-label">{t('users.pin')}
-                    <input className="field-input" type="password" inputMode="numeric" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={8} />
+                    <input className="field-input" type="password" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={12} />
                   </label>
                   <label className="field-label">{t('users.role')}
                     <select className="field-input" value={formRole} onChange={e => setFormRole(e.target.value as UserRole)}>
@@ -251,7 +251,7 @@ export function UsersPage() {
                 {formError && <div className="form-error">{formError}</div>}
                 <form onSubmit={handlePin} className="modal-form">
                   <label className="field-label">{t('users.newPin')}
-                    <input className="field-input" type="password" inputMode="numeric" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={8} />
+                    <input className="field-input" type="password" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={12} />
                   </label>
                   <div className="modal-buttons">
                     <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>

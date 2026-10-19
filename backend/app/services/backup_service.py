@@ -59,9 +59,27 @@ def _pg_binary(name: str) -> str:
     return name
 
 
+def shop_code() -> str:
+    """Identifies this shop in backup filenames, e.g. "sharma-mart-420bef": the licensed customer (or the
+    first store) plus the start of the Main PC's machine ID, so two shops with the same name never clash."""
+    import re
+
+    from app.models.store import Store
+    from app.services import license_service
+
+    status = license_service.current_status()
+    name = status.customer_name if status.valid else None
+    if not name:
+        store = db.session.execute(db.select(Store).order_by(Store.id).limit(1)).scalar_one_or_none()
+        name = store.name if store else ""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:30].strip("-") or "shop"
+    return f"{slug}-{license_service.machine_id()[:6]}"
+
+
 def create_backup(user: User) -> BackupRun:
+    # pos_<shop>_<UTC date>_<UTC time>.pgdump - the VPS watcher reads the shop and time from the name.
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    filename = f"pos_db_{ts}.pgdump"
+    filename = f"pos_{shop_code()}_{ts}.pgdump"
     backup_dir = _backup_dir()
     file_path = backup_dir / filename
 

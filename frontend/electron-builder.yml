@@ -1,14 +1,39 @@
-# Windows installer build settings (run: npm run dist).
-appId: com.litecode.posbilling
-productName: POS Billing
+# Windows installer build settings. Full build (backend + app + installer): scripts\build\build_installer.ps1
+# Output: release\LiteRetailer-Setup-<version>.exe
+appId: com.litecode.literetailer
+productName: LiteRetailer
+executableName: LiteRetailer
 copyright: Copyright © 2026 LiteCode Software Pvt Ltd
+artifactName: LiteRetailer-Setup-${version}.${ext}
 directories:
   output: release
+  buildResources: build
 files:
   - out/**
   - package.json
+extraResources:
+  # Frozen Flask backend (backend\literetailer-backend.spec) -> resources\backend\literetailer-backend.exe
+  - from: ../backend/dist/literetailer-backend
+    to: backend
+  # Windows service wrapper: WinSW-x64.exe renamed + its XML -> resources\backend\winsw
+  - from: build/vendor/winsw/LiteRetailerServer.exe
+    to: backend/winsw/LiteRetailerServer.exe
+  - from: build/winsw/LiteRetailerServer.xml
+    to: backend/winsw/LiteRetailerServer.xml
 win:
   target: nsis
+  icon: build/icon.ico
 nsis:
   oneClick: false
+  # Per-machine: installs to Program Files and needs admin (PostgreSQL, Windows service, firewall).
+  perMachine: true
+  allowElevation: true
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: LiteRetailer
+  uninstallDisplayName: LiteRetailer
+  deleteAppDataOnUninstall: false
+  # Setup type / PostgreSQL / counter pages and the install steps. The PostgreSQL installer in
+  # build\vendor\postgresql is packed by installer.nsh itself (extracted only when it is needed).
+  include: build/installer.nsh

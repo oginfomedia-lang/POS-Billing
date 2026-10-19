@@ -51,7 +51,7 @@ export function LoginPage() {
           <div className="login-brand-logo">
             <IconShoppingCart size={28} color="#ffffff" />
           </div>
-          <h1 className="login-title">{lastStoreName() || 'SUPERMARKET POS'}</h1>
+          <h1 className="login-title">{lastStoreName() || 'LiteRetailer'}</h1>
           <p className="login-subtitle">{t('login.subtitle')}</p>
         </div>
 
@@ -78,13 +78,12 @@ export function LoginPage() {
               <input
                 className="field-input"
                 type={showPin ? 'text' : 'password'}
-                inputMode="numeric"
                 placeholder="••••••••"
                 autoComplete="current-password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value)}
                 minLength={4}
-                maxLength={8}
+                maxLength={12}
                 required
               />
               <button

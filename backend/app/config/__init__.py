@@ -1,10 +1,10 @@
 """Maps config names (development/testing/production) to config classes."""
-from pathlib import Path
-
 from dotenv import load_dotenv
 
-# Load backend/.env before the config classes read os.environ.
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+from app.utils.paths import env_file
+
+# Load backend/.env (or %ProgramData%\LiteRetailer\backend.env when installed) before the config classes read os.environ.
+load_dotenv(env_file())
 
 from app.config.development import DevelopmentConfig  # noqa: E402
 from app.config.production import ProductionConfig  # noqa: E402

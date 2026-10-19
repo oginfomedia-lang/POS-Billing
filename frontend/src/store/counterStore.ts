@@ -11,17 +11,28 @@ interface CounterState {
   savePrinterSettings: (changes: Partial<PrinterSettings>) => Promise<void>;
 }
 
+/**
+ * API address when running in a browser: VITE_API_URL if the build sets it; the local backend while
+ * developing; otherwise the server that served this page (its web server forwards /api to the backend).
+ * "localhost" would be the visitor's own PC, not the server.
+ */
+function browserApiUrl(): string {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (import.meta.env.DEV) return 'http://localhost:5000/api/v1';
+  return `${window.location.origin}/api/v1`;
+}
+
 export const useCounterStore = create<CounterState>((set) => ({
   config: null,
   error: null,
   load: async () => {
     try {
       // window.posBridge is only present in the Electron app.
-      // In a plain browser (dev / admin web UI) fall back to localhost defaults.
+      // In a plain browser (the web admin portal, or `vite` while developing) there is no counter.json.
       const bridge = typeof window !== 'undefined' ? window.posBridge : undefined;
       const config = bridge
         ? await bridge.getCounterConfig()
-        : { counterCode: 'C01', apiUrl: 'http://localhost:5000/api/v1', printerName: '', autoPrint: true, drawerEnabled: true };
+        : { counterCode: 'C01', apiUrl: browserApiUrl(), printerName: '', autoPrint: true, drawerEnabled: true };
       setApiBaseUrl(config.apiUrl);
       set({ config, error: null });
     } catch (err) {

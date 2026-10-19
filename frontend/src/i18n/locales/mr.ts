@@ -606,11 +606,11 @@ export const mr: typeof en = {
     addTitle: 'वापरकर्ता जोडा',
     username: 'युझरनेम',
     fullName: 'पूर्ण नाव',
-    pin: 'PIN (4–8 अंक)',
+    pin: 'PIN (4–12 अक्षरे किंवा अंक)',
     role: 'भूमिका',
     editTitle: '{{name}} संपादित करा',
     resetTitle: 'PIN बदला — {{name}}',
-    newPin: 'नवीन PIN (4–8 अंक)',
+    newPin: 'नवीन PIN (4–12 अक्षरे किंवा अंक)',
   },
   settings: {
     title: 'सेटिंग्ज',
@@ -899,6 +899,13 @@ export const mr: typeof en = {
     failed: 'प्रिंटरने प्रतिसाद दिला नाही.',
     testTitle: 'प्रिंटर टेस्ट',
     testLine: 'हे वाचता येत असेल तर पावत्या इथे प्रिंट होतील.',
+    errors: {
+      noPrinters: 'या PC वर एकही प्रिंटर इन्स्टॉल नाही. पावती प्रिंटरचा ड्रायव्हर इन्स्टॉल करा, किंवा Admin → Settings → या काउंटरचा प्रिंटर मध्ये ऑटो प्रिंट बंद करा.',
+      noPrinterSet: 'या PC साठी पावती प्रिंटर निवडलेला नाही, म्हणून Windows ने बिल डीफॉल्ट प्रिंटरकडे (सहसा "Microsoft Print to PDF") पाठवून रद्द केले. Admin → Settings → या काउंटरचा प्रिंटर मध्ये पावती प्रिंटर निवडा, किंवा तिथे ऑटो प्रिंट बंद करा.',
+      printerNotFound: '"{{name}}" हा प्रिंटर या PC वर इन्स्टॉल नाही. Admin → Settings → या काउंटरचा प्रिंटर मध्ये दुसरा निवडा.',
+      virtualPrinter: '"{{name}}" प्रिंट न करता फाइल सेव्ह करतो. Admin → Settings → या काउंटरचा प्रिंटर मध्ये पावती प्रिंटर निवडा, किंवा तिथे ऑटो प्रिंट बंद करा.',
+      cancelled: 'Windows ने प्रिंट रद्द केले. "{{name}}" चालू आहे, जोडलेला आहे, त्यात कागद आहे आणि तो Pause नाही हे तपासा (Windows Settings → Printers).',
+    },
   },
   backup: {
     title: 'बॅकअप व्यवस्थापन',

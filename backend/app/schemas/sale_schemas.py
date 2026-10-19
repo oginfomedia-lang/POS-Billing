@@ -91,7 +91,7 @@ class ManualDiscountRequest(BaseModel):
     amount: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)
     reason: str = Field("", max_length=100)
     approver_username: str = Field(..., min_length=1, max_length=50)
-    approver_pin: str = Field(..., min_length=4, max_length=8)
+    approver_pin: str = Field(..., min_length=4, max_length=12)
 
     @model_validator(mode="after")
     def need_reason(self) -> "ManualDiscountRequest":

@@ -608,7 +608,7 @@ function ScheduleTab() {
             Cron Schedule
           </span>
           <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, marginTop: 4, fontSize: 14 }}>
-            {import.meta.env.VITE_BACKUP_CRON ?? '0 2 * * * (daily at 02:00)'}
+            {import.meta.env.VITE_BACKUP_CRON ?? '0 22 * * * (daily at 22:00)'}
           </div>
           <div style={{ color: 'var(--muted)', marginTop: 4, fontSize: 12 }}>
             Set via <code>BACKUP_CRON_SCHEDULE</code> in backend/.env

@@ -34,6 +34,10 @@ class BaseConfig:
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
 
+    # Refuse API calls (except /health and /license) until the shop licence is activated.
+    # On in production (the installed server); development and tests skip it.
+    LICENSE_REQUIRED = os.environ.get("LICENSE_REQUIRED", "0") == "1"
+
     LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
     LOG_FILE = os.environ.get("LOG_FILE") or None
     # Razorpay / Paytm / WhatsApp values below are fallbacks: the admin normally enters them in
@@ -79,9 +83,12 @@ class BaseConfig:
     VPS_BACKUP_PATH       = os.environ.get("VPS_BACKUP_PATH", "/backups/pos/")
 
     # --- Backup scheduler (cron expression: minute hour dom month dow) ---
-    BACKUP_CRON_SCHEDULE    = os.environ.get("BACKUP_CRON_SCHEDULE", "0 2 * * *")
+    BACKUP_CRON_SCHEDULE    = os.environ.get("BACKUP_CRON_SCHEDULE", "0 22 * * *")
     # Backups older than this many days are auto-deleted from local disk and VPS
     BACKUP_RETENTION_DAYS   = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
+    # Back up as soon as possible (start-up, then hourly checks) when the last backup is older than this.
+    # Covers PCs that are switched off at the daily time. 0 = off.
+    BACKUP_CATCHUP_HOURS    = int(os.environ.get("BACKUP_CATCHUP_HOURS") or "24")
 
     # --- Supplier document uploads ---
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None

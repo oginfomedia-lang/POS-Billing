@@ -1,5 +1,6 @@
-// Reads counter.json (counterCode, apiUrl, printer settings) from the user-data folder.
-// On first start the file is created with defaults so the installer can edit it.
+// Reads counter.json (counterCode, apiUrl, printer settings).
+// Installed app: C:\ProgramData\LiteRetailer\counter.json, written by the installer (Main PC / Counter PC page).
+// Development: the Electron user-data folder. If the file is missing it is created with defaults.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { app } from 'electron';
@@ -27,6 +28,9 @@ const DEFAULT_CONFIG: CounterConfig = {
 };
 
 export function getConfigPath(): string {
+  if (app.isPackaged) {
+    return join(process.env.ProgramData ?? 'C:\\ProgramData', 'LiteRetailer', 'counter.json');
+  }
   return join(app.getPath('userData'), 'counter.json');
 }
 

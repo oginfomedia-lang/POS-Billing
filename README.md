@@ -61,13 +61,19 @@ npm run build        # production build into out/
 npm run dist         # Windows installer into release/
 ```
 
-On first start the app creates `%APPDATA%\pos-billing-frontend\counter.json`:
+The installer writes `C:\ProgramData\LiteRetailer\counter.json` (in development the app uses
+`%APPDATA%\LiteRetailer\counter.json` and creates it on first start):
 
 ```json
 { "counterCode": "C01", "apiUrl": "http://localhost:5000/api/v1", "printerName": "" }
 ```
 
-On each counter PC, set `counterCode` and point `apiUrl` at the server's LAN address.
+Main PC: `C01` + `localhost`. Counter PC: the code and Main PC IP chosen in the installer.
+
+### Client installer (LiteRetailer-Setup-x.y.z.exe)
+
+Build everything (frozen backend + app + installer) with `scripts\build\build_installer.ps1`.
+See [documentation/installer.md](documentation/installer.md).
 The status bar at the bottom of the POS window shows whether the server and database are reachable.
 
 ## Production server

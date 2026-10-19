@@ -9,7 +9,7 @@ import { listStores } from '../services/api/storeApi';
 import type { StoreOut } from '../types/api';
 import { useAuthStore } from './authStore';
 
-export const APP_NAME = 'Supermarket POS';
+export const APP_NAME = 'LiteRetailer';
 const SELECTED_KEY = 'pos-selected-store';
 const LAST_NAME_KEY = 'pos-last-store-name';
 

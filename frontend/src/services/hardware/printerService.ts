@@ -1,11 +1,22 @@
 // Receipt printing and cash drawer for the React screens.
 // In the Electron app this goes to window.posBridge (silent print to the counter's printer);
 // in a plain browser (e.g. testing the UI with `vite`) it falls back to the browser print dialog.
+import type { PrintErrorCode } from '../../../electron/ipc/printerHandlers';
+import i18n from '../../i18n';
 import { useCounterStore } from '../../store/counterStore';
 
 export interface HardwareResult {
   ok: boolean;
   error?: string;
+  code?: PrintErrorCode;
+  printer?: string;
+}
+
+/** Fills `error` with a message that says what to do, in the screen's language, when the app knows why. */
+function explain(result: HardwareResult): HardwareResult {
+  if (result.ok || !result.code) return result;
+  const key = `printer.errors.${result.code}` as const;
+  return { ...result, error: i18n.t(key, { name: result.printer ?? '' }) };
 }
 
 function bridge() {
@@ -20,7 +31,7 @@ export async function printReceipt(): Promise<HardwareResult> {
     return { ok: true };
   }
   try {
-    return await b.printReceipt();
+    return explain(await b.printReceipt());
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

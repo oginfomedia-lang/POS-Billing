@@ -606,11 +606,11 @@ export const en = {
     addTitle: 'Add User',
     username: 'Username',
     fullName: 'Full Name',
-    pin: 'PIN (4–8 digits)',
+    pin: 'PIN (4–12 letters or digits)',
     role: 'Role',
     editTitle: 'Edit {{name}}',
     resetTitle: 'Reset PIN — {{name}}',
-    newPin: 'New PIN (4–8 digits)',
+    newPin: 'New PIN (4–12 letters or digits)',
   },
   settings: {
     title: 'Settings',
@@ -899,6 +899,13 @@ export const en = {
     failed: 'The printer did not respond.',
     testTitle: 'PRINTER TEST',
     testLine: 'If you can read this, receipts will print here.',
+    errors: {
+      noPrinters: "No printer is installed on this PC. Install the receipt printer's driver, or turn off automatic printing in Admin → Settings → This counter's printer.",
+      noPrinterSet: "No receipt printer is chosen for this PC, so Windows sent the bill to its default (usually \"Microsoft Print to PDF\") and cancelled it. Choose the receipt printer in Admin → Settings → This counter's printer, or turn off automatic printing there.",
+      printerNotFound: `The printer "{{name}}" is not installed on this PC. Choose another one in Admin → Settings → This counter's printer.`,
+      virtualPrinter: `"{{name}}" saves files instead of printing. Choose the receipt printer in Admin → Settings → This counter's printer, or turn off automatic printing there.`,
+      cancelled: 'Windows cancelled the print job. Check that "{{name}}" is switched on, connected, has paper and is not paused (Windows Settings → Printers).',
+    },
   },
   backup: {
     title: 'Backup Management',

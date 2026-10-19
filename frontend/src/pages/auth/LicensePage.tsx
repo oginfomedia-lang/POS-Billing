@@ -1,40 +1,45 @@
-import { useEffect, useState } from 'react';
+// Shop licence activation. One key per shop, issued for the Main PC's machine ID; it can be
+// entered on any PC in the store because the server on the Main PC checks and keeps it.
+import { useState } from 'react';
+import { activateLicense } from '../../services/api/licenseApi';
 
 interface Props {
   reason?: string;
   expiresAt?: string;
+  /** The Main PC's machine ID (from the server). */
+  machineId: string;
   onActivated: () => void;
 }
 
-export function LicensePage({ reason, expiresAt, onActivated }: Props) {
-  const [machineId, setMachineId] = useState<string>('');
+export function LicensePage({ reason, expiresAt, machineId, onActivated }: Props) {
   const [key, setKey] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (window.posBridge?.getMachineId) {
-      window.posBridge.getMachineId().then(setMachineId);
-    }
-  }, []);
-
   async function handleActivate() {
     if (!key.trim()) return;
     setStatus('loading');
     setErrorMsg('');
-    const result = await window.posBridge.activateLicense(key.trim());
-    if (result.ok) {
-      onActivated();
-    } else {
-      setStatus('error');
-      setErrorMsg(
-        result.error === 'expired' ? 'This license key has expired.' :
-        result.error === 'wrong_machine' ? 'This key belongs to a different computer.' :
-        result.error === 'invalid_key' ? 'Invalid license key. Please check and try again.' :
-        'Activation failed. Please contact support.'
-      );
+    let reason: string | null;
+    try {
+      const result = await activateLicense(key.trim());
+      if (result.valid) {
+        onActivated();
+        return;
+      }
+      reason = result.reason;
+    } catch {
+      reason = 'unreachable';
     }
+    setStatus('error');
+    setErrorMsg(
+      reason === 'expired' ? 'This license key has expired.' :
+      reason === 'wrong_machine' ? "This key was issued for a different Main PC. Use the Main PC's machine ID shown above." :
+      reason === 'invalid_key' ? 'Invalid license key. Please check and try again.' :
+      reason === 'unreachable' ? 'Cannot reach the LiteRetailer server on the Main PC. Check the network and try again.' :
+      'Activation failed. Please contact support.'
+    );
   }
 
   function copyMachineId() {
@@ -74,7 +79,7 @@ export function LicensePage({ reason, expiresAt, onActivated }: Props) {
           <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.88em' }}>
             {isExpired
               ? `Your license expired on ${expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}. Please contact your provider to renew.`
-              : 'Enter your license key to unlock the POS application.'}
+              : 'One licence key activates LiteRetailer on every PC in this shop.'}
           </div>
         </div>
 
@@ -83,7 +88,7 @@ export function LicensePage({ reason, expiresAt, onActivated }: Props) {
           {/* Machine ID */}
           <div>
             <div style={{ fontSize: '0.78em', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>
-              Your Machine ID
+              Main PC Machine ID
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
@@ -108,7 +113,7 @@ export function LicensePage({ reason, expiresAt, onActivated }: Props) {
               </button>
             </div>
             <div style={{ fontSize: '0.76em', color: '#94a3b8', marginTop: 6 }}>
-              Share this with your provider to get a license key for this computer.
+              Share this with your provider to get the shop's licence key. It is the same on every PC in the shop.
             </div>
           </div>
 

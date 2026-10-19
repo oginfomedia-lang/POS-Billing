@@ -9,7 +9,7 @@ from app.models.enums import UserRole
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-z0-9_]+$")
     full_name: str = Field(..., min_length=1, max_length=150)
-    pin: str = Field(..., min_length=4, max_length=8, pattern=r"^\d{4,8}$")
+    pin: str = Field(..., min_length=4, max_length=12, pattern=r"^[A-Za-z0-9]{4,12}$")
     role: UserRole
     store_id: int | None = None
 
@@ -22,4 +22,4 @@ class UserUpdate(BaseModel):
 
 
 class PinReset(BaseModel):
-    new_pin: str = Field(..., min_length=4, max_length=8, pattern=r"^\d{4,8}$")
+    new_pin: str = Field(..., min_length=4, max_length=12, pattern=r"^[A-Za-z0-9]{4,12}$")
