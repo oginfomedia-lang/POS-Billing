@@ -9,6 +9,8 @@ Fills the key for every existing product. New and edited products get it automat
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import add_column_if_missing
+
 from app.utils.search_key import search_key
 
 
@@ -19,7 +21,8 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("products", sa.Column("search_key", sa.String(length=400), nullable=True))
+    # The column may already be there (a build made while this was being written); the keys are refilled anyway.
+    add_column_if_missing("products", sa.Column("search_key", sa.String(length=400), nullable=True))
     conn = op.get_bind()
     rows = conn.execute(sa.text("SELECT id, name FROM products")).all()
     for pid, name in rows:

@@ -8,6 +8,8 @@ Anyone still using the installer's default PIN (admin123) has to change it at th
 """
 from alembic import op
 import sqlalchemy as sa
+
+from app.utils.migration_guards import has_column
 from werkzeug.security import check_password_hash
 
 
@@ -20,6 +22,8 @@ DEFAULT_PIN = "admin123"
 
 
 def upgrade():
+    if has_column("users", "must_change_pin"):
+        return
     op.add_column(
         "users", sa.Column("must_change_pin", sa.Boolean(), nullable=False, server_default=sa.false())
     )

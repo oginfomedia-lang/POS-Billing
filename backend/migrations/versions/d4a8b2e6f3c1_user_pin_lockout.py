@@ -10,6 +10,8 @@ Existing users start with no failures and no lock.
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import add_column_if_missing
+
 
 revision = "d4a8b2e6f3c1"
 down_revision = "c7e2a4f8d1b9"
@@ -18,8 +20,8 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("users", sa.Column("pin_failures", sa.Integer(), nullable=False, server_default="0"))
-    op.add_column("users", sa.Column("pin_locked_until", sa.DateTime(timezone=True), nullable=True))
+    add_column_if_missing("users", sa.Column("pin_failures", sa.Integer(), nullable=False, server_default="0"))
+    add_column_if_missing("users", sa.Column("pin_locked_until", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade():

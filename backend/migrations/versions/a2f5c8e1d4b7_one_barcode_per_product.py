@@ -12,6 +12,8 @@ import json
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import has_constraint
+
 
 revision = "a2f5c8e1d4b7"
 down_revision = "e6c1f4a9b2d7"
@@ -41,7 +43,8 @@ def upgrade():
         )
         conn.execute(sa.text("DELETE FROM product_barcodes WHERE id = :id"), {"id": bid})
     conn.execute(sa.text("UPDATE product_barcodes SET is_primary = true WHERE NOT is_primary"))
-    op.create_unique_constraint("uq_product_barcodes_product_id", "product_barcodes", ["product_id"])
+    if not has_constraint("product_barcodes", "uq_product_barcodes_product_id"):
+        op.create_unique_constraint("uq_product_barcodes_product_id", "product_barcodes", ["product_id"])
 
 
 def downgrade():

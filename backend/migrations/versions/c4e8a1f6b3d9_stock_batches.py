@@ -14,6 +14,8 @@ from decimal import Decimal
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import has_table
+
 
 revision = "c4e8a1f6b3d9"
 down_revision = "b9d3e7f2a6c4"
@@ -22,6 +24,8 @@ depends_on = None
 
 
 def upgrade():
+    if has_table("stock_batches"):
+        return  # already there (with its batches): nothing to add
     op.create_table(
         "stock_batches",
         sa.Column("id", sa.Integer(), primary_key=True),

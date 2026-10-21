@@ -14,6 +14,8 @@ e.g. "Counter 1" -> "Counter 1 (C02)". Nothing is deleted. Bills keep their bill
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import has_constraint, has_index
+
 
 revision = "b3d6f9a2c8e1"
 down_revision = "a7c3e9f1b2d4"
@@ -33,9 +35,13 @@ def upgrade():
         WHERE c.id = d.id AND d.n > 1
         """
     )
-    op.drop_constraint("uq_counters_code", "counters", type_="unique")
-    op.create_unique_constraint("uq_counters_store_id_code", "counters", ["store_id", "code"])
-    op.create_index("uq_counters_store_id_label", "counters", ["store_id", sa.text("lower(label)")], unique=True)
+    # Each step is skipped when it's already done (a shop installed from a build made while this was being written).
+    if has_constraint("counters", "uq_counters_code"):
+        op.drop_constraint("uq_counters_code", "counters", type_="unique")
+    if not has_constraint("counters", "uq_counters_store_id_code"):
+        op.create_unique_constraint("uq_counters_store_id_code", "counters", ["store_id", "code"])
+    if not has_index("counters", "uq_counters_store_id_label"):
+        op.create_index("uq_counters_store_id_label", "counters", ["store_id", sa.text("lower(label)")], unique=True)
 
 
 def downgrade():

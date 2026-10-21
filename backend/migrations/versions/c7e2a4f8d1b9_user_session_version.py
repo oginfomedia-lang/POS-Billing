@@ -10,6 +10,8 @@ by the upgrade itself.
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_guards import add_column_if_missing
+
 
 revision = "c7e2a4f8d1b9"
 down_revision = "b3d6f9a2c8e1"
@@ -18,7 +20,7 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("users", sa.Column("session_version", sa.Integer(), nullable=False, server_default="0"))
+    add_column_if_missing("users", sa.Column("session_version", sa.Integer(), nullable=False, server_default="0"))
 
 
 def downgrade():
