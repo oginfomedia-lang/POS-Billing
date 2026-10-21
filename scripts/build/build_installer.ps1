@@ -76,6 +76,9 @@ try {
     if ($LASTEXITCODE) { throw 'PyInstaller failed' }
     & dist\literetailer-backend\literetailer-backend.exe --help | Out-Null
     if ($LASTEXITCODE) { throw 'Frozen backend does not start' }
+    # Every module under app\ must be inside the frozen backend, or the client finds out (e.g. in the database upgrade).
+    & .venv\Scripts\python.exe (Join-Path $PSScriptRoot 'check_frozen_backend.py')
+    if ($LASTEXITCODE) { throw 'Frozen backend is incomplete (see above)' }
 } finally { Pop-Location }
 
 Write-Host '== 3/3 App + installer -> frontend\release'
