@@ -1,12 +1,12 @@
 <!--
-  Windows service for the LiteRetailer backend (WinSW v2). The installer copies this file next to
+  Windows service for the LiteRetail backend (WinSW v2). The installer copies this file next to
   LiteRetailerServer.exe (WinSW-x64.exe renamed) in resources\backend\winsw and runs "LiteRetailerServer.exe install".
   The backend reads C:\ProgramData\LiteRetailer\backend.env.
 -->
 <service>
   <id>LiteRetailerServer</id>
-  <name>LiteRetailer Server</name>
-  <description>LiteRetailer billing server (API for all counters). Settings: C:\ProgramData\LiteRetailer\backend.env</description>
+  <name>LiteRetail Server</name>
+  <description>LiteRetail billing server (API for all counters). Settings: C:\ProgramData\LiteRetailer\backend.env</description>
   <executable>%BASE%\..\literetailer-backend.exe</executable>
   <arguments>serve</arguments>
   <workingdirectory>%BASE%\..</workingdirectory>

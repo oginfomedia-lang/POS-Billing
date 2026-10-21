@@ -19,8 +19,9 @@ def make_store(name: str = "Test Store", **kwargs) -> Store:
     return store
 
 
-def make_counter(store: Store, code: str = "C01", label: str = "Counter 1", **kwargs) -> Counter:
-    counter = Counter(code=code, label=label, store_id=store.id, **kwargs)
+def make_counter(store: Store, code: str = "C01", label: str | None = None, **kwargs) -> Counter:
+    # Names are unique per store: default to one per code ("Counter C01").
+    counter = Counter(code=code, label=label or f"Counter {code}", store_id=store.id, **kwargs)
     db.session.add(counter)
     db.session.commit()
     return counter

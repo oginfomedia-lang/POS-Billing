@@ -29,7 +29,12 @@ function translateServerError(code: string | undefined, message: string, details
       .join(', ');
     return t('errors.insufficientStock', { items });
   }
-  if (code === 'VALIDATION_ERROR' && message === 'Invalid request data.') return t('errors.invalidRequest');
+  if (code === 'VALIDATION_ERROR' && message === 'Invalid request data.') {
+    // Our own field checks explain what to fix ("Enter a valid 10-digit mobile number…"): show that.
+    const first = Array.isArray(details) ? (details[0] as { message?: unknown } | undefined) : undefined;
+    const own = typeof first?.message === 'string' && /^Value error, /.exec(first.message);
+    return own ? (first!.message as string).slice(own[0].length) : t('errors.invalidRequest');
+  }
   if (message === 'Invalid username or PIN.') return t('errors.badLogin');
   if (message === 'Approval failed: wrong manager username or PIN.') return t('errors.approvalFailed');
   if (message === 'Only a manager or admin can approve a discount.') return t('errors.approvalRole');

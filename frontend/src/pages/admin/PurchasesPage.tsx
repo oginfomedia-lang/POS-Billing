@@ -192,7 +192,8 @@ interface ProductRow {
   id: number;
   name: string;
   sku: string | null;
-  price: number;
+  price: number | null; // purchase rate to start the line at; null = unknown, the user types it
+  selling: number | null; // selling price (before GST), only to warn about a rate that isn't below it
   tax_rate: number;
 }
 
@@ -235,6 +236,7 @@ function ProductSearch({
           name: p.name,
           sku: p.sku,
           price: p.purchase_price,
+          selling: p.selling_price,
           tax_rate: p.tax_rate,
         })));
       })
@@ -267,7 +269,9 @@ function ProductSearch({
             id: p.id,
             name: p.name,
             sku: p.sku,
-            price: parseFloat(p.store_price ?? p.price ?? '0'),
+            // Never the selling price as a purchase rate: the cost if known, else typed in.
+            price: p.cost_price != null ? Math.round(parseFloat(p.cost_price) * 100) / 100 : null,
+            selling: parseFloat(p.store_price ?? p.price ?? '0'),
             tax_rate: parseFloat(p.tax_rate ?? '0'),
           })));
         })
@@ -375,7 +379,7 @@ function ProductSearch({
                       )}
                     </div>
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginLeft: 12, flexShrink: 0 }}>
-                      ₹{p.price.toFixed(2)}
+                      {p.price != null ? `₹${p.price.toFixed(2)}` : t('purchases.ratePlaceholder') + ' ?'}
                     </span>
                   </div>
                 ))}
@@ -394,6 +398,14 @@ interface LineItem extends PurchaseOrderItemPayload {
   _id: number;
   _name: string;
   _sku: string;
+  _selling?: number | null; // selling price, for the warning
+  _rateMissing?: boolean; // no rate known or typed yet: the order can't be saved
+}
+
+/** Rate after the line discount is not below the selling price: probably a typo (or the selling price). */
+function rateNotBelowSelling(l: LineItem): boolean {
+  if (l._rateMissing || l._selling == null || l._selling <= 0) return false;
+  return l.unit_price * (1 - (l.discount_percent ?? 0) / 100) >= l._selling - 0.005;
 }
 
 function calcLine(qty: number, price: number, disc: number, tax: number) {
@@ -452,9 +464,11 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
         _sku: p.sku ?? '',
         product_id: p.id,
         ordered_qty: 1,
-        unit_price: p.price,
+        unit_price: p.price ?? 0,
         discount_percent: 0,
         tax_rate: p.tax_rate,
+        _selling: p.selling,
+        _rateMissing: p.price == null,
       },
     ]);
   }
@@ -463,6 +477,15 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
     setLines((prev) =>
       prev.map((l) => l._id !== id ? l : { ...l, [field]: value }),
     );
+  }
+
+  /** Blank = no rate yet (not ₹0), so the order can't go out without one. */
+  function updateRate(id: number, text: string) {
+    setLines((prev) => prev.map((l) => l._id !== id ? l : {
+      ...l,
+      unit_price: parseFloat(text) || 0,
+      _rateMissing: text.trim() === '' || Number.isNaN(parseFloat(text)),
+    }));
   }
 
   function removeLine(id: number) {
@@ -482,6 +505,8 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
   async function save() {
     if (!supplierId) { setErr(t('purchases.fieldSupplier') + ' is required'); return; }
     if (lines.length === 0) { setErr(t('purchases.noItems')); return; }
+    const missing = lines.filter((l) => l._rateMissing).map((l) => l._name);
+    if (missing.length > 0) { setErr(t('purchases.rateMissing', { names: missing.join(', ') })); return; }
     setSaving(true);
     setErr('');
     try {
@@ -674,10 +699,23 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
                               type="number"
                               min="0"
                               step="0.01"
-                              value={l.unit_price}
-                              onChange={(e) => updateLine(l._id, 'unit_price', parseFloat(e.target.value) || 0)}
-                              style={{ padding: '5px 8px', minHeight: 32 }}
+                              value={l._rateMissing ? '' : l.unit_price}
+                              placeholder={t('purchases.ratePlaceholder')}
+                              aria-invalid={l._rateMissing || rateNotBelowSelling(l)}
+                              onChange={(e) => updateRate(l._id, e.target.value)}
+                              style={{
+                                padding: '5px 8px',
+                                minHeight: 32,
+                                ...(l._rateMissing || rateNotBelowSelling(l) ? { borderColor: 'var(--danger-border)' } : {}),
+                              }}
                             />
+                            {l._selling != null && (
+                              <div className={`hint-text${rateNotBelowSelling(l) ? ' text-danger' : ''}`} style={{ fontSize: 11, marginTop: 2 }}>
+                                {rateNotBelowSelling(l)
+                                  ? t('purchases.rateNotBelowSelling', { price: l._selling.toFixed(2) })
+                                  : t('purchases.sellsAt', { price: l._selling.toFixed(2) })}
+                              </div>
+                            )}
                           </td>
                           <td>
                             <input
@@ -1749,16 +1787,31 @@ export function PurchasesPage() {
       {/* Dashboard tiles */}
       {dash && (
         <div className="stat-grid" style={{ marginBottom: 24 }}>
-          <StatTile label={t('purchases.cardTotal')}    value={dash.total}                accent="var(--muted)" />
+          {/* Every tile filters the list below to the orders behind its number; clicking again shows all. */}
+          <StatTile label={t('purchases.cardTotal')} value={dash.total} accent="var(--muted)"
+                    onClick={clearAllFilters} isActive={false} />
           <StatTile
             label={t('purchases.cardValue')}
             value={`₹${parseFloat(dash.total_value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
             accent="var(--brand)"
+            onClick={clearAllFilters}
+            isActive={false}
           />
-          <StatTile label={t('purchases.cardOrdered')}  value={dash.ordered}              accent="#0284c7" />
-          <StatTile label={t('purchases.cardPartial')}  value={dash.partially_received}   accent="var(--warn)" />
-          <StatTile label={t('purchases.cardReceived')} value={dash.received}             accent="var(--ok)" />
-          <StatTile label={t('purchases.cardCancelled')} value={dash.cancelled}           accent="var(--danger)" />
+          {([
+            ['cardOrdered', 'ordered', dash.ordered, '#0284c7'],
+            ['cardPartial', 'partially_received', dash.partially_received, 'var(--warn)'],
+            ['cardReceived', 'received', dash.received, 'var(--ok)'],
+            ['cardCancelled', 'cancelled', dash.cancelled, 'var(--danger)'],
+          ] as const).map(([label, status, value, accent]) => (
+            <StatTile
+              key={status}
+              label={t(`purchases.${label}`)}
+              value={value}
+              accent={accent}
+              onClick={() => handleStatusChange(statusFilter === status ? '' : status)}
+              isActive={statusFilter === status}
+            />
+          ))}
           <StatTile
             label="Amount Paid"
             value={`₹${parseFloat(dash.total_paid || '0').toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}

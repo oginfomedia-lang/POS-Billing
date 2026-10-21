@@ -37,6 +37,11 @@ class SaleRepository(BaseRepository):
             q = q.where(Sale.store_id == store_id)
         return list(db.session.scalars(q.order_by(Sale.completed_at.desc()).limit(limit)).all())
 
+    def list_for_shift(self, shift_id: int) -> list[Sale]:
+        """Every bill started on this shift (paid, held, voided, open), oldest first."""
+        q = db.select(Sale).where(Sale.shift_id == shift_id).order_by(Sale.completed_at.asc().nulls_last(), Sale.id)
+        return list(db.session.scalars(q).all())
+
     def find_item(self, sale_id: int, product_id: int) -> SaleItem | None:
         return db.session.scalar(
             db.select(SaleItem).where(SaleItem.sale_id == sale_id, SaleItem.product_id == product_id)

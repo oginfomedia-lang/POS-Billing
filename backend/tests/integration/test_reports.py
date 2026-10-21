@@ -77,6 +77,23 @@ def test_dashboard(client, admin_headers, cashier_headers, shift, store):
     assert d["recent_sales"][0]["cashier_name"] == "Test User"
 
 
+def test_dashboard_counts_products_near_expiry(client, admin_headers, store):
+    from datetime import date, timedelta
+
+    soon = make_product(store, name="Curd", stock=0)
+    later = make_product(store, name="Rice", stock=0)
+    for p, days in ((soon, 10), (later, 60)):
+        resp = client.post("/api/v1/inventory/stock-in", json={
+            "store_id": store.id, "product_id": p.id, "qty": "5",
+            "expiry_date": (date.today() + timedelta(days=days)).isoformat(),
+        }, headers=admin_headers)
+        assert resp.status_code in (200, 201)
+    d = client.get(f"/api/v1/reports/dashboard?store_id={store.id}", headers=admin_headers).get_json()
+    assert d["near_expiry"] == 1
+    all_branches = client.get("/api/v1/reports/dashboard", headers=admin_headers).get_json()
+    assert all_branches["near_expiry"] == 1
+
+
 def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_headers, shift, store):
     s = client.get("/api/v1/settings", headers=admin_headers).get_json()
     assert s == {

@@ -37,7 +37,7 @@ from app.schemas.product_import_schemas import (
     ImportResult,
     ImportRowOut,
 )
-from app.schemas.product_schemas import _optional_hsn, _optional_plu
+from app.schemas.product_schemas import MAX_COST, MAX_MONEY, _optional_hsn, _optional_plu
 from app.services import audit_service
 from app.services.product_service import (
     _add_barcode_to_product,
@@ -204,8 +204,9 @@ def _parse(number: int, cells: dict) -> _Row:
         except InvalidOperation:
             row.errors.append(f"{col}: '{raw[col]}' is not a number.")
             continue
-        if value < 0 or (col == "tax_rate" and value > 100):
-            row.errors.append(f"{col}: {value} is out of range.")
+        limit = Decimal("100") if col == "tax_rate" else MAX_COST if col == "cost_price" else MAX_MONEY
+        if value < 0 or value > limit:
+            row.errors.append(f"{col}: {value} is out of range (0 to {limit}).")
             continue
         row.values[col] = value.quantize(Decimal("0.01"))
 
@@ -438,7 +439,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
     """Saves an analysed file that has no errors, all in one transaction."""
     if any(r.errors for r in rows):
         raise BadRequestError("Fix the rows with errors first.")
-    if not has_permission(actor.role, "reports.profit"):  # purchase cost is admin only
+    if not has_permission(actor.role, "products.cost"):  # purchase cost: admin / manager only
         for row in rows:
             row.values.pop("cost_price", None)
     look = _Lookups.load()

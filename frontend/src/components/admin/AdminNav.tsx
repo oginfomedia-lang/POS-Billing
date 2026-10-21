@@ -3,8 +3,9 @@
 import type { ParseKeys } from 'i18next';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { hasPrinterBridge } from '../../services/hardware/printerService';
 import {
   IconBarChart,
   IconBoxes,
@@ -17,6 +18,7 @@ import {
   IconMenu,
   IconPackage,
   IconPercent,
+  IconReceipt,
   IconSettings,
   IconShoppingCart,
   IconStore,
@@ -36,6 +38,18 @@ interface LinkItem {
   adminOnly?: boolean;
 }
 
+/** Parts of the Settings page, shown as a tree under Settings: one click goes straight there. */
+const SETTINGS_SECTIONS: { id: string; label: ParseKeys; adminOnly?: boolean; printerOnly?: boolean }[] = [
+  { id: 'general', label: 'nav.settingsGeneral' },
+  { id: 'rewards', label: 'settings.rewards.title' },
+  { id: 'ebill', label: 'settings.ebill.title' },
+  { id: 'cardupi', label: 'settings.cardUpi.title' },
+  { id: 'scale', label: 'settings.scale.title' },
+  { id: 'daily-report', label: 'settings.dailyReport.title' },
+  { id: 'integrations', label: 'settings.integrations.title', adminOnly: true },
+  { id: 'printer', label: 'printer.title', printerOnly: true },
+];
+
 // Titles and labels are translation keys, turned into text with t() when rendering.
 const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
   {
@@ -43,6 +57,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
     links: [
       { to: '/admin', label: 'nav.dashboard', icon: IconDashboard },
       { to: '/admin/reports', label: 'nav.reports', icon: IconBarChart },
+      { to: '/admin/bills', label: 'nav.bills', icon: IconReceipt },
       { to: '/admin/customers', label: 'nav.customers', icon: IconUsers },
     ],
   },
@@ -107,6 +122,15 @@ export function AdminNav() {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const location = useLocation();
+  const onSettings = location.pathname === '/admin/settings';
+  const currentSection = onSettings ? new URLSearchParams(location.search).get('section') : null;
+  // The Settings tree is open on the Settings page; elsewhere the arrow opens it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsExpanded = onSettings || settingsOpen;
+  const settingsSections = SETTINGS_SECTIONS.filter(
+    (s) => (isAdmin || !s.adminOnly) && (!s.printerOnly || hasPrinterBridge()),
+  );
   const { loaded, refresh } = useStoreContext();
   const storeName = useStoreDisplayName();
   useEffect(() => { if (!loaded) refresh().catch(() => {}); }, [loaded]);
@@ -165,17 +189,49 @@ export function AdminNav() {
                 <span className="nav-section-title">{t(section.title)}</span>
                 {links.map((l) => {
                   const Icon = l.icon;
+                  const isSettings = l.to === '/admin/settings';
                   return (
-                    <NavLink
-                      key={l.to}
-                      to={l.to}
-                      end={l.to === '/admin'}
-                      className={({ isActive }) => `admin-nav-link${isActive ? ' active' : ''}`}
-                      onClick={() => setOpen(false)}
-                    >
-                      <Icon size={18} />
-                      <span>{t(l.label)}</span>
-                    </NavLink>
+                    <React.Fragment key={l.to}>
+                      <div className={isSettings ? 'nav-link-row' : undefined}>
+                        <NavLink
+                          to={l.to}
+                          end={l.to === '/admin'}
+                          className={({ isActive }) => `admin-nav-link${isActive ? ' active' : ''}`}
+                          onClick={() => setOpen(false)}
+                        >
+                          <Icon size={18} />
+                          <span>{t(l.label)}</span>
+                        </NavLink>
+                        {isSettings && !onSettings && (
+                          <button
+                            type="button"
+                            className={`nav-tree-toggle${settingsExpanded ? ' open' : ''}`}
+                            aria-expanded={settingsExpanded}
+                            aria-controls="nav-settings-tree"
+                            aria-label={t('nav.settingsSections')}
+                            title={t('nav.settingsSections')}
+                            onClick={() => setSettingsOpen((v) => !v)}
+                          >
+                            ▸
+                          </button>
+                        )}
+                      </div>
+                      {isSettings && settingsExpanded && (
+                        <ul className="nav-subtree" id="nav-settings-tree">
+                          {settingsSections.map((s) => (
+                            <li key={s.id}>
+                              <button
+                                type="button"
+                                className={`admin-nav-sublink${currentSection === s.id ? ' active' : ''}`}
+                                onClick={() => { navigate(`/admin/settings?section=${s.id}`); setOpen(false); }}
+                              >
+                                {t(s.label)}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </div>

@@ -353,3 +353,60 @@ class ReportRepository:
         if store_id is not None:
             q = q.where(Sale.store_id == store_id)
         return db.session.execute(q).all()
+
+    # ── Bill / return lists ──────────────────────────────────────────────────────────
+
+    def _bill_conditions(self, store_id, start, end, status, method, discounted, text) -> list:
+        if status == "voided":  # same rule as voided_count()
+            conds = [Sale.status == SaleStatus.VOIDED, Sale.updated_at >= start, Sale.updated_at < end]
+            if store_id is not None:
+                conds.append(Sale.store_id == store_id)
+        else:
+            conds = self._paid(store_id, start, end)
+        if method is not None:
+            conds.append(Sale.id.in_(db.select(Payment.sale_id).where(Payment.method == method)))
+        if discounted:
+            conds.append(Sale.discount_amount > 0)
+        if text:
+            conds.append(Sale.bill_number.icontains(text, autoescape=True))
+        return conds
+
+    def list_bills(self, store_id, start, end, status, method, discounted, text, page, per_page):
+        """(rows of (Sale, cashier name, counter code), totals row) — newest first."""
+        conds = self._bill_conditions(store_id, start, end, status, method, discounted, text)
+        f = db.func
+        totals = db.session.execute(
+            db.select(
+                f.count(Sale.id).label("count"),
+                f.coalesce(f.sum(Sale.subtotal), 0).label("subtotal"),
+                f.coalesce(f.sum(Sale.discount_amount), 0).label("discount"),
+                f.coalesce(f.sum(Sale.tax_amount), 0).label("tax"),
+                f.coalesce(f.sum(Sale.total), 0).label("total"),
+            ).where(*conds)
+        ).one()
+        when = Sale.updated_at if status == "voided" else Sale.completed_at
+        rows = db.session.execute(
+            db.select(Sale, User.full_name, Counter.code)
+            .join(User, User.id == Sale.cashier_id)
+            .outerjoin(Counter, Counter.id == Sale.counter_id)
+            .where(*conds)
+            .order_by(when.desc(), Sale.id.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        ).all()
+        return rows, totals
+
+    def list_returns(self, store_id, start, end, page, per_page):
+        """(rows of SaleReturn, totals row) — newest first, by the day the refund was paid."""
+        conds = self._returned(store_id, start, end)
+        f = db.func
+        totals = db.session.execute(
+            db.select(f.count(SaleReturn.id).label("count"),
+                      f.coalesce(f.sum(SaleReturn.refund_amount), 0).label("total")).where(*conds)
+        ).one()
+        rows = db.session.scalars(
+            db.select(SaleReturn).where(*conds)
+            .order_by(SaleReturn.created_at.desc(), SaleReturn.id.desc())
+            .offset((page - 1) * per_page).limit(per_page)
+        ).all()
+        return list(rows), totals

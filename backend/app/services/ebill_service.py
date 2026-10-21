@@ -132,7 +132,10 @@ def resend(sale_id: int, mobile: str | None, actor: User) -> dict | None:
     """
     from app.services.billing_service import get_sale
 
+    from app.utils.store_scope import require_same_store_or_404
+
     sale = get_sale(sale_id)
+    require_same_store_or_404(actor, sale.store_id, f"Sale {sale_id}")
     if sale.bill_number is None or sale.completed_at is None:
         raise AppError("An e-bill can only be sent for a completed bill.")
     recipient = normalize_mobile(mobile) or sale.customer_mobile

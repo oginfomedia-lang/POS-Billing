@@ -3,15 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
-import {
-  IconAlert,
-  IconBarChart,
-  IconCash,
-  IconFileText,
-  IconPercent,
-  IconReceipt,
-  IconStore,
-} from '../../components/common/Icons';
+import { IconAlert, IconBarChart, IconCash, IconFileText, IconHistory, IconPercent, IconReceipt, IconStore } from '../../components/common/Icons';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getDashboard } from '../../services/api/reportApi';
 import type { DashboardOut } from '../../types/report';
@@ -60,7 +52,8 @@ export function DashboardPage() {
       {data && s && (
         <>
           <div className="stat-grid">
-            <div className="stat-tile stat-tile-sales">
+            {/* Every tile opens the list or report behind its number (today, this branch). */}
+            <button className="stat-tile stat-link stat-tile-sales" onClick={() => navigate('/admin/bills')}>
               <div className="stat-icon-wrapper sales">
                 <IconCash size={20} />
               </div>
@@ -71,34 +64,34 @@ export function DashboardPage() {
                   {t('reports.salesMinusReturns', { sales: formatRupees(s.total), returns: formatRupees(s.refunded) })}
                 </span>
               )}
-            </div>
+            </button>
 
-            <div className="stat-tile stat-tile-bills">
+            <button className="stat-tile stat-link stat-tile-bills" onClick={() => navigate('/admin/bills')}>
               <div className="stat-icon-wrapper bills">
                 <IconReceipt size={20} />
               </div>
               <span className="stat-label">{t('dashboard.completedBills')}</span>
               <span className="stat-value">{s.bills}</span>
               <span className="stat-sub">{t('dashboard.avgBasket', { amount: formatRupees(s.average_bill) })}</span>
-            </div>
+            </button>
 
-            <div className="stat-tile stat-tile-discounts">
+            <button className="stat-tile stat-link stat-tile-discounts" onClick={() => navigate('/admin/bills?discount=1')}>
               <div className="stat-icon-wrapper discounts">
                 <IconPercent size={20} />
               </div>
               <span className="stat-label">{t('dashboard.discountsGiven')}</span>
               <span className="stat-value">{formatRupees(s.discount)}</span>
-            </div>
+            </button>
 
-            <div className="stat-tile stat-tile-tax">
+            <button className="stat-tile stat-link stat-tile-tax" onClick={() => navigate('/admin/reports?tab=gst')}>
               <div className="stat-icon-wrapper tax">
                 <IconFileText size={20} />
               </div>
               <span className="stat-label">{t('dashboard.gstCollected')}</span>
               <span className="stat-value">{formatRupees(s.tax)}</span>
-            </div>
+            </button>
 
-            <button className="stat-tile stat-link stat-tile-shifts" onClick={() => navigate('/admin/reports')}>
+            <button className="stat-tile stat-link stat-tile-shifts" onClick={() => navigate('/admin/reports?tab=shifts')}>
               <div className="stat-icon-wrapper shifts">
                 <IconStore size={20} />
               </div>
@@ -114,6 +107,15 @@ export function DashboardPage() {
               <span className="stat-label">{t('dashboard.stockWarnings')}</span>
               <span className="stat-value">{data.low_stock}</span>
               <span className="stat-sub">{data.low_stock ? t('dashboard.reviewLow') : t('dashboard.allStocked')}</span>
+            </button>
+
+            <button className="stat-tile stat-link stat-tile-expiry" onClick={() => navigate('/admin/inventory?tab=expiry')}>
+              <div className={`stat-icon-wrapper ${data.near_expiry ? 'warn' : 'ok'}`}>
+                <IconHistory size={20} />
+              </div>
+              <span className="stat-label">{t('dashboard.nearExpiry')}</span>
+              <span className="stat-value">{data.near_expiry}</span>
+              <span className="stat-sub">{data.near_expiry ? t('dashboard.reviewExpiry') : t('dashboard.noExpiry')}</span>
             </button>
           </div>
 

@@ -1,0 +1,1 @@
+Currently multiple barcodes can be generated for one product, it must be one barcode for one product

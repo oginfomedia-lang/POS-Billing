@@ -35,6 +35,22 @@ class ReturnRepository(BaseRepository):
         )
         return Decimal(db.session.scalar(q))
 
+    def list_for_shift(self, shift_id: int) -> list[SaleReturn]:
+        """Returns paid out of this shift's drawer, oldest first."""
+        q = db.select(SaleReturn).where(SaleReturn.shift_id == shift_id).order_by(SaleReturn.id)
+        return list(db.session.scalars(q).all())
+
+    def refunded_by_sale(self, sale_ids: list[int]) -> dict[int, tuple[int, Decimal]]:
+        """{sale_id: (number of returns, amount refunded)} on these bills, whichever shift paid them out."""
+        if not sale_ids:
+            return {}
+        q = (
+            db.select(SaleReturn.sale_id, db.func.count(SaleReturn.id), db.func.sum(SaleReturn.refund_amount))
+            .where(SaleReturn.sale_id.in_(sale_ids))
+            .group_by(SaleReturn.sale_id)
+        )
+        return {sid: (count, Decimal(total)) for sid, count, total in db.session.execute(q).all()}
+
     def list_for_sale(self, sale_id: int) -> list[SaleReturn]:
         q = db.select(SaleReturn).where(SaleReturn.sale_id == sale_id).order_by(SaleReturn.id)
         return list(db.session.scalars(q).all())

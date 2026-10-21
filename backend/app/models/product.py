@@ -21,6 +21,9 @@ class Product(TimestampMixin, db.Model):
     sku = db.Column(db.String(50), unique=True, nullable=False, default=_gen_sku)
 
     name = db.Column(db.String(200), nullable=False)
+    # Sound-alike form of the name (app/utils/search_key.py), kept up to date below, so typing "madhur"
+    # finds "मधुर साखर". Never shown.
+    search_key = db.Column(db.String(400), nullable=True)
     description = db.Column(db.Text, nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)  # selling price, before GST
@@ -49,6 +52,15 @@ class Product(TimestampMixin, db.Model):
 
     def __repr__(self) -> str:
         return f"<Product {self.name}>"
+
+
+@db.event.listens_for(Product, "before_insert")
+@db.event.listens_for(Product, "before_update")
+def _set_search_key(mapper, connection, product: "Product") -> None:
+    """Every way a product is saved (form, import, scripts) keeps its search key in step with its name."""
+    from app.utils.search_key import search_key
+
+    product.search_key = search_key(product.name)
 
 
 class ProductBarcode(db.Model):

@@ -1,8 +1,8 @@
-# Builds the LiteRetailer client installer: frozen backend + Electron app + PostgreSQL, one .exe.
+# Builds the LiteRetail client installer: frozen backend + Electron app + PostgreSQL, one .exe.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\build\build_installer.ps1
 #
-# Output: frontend\release\LiteRetailer-Setup-<version>.exe
+# Output: frontend\release\LiteRetail-Setup-<version>.exe
 # One-time downloads (not in git, see .gitignore) are fetched automatically into frontend\build\vendor.
 $ErrorActionPreference = 'Stop'
 
@@ -59,6 +59,6 @@ try {
     if ($LASTEXITCODE) { throw 'electron-builder failed' }
 } finally { Pop-Location }
 
-Get-ChildItem (Join-Path $frontend 'release\LiteRetailer-Setup-*.exe') | ForEach-Object {
+Get-ChildItem (Join-Path $frontend 'release\LiteRetail-Setup-*.exe') | ForEach-Object {
     Write-Host ("Done: {0} ({1:N0} MB)" -f $_.FullName, ($_.Length / 1MB))
 }

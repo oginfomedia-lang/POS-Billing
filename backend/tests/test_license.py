@@ -12,7 +12,7 @@ from app.services import license_service
 
 def make_key(mid=None, exp=None, secret=license_service.SECRET):
     payload = {
-        "product": "LiteRetailer",
+        "product": "LiteRetail",
         "customer": "Test Mart",
         "mid": mid or license_service.machine_id(),
         "iat": date.today().isoformat(),

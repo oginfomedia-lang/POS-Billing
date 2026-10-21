@@ -18,6 +18,7 @@ import { useStoreContext, useStores } from '../../store/storeContext';
 import { formatRupees } from '../../utils/money';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { ProductImportDialog } from '../../components/admin/ProductImportDialog';
 import type { SupplierOut } from '../../types/api';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
@@ -152,8 +153,9 @@ export function ProductsPage() {
   const priceWithGst = Number.isFinite(priceNum) ? priceNum * (1 + (parseFloat(formTax) || 0) / 100) : null;
   const mrpNum = parseFloat(formMrp);
   const mrpTooLow = priceWithGst !== null && Number.isFinite(mrpNum) && mrpNum + 0.005 < priceWithGst;
-  // Purchase cost is admin only. The branch's average cost (from goods receipts) wins over the default cost.
-  const seesCost = user?.role === 'admin';
+  // Purchase cost: admin and manager (the server hides it from cashiers). The branch's average cost
+  // (from goods receipts) wins over the default cost.
+  const seesCost = user?.role === 'admin' || user?.role === 'manager';
   const branchAvgCost = target?.store_avg_cost ?? null;
   const costNum = parseFloat(branchAvgCost ?? formCost);
   const belowCost = Number.isFinite(priceNum) && Number.isFinite(costNum) && priceNum + 0.005 < costNum;
@@ -500,11 +502,12 @@ export function ProductsPage() {
                 </label>
                 <label className="field-label">
                   {t('products.productName')}
-                  <input
+                  <MarathiInput
                     className="field-input"
                     value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
+                    onChange={setFormName}
                     required
+                    maxLength={200}
                     placeholder={t('products.namePlaceholder')}
                   />
                 </label>
@@ -555,7 +558,8 @@ export function ProductsPage() {
                     onChange={(e) => setFormCategory(e.target.value)}
                   >
                     <option value="">{t('common.none')}</option>
-                    {categories.map((c) => (
+                    {/* Deactivated categories are not offered, except the one this product already has. */}
+                    {categories.filter((c) => c.is_active || String(c.id) === formCategory).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -630,6 +634,9 @@ export function ProductsPage() {
                     onChange={(e) => setFormCost(e.target.value)}
                     placeholder={t('products.costPlaceholder')}
                   />
+                  {!formCost.trim() && branchAvgCost === null && (
+                    <span className="hint-text">{t('products.costAutoHint')}</span>
+                  )}
                   {branchAvgCost !== null && (
                     <span className="hint-text">{t('products.branchAvgCost', { cost: formatRupees(Number(branchAvgCost).toFixed(2)) })}</span>
                   )}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { IconEdit, IconTruck, IconX, IconBarChart } from '../../components/common/Icons';
 import { supplierApi } from '../../services/api/supplierApi';
 import type { SupplierCreatePayload, SupplierUpdatePayload } from '../../services/api/supplierApi';
@@ -41,6 +42,27 @@ function emptyForm(): SupplierCreatePayload {
     payment_terms: 'net_30',
     notes: '',
   };
+}
+
+/** Same rules as the server, checked before sending so the field can be fixed straight away. Returns an i18n key. */
+type SupplierFormError =
+  | 'suppliers.errNameRequired' | 'suppliers.errPhone' | 'suppliers.errAltPhone' | 'suppliers.errEmail'
+  | 'suppliers.errGstin' | 'suppliers.errPan' | 'suppliers.errPincode';
+
+function checkSupplierForm(form: SupplierCreatePayload): SupplierFormError | null {
+  const phone = form.phone?.trim() ?? '';
+  const alt = form.alt_phone?.trim() ?? '';
+  const pin = form.pincode?.trim() ?? '';
+  const email = form.email?.trim() ?? '';
+  const india = (form.country ?? 'India').trim().toLowerCase() === 'india';
+  if (!form.company_name.trim()) return 'suppliers.errNameRequired';
+  if (phone && !/^[6-9]\d{9}$/.test(phone)) return 'suppliers.errPhone';
+  if (alt && !/^([6-9]\d{9}|0\d{10})$/.test(alt)) return 'suppliers.errAltPhone';
+  if (email && !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email)) return 'suppliers.errEmail';
+  if (form.gstin?.trim() && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(form.gstin.trim())) return 'suppliers.errGstin';
+  if (form.pan?.trim() && !/^[A-Z]{5}\d{4}[A-Z]$/.test(form.pan.trim())) return 'suppliers.errPan';
+  if (pin && india && !/^[1-9]\d{5}$/.test(pin)) return 'suppliers.errPincode';
+  return null;
 }
 
 export function SuppliersPage() {
@@ -159,6 +181,11 @@ export function SuppliersPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    const problem = checkSupplierForm(form);
+    if (problem) {
+      setFormError(t(problem));
+      return;
+    }
     setSaving(true);
     setFormError('');
     const payload: SupplierCreatePayload = {
@@ -388,20 +415,22 @@ export function SuppliersPage() {
                 </label>
                 <label className="field-label">
                   {t('suppliers.fieldName')} <span style={{ color: 'var(--color-danger)' }}>*</span>
-                  <input
+                  <MarathiInput
                     className="field-input"
                     required
                     value={form.company_name}
-                    onChange={(e) => field('company_name', e.target.value)}
+                    maxLength={200}
+                    onChange={(v) => field('company_name', v)}
                     placeholder="e.g. ABC Traders Pvt Ltd"
                   />
                 </label>
                 <label className="field-label">
                   {t('suppliers.fieldContact')}
-                  <input
+                  <MarathiInput
                     className="field-input"
                     value={form.contact_person ?? ''}
-                    onChange={(e) => field('contact_person', e.target.value)}
+                    maxLength={100}
+                    onChange={(v) => field('contact_person', v)}
                     placeholder="e.g. Ramesh Patil"
                   />
                 </label>
@@ -409,8 +438,11 @@ export function SuppliersPage() {
                   {t('suppliers.fieldPhone')}
                   <input
                     className="field-input"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={form.phone ?? ''}
-                    onChange={(e) => field('phone', e.target.value)}
+                    onChange={(e) => field('phone', e.target.value.replace(/\D/g, ''))}
                     placeholder="e.g. 9876543210"
                   />
                 </label>
@@ -418,8 +450,12 @@ export function SuppliersPage() {
                   {t('suppliers.fieldAltPhone')}
                   <input
                     className="field-input"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={11}
                     value={form.alt_phone ?? ''}
-                    onChange={(e) => field('alt_phone', e.target.value)}
+                    onChange={(e) => field('alt_phone', e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 9876543210 or 02024567890"
                   />
                 </label>
                 <label className="field-label">
@@ -459,11 +495,12 @@ export function SuppliersPage() {
                 </label>
                 <label className="field-label" style={{ gridColumn: '1 / -1' }}>
                   {t('suppliers.fieldAddress')}
-                  <textarea
+                  <MarathiInput
+                    multiline
                     className="field-input"
                     rows={2}
                     value={form.billing_address ?? ''}
-                    onChange={(e) => field('billing_address', e.target.value)}
+                    onChange={(v) => field('billing_address', v)}
                   />
                 </label>
                 <label className="field-label">
@@ -471,6 +508,7 @@ export function SuppliersPage() {
                   <input
                     className="field-input"
                     value={form.city ?? ''}
+                    maxLength={100}
                     onChange={(e) => field('city', e.target.value)}
                   />
                 </label>
@@ -479,6 +517,7 @@ export function SuppliersPage() {
                   <input
                     className="field-input"
                     value={form.state ?? ''}
+                    maxLength={100}
                     onChange={(e) => field('state', e.target.value)}
                   />
                 </label>
@@ -488,7 +527,8 @@ export function SuppliersPage() {
                     className="field-input"
                     value={form.pincode ?? ''}
                     onChange={(e) => field('pincode', e.target.value)}
-                    maxLength={10}
+                    inputMode={(form.country ?? 'India').trim().toLowerCase() === 'india' ? 'numeric' : 'text'}
+                    maxLength={(form.country ?? 'India').trim().toLowerCase() === 'india' ? 6 : 10}
                   />
                 </label>
                 <label className="field-label">
@@ -528,11 +568,12 @@ export function SuppliersPage() {
                 )}
                 <label className="field-label" style={{ gridColumn: '1 / -1' }}>
                   {t('suppliers.fieldNotes')}
-                  <textarea
+                  <MarathiInput
+                    multiline
                     className="field-input"
                     rows={2}
                     value={form.notes ?? ''}
-                    onChange={(e) => field('notes', e.target.value)}
+                    onChange={(v) => field('notes', v)}
                   />
                 </label>
               </div>

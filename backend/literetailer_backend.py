@@ -1,4 +1,4 @@
-"""LiteRetailer backend entry point (frozen into literetailer-backend.exe by PyInstaller).
+"""LiteRetail backend entry point (frozen into literetailer-backend.exe by PyInstaller).
 
     literetailer-backend serve                      run the API (Waitress) - used by the Windows service
     literetailer-backend check-pg --host ...        test PostgreSQL superuser details (installer page)

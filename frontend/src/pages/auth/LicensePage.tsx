@@ -2,6 +2,7 @@
 // entered on any PC in the store because the server on the Main PC checks and keeps it.
 import { useState } from 'react';
 import { activateLicense } from '../../services/api/licenseApi';
+import { VENDOR_CREDIT, VENDOR_PHONE } from '../../utils/brand';
 
 interface Props {
   reason?: string;
@@ -37,7 +38,7 @@ export function LicensePage({ reason, expiresAt, machineId, onActivated }: Props
       reason === 'expired' ? 'This license key has expired.' :
       reason === 'wrong_machine' ? "This key was issued for a different Main PC. Use the Main PC's machine ID shown above." :
       reason === 'invalid_key' ? 'Invalid license key. Please check and try again.' :
-      reason === 'unreachable' ? 'Cannot reach the LiteRetailer server on the Main PC. Check the network and try again.' :
+      reason === 'unreachable' ? 'Cannot reach the LiteRetail server on the Main PC. Check the network and try again.' :
       'Activation failed. Please contact support.'
     );
   }
@@ -79,7 +80,7 @@ export function LicensePage({ reason, expiresAt, machineId, onActivated }: Props
           <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.88em' }}>
             {isExpired
               ? `Your license expired on ${expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}. Please contact your provider to renew.`
-              : 'One licence key activates LiteRetailer on every PC in this shop.'}
+              : 'One licence key activates LiteRetail on every PC in this shop.'}
           </div>
         </div>
 
@@ -159,8 +160,10 @@ export function LicensePage({ reason, expiresAt, machineId, onActivated }: Props
             {status === 'loading' ? 'Activating…' : isExpired ? 'Renew License' : 'Activate'}
           </button>
 
-          <div style={{ textAlign: 'center', fontSize: '0.78em', color: '#94a3b8' }}>
-            Need help? Contact your software provider.
+          {/* Same footer as the login screen. */}
+          <div className="login-footer-hint" style={{ marginTop: 4 }}>
+            <span>🔒 Need help activating? Call {VENDOR_PHONE}</span>
+            <div className="vendor-credit">{VENDOR_CREDIT}</div>
           </div>
         </div>
       </div>

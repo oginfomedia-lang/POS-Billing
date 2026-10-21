@@ -4,9 +4,11 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
+from app.errors.exceptions import AppError
 from app.models.enums import PaymentTerms
+from app.utils.phone import normalize_mobile
 
 
 def _clean(v: str | None) -> str | None:
@@ -34,20 +36,56 @@ def _validate_pan(v: str | None) -> str | None:
     return v
 
 
-def _validate_phone(v: str | None) -> str | None:
-    if not v:
+def _validate_mobile(v: str | None) -> str | None:
+    """Primary phone: a 10-digit Indian mobile ('+91 98765-43210' is saved as '9876543210')."""
+    try:
+        return normalize_mobile(v)
+    except AppError:
+        raise ValueError("Enter a valid 10-digit mobile number (starting with 6, 7, 8 or 9).") from None
+
+
+def _validate_alt_phone(v: str | None) -> str | None:
+    """Alternate phone: a 10-digit mobile, or a landline with its STD code (0 + 10 digits, e.g. 02024567890)."""
+    if v is None:
         return None
-    v = v.strip()
-    if not re.fullmatch(r"[\d\s+\-()]{7,20}", v):
-        raise ValueError("Invalid phone number format (7–20 digits/spaces/+/-/parentheses).")
-    return v
+    digits = re.sub(r"[\s\-()]", "", str(v))
+    if not digits:
+        return None
+    if re.fullmatch(r"0\d{10}", digits):
+        return digits
+    try:
+        return normalize_mobile(digits)
+    except AppError:
+        raise ValueError(
+            "Enter a 10-digit mobile number, or a landline with its STD code (11 digits, e.g. 02024567890)."
+        ) from None
+
+
+def _limit(max_len: int, label: str):
+    def check(v: str | None) -> str | None:
+        v = _clean(v)
+        if v is not None and len(v) > max_len:
+            raise ValueError(f"{label} can be at most {max_len} characters.")
+        return v
+    return check
+
+
+def _check_pincode(values):
+    """Indian PIN codes are 6 digits and never start with 0."""
+    pincode = values.pincode
+    country = (values.country or "India").strip().lower()
+    if pincode and country == "india" and not re.fullmatch(r"[1-9]\d{5}", pincode):
+        raise ValueError("Enter a valid 6-digit PIN code.")
+    if pincode and not re.fullmatch(r"[A-Za-z0-9 \-]{3,10}", pincode):
+        raise ValueError("Enter a valid postal code.")
+    return values
 
 
 def _validate_email(v: str | None) -> str | None:
     if not v:
         return None
     v = v.strip().lower()
-    if not re.fullmatch(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", v):
+    if len(v) > 200 or not re.fullmatch(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}", v):
         raise ValueError("Invalid email address format.")
     return v
 
@@ -75,16 +113,23 @@ class SupplierCreate(BaseModel):
         v = (v or "").strip()
         if not v:
             raise ValueError("Company name is required.")
+        if len(v) > 200:
+            raise ValueError("Company name can be at most 200 characters.")
         return v
 
-    _phone = field_validator("phone", mode="before")(classmethod(lambda cls, v: _validate_phone(v)))
-    _alt_phone = field_validator("alt_phone", mode="before")(classmethod(lambda cls, v: _validate_phone(v)))
+    _phone = field_validator("phone", mode="before")(classmethod(lambda cls, v: _validate_mobile(v)))
+    _alt_phone = field_validator("alt_phone", mode="before")(classmethod(lambda cls, v: _validate_alt_phone(v)))
     _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _validate_email(v)))
     _gstin = field_validator("gstin", mode="before")(classmethod(lambda cls, v: _validate_gstin(v)))
     _pan = field_validator("pan", mode="before")(classmethod(lambda cls, v: _validate_pan(v)))
-    _clean_fields = field_validator(
-        "contact_person", "billing_address", "city", "state", "pincode", "notes", mode="before"
-    )(classmethod(lambda cls, v: _clean(v)))
+    _contact = field_validator("contact_person", mode="before")(classmethod(lambda cls, v: _limit(100, "Contact person")(v)))
+    _city = field_validator("city", mode="before")(classmethod(lambda cls, v: _limit(100, "City")(v)))
+    _state = field_validator("state", mode="before")(classmethod(lambda cls, v: _limit(100, "State")(v)))
+    _country = field_validator("country", mode="before")(classmethod(lambda cls, v: _limit(100, "Country")(v)))
+    _address = field_validator("billing_address", mode="before")(classmethod(lambda cls, v: _limit(500, "Address")(v)))
+    _notes = field_validator("notes", mode="before")(classmethod(lambda cls, v: _limit(2000, "Notes")(v)))
+    _pin = field_validator("pincode", mode="before")(classmethod(lambda cls, v: _clean(v)))
+    _pin_check = model_validator(mode="after")(_check_pincode)
 
 
 class SupplierUpdate(BaseModel):
@@ -111,16 +156,23 @@ class SupplierUpdate(BaseModel):
             v = v.strip()
             if not v:
                 raise ValueError("Company name cannot be empty.")
+            if len(v) > 200:
+                raise ValueError("Company name can be at most 200 characters.")
         return v
 
-    _phone = field_validator("phone", mode="before")(classmethod(lambda cls, v: _validate_phone(v)))
-    _alt_phone = field_validator("alt_phone", mode="before")(classmethod(lambda cls, v: _validate_phone(v)))
+    _phone = field_validator("phone", mode="before")(classmethod(lambda cls, v: _validate_mobile(v)))
+    _alt_phone = field_validator("alt_phone", mode="before")(classmethod(lambda cls, v: _validate_alt_phone(v)))
     _email = field_validator("email", mode="before")(classmethod(lambda cls, v: _validate_email(v)))
     _gstin = field_validator("gstin", mode="before")(classmethod(lambda cls, v: _validate_gstin(v)))
     _pan = field_validator("pan", mode="before")(classmethod(lambda cls, v: _validate_pan(v)))
-    _clean_fields = field_validator(
-        "contact_person", "billing_address", "city", "state", "pincode", "notes", mode="before"
-    )(classmethod(lambda cls, v: _clean(v)))
+    _contact = field_validator("contact_person", mode="before")(classmethod(lambda cls, v: _limit(100, "Contact person")(v)))
+    _city = field_validator("city", mode="before")(classmethod(lambda cls, v: _limit(100, "City")(v)))
+    _state = field_validator("state", mode="before")(classmethod(lambda cls, v: _limit(100, "State")(v)))
+    _country = field_validator("country", mode="before")(classmethod(lambda cls, v: _limit(100, "Country")(v)))
+    _address = field_validator("billing_address", mode="before")(classmethod(lambda cls, v: _limit(500, "Address")(v)))
+    _notes = field_validator("notes", mode="before")(classmethod(lambda cls, v: _limit(2000, "Notes")(v)))
+    _pin = field_validator("pincode", mode="before")(classmethod(lambda cls, v: _clean(v)))
+    _pin_check = model_validator(mode="after")(_check_pincode)
 
 
 class SupplierOut(BaseModel):

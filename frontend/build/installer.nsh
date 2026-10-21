@@ -1,4 +1,4 @@
-; LiteRetailer installer additions (included by electron-builder, see electron-builder.yml nsis.include).
+; LiteRetail installer additions (included by electron-builder, see electron-builder.yml nsis.include).
 ;
 ; Pages added after "Choose install location":
 ;   1. Setup type        Main PC (server) / Counter PC
@@ -18,11 +18,11 @@
 !include MUI2.nsh
 
 !define SERVICE_NAME "LiteRetailerServer"
-!define FIREWALL_RULE "LiteRetailer Server"
+!define FIREWALL_RULE "LiteRetail Server"
 !define APP_PORT "5000"
 ; Task Scheduler jobs on the Main PC (run as SYSTEM, output in C:\ProgramData\LiteRetailer\logs\<command>.log)
-!define TASK_DAILY "LiteRetailer Daily Collection"
-!define TASK_EBILLS "LiteRetailer E-bill Retry"
+!define TASK_DAILY "LiteRetail Daily Collection"
+!define TASK_EBILLS "LiteRetail E-bill Retry"
 ; Bundled PostgreSQL installer (download once into build\vendor\postgresql, see scripts\build\build_installer.ps1).
 !define PG_INSTALLER "postgresql-17.6-1-windows-x64.exe"
 
@@ -99,7 +99,7 @@ Function SetupTypePageCreate
 
   ${NSD_CreateRadioButton} 0 6u 100% 12u "Main PC (server)"
   Pop $hRadioServer
-  ${NSD_CreateLabel} 14u 20u 95% 24u "Installs the database and the LiteRetailer server on this PC. Choose this on the store's first (or only) PC."
+  ${NSD_CreateLabel} 14u 20u 95% 24u "Installs the database and the LiteRetail server on this PC. Choose this on the store's first (or only) PC."
   Pop $0
 
   ${NSD_CreateRadioButton} 0 52u 100% 12u "Counter PC"
@@ -165,7 +165,7 @@ Function PgPageCreate
 
   ${If} $PgFound == 1
     !insertmacro MUI_HEADER_TEXT "Database" "PostgreSQL is already installed on this PC. Enter its administrator login."
-    ${NSD_CreateLabel} 0 0 100% 20u "LiteRetailer will create its own database (literetailer_db) and database user on this server. The administrator password is only used now and is not saved."
+    ${NSD_CreateLabel} 0 0 100% 20u "LiteRetail will create its own database (literetailer_db) and database user on this server. The administrator password is only used now and is not saved."
     Pop $0
     ${NSD_CreateLabel} 0 28u 30% 12u "Host"
     Pop $0
@@ -185,7 +185,7 @@ Function PgPageCreate
     Pop $hPass
   ${Else}
     !insertmacro MUI_HEADER_TEXT "Database" "PostgreSQL 17 will be installed on this PC."
-    ${NSD_CreateLabel} 0 0 100% 28u "Choose the password for the PostgreSQL administrator (user 'postgres'). Write it down: it is needed for database maintenance and when you reinstall or upgrade LiteRetailer."
+    ${NSD_CreateLabel} 0 0 100% 28u "Choose the password for the PostgreSQL administrator (user 'postgres'). Write it down: it is needed for database maintenance and when you reinstall or upgrade LiteRetail."
     Pop $0
     ${NSD_CreateLabel} 0 36u 30% 12u "Password"
     Pop $0
@@ -306,7 +306,7 @@ Function CounterPageCreate
   ${NSD_CB_AddString} $hCounterCode "C04"
   ${NSD_CB_AddString} $hCounterCode "C05"
   ${NSD_CB_SelectString} $hCounterCode $CounterCode
-  ${NSD_CreateLabel} 0 66u 100% 28u "Each counter PC needs a different code. C01 is the Main PC. More counters can be added in LiteRetailer under Admin > Counters."
+  ${NSD_CreateLabel} 0 66u 100% 28u "Each counter PC needs a different code. C01 is the Main PC. More counters can be added in LiteRetail under Admin > Counters."
   Pop $0
   nsDialogs::Show
 FunctionEnd
@@ -361,13 +361,13 @@ FunctionEnd
         StrCpy $PgUser "postgres"
       ${EndIf}
 
-      DetailPrint "Creating the LiteRetailer database..."
+      DetailPrint "Creating the LiteRetail database..."
       nsExec::ExecToStack '"$R9" setup --host "$PgHost" --port $PgPort --superuser "$PgUser" --superpassword "$PgPass" --app-port ${APP_PORT}'
       Pop $0
       Pop $1
       DetailPrint $1
       ${If} $0 != 0
-        MessageBox MB_ICONSTOP "The LiteRetailer database could not be set up:$\r$\n$\r$\n$1$\r$\nDetails: $R8\logs\setup.log"
+        MessageBox MB_ICONSTOP "The LiteRetail database could not be set up:$\r$\n$\r$\n$1$\r$\nDetails: $R8\logs\setup.log"
         Abort
       ${EndIf}
 
@@ -375,7 +375,7 @@ FunctionEnd
       nsExec::Exec 'icacls "$R8\backend.env" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F'
       Pop $0
 
-      DetailPrint "Installing the LiteRetailer Server service..."
+      DetailPrint "Installing the LiteRetail Server service..."
       nsExec::Exec 'sc.exe delete ${SERVICE_NAME}'
       Pop $0
       nsExec::ExecToStack '"$INSTDIR\resources\backend\winsw\${SERVICE_NAME}.exe" install'

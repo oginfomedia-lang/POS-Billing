@@ -77,7 +77,8 @@ def test_goods_receipts_keep_a_weighted_average_cost(client, admin_headers, stor
     assert _avg_cost(store, oil) == Decimal("108.5000")
 
     listed = client.get(f"/api/v1/products?store_id={store.id}&q=Oil", headers=admin_headers).get_json()["items"][0]
-    assert listed["store_avg_cost"] == "108.5000" and listed["cost_price"] is None
+    # The product had no default cost: the first receipt's rate became it.
+    assert listed["store_avg_cost"] == "108.5000" and listed["cost_price"] == "100.0000"
 
 
 def test_first_receipt_averages_with_the_default_cost(client, admin_headers, store):
@@ -131,16 +132,19 @@ def test_sold_below_cost_shows_a_loss(client, admin_headers, cashier_headers, sh
     assert (row["gross_profit"], row["margin_pct"]) == ("-10.00", "-25.00")
 
 
-def test_cost_and_profit_are_admin_only(client, admin_headers, manager_headers, cashier_headers, store):
+def test_profit_is_admin_only_cost_is_admin_and_manager(client, admin_headers, manager_headers, cashier_headers, store):
     tea = make_product(store, name="Tea", price="100.00")
     _set_cost(client, admin_headers, tea, "70")
 
     assert client.get("/api/v1/reports/profit", headers=manager_headers).status_code == 403
     assert client.get("/api/v1/reports/profit", headers=cashier_headers).status_code == 403
 
-    seen = client.get(f"/api/v1/products/{tea.id}", headers=manager_headers).get_json()
-    assert seen["cost_price"] is None and seen["store_avg_cost"] is None
-    # A manager can still edit the product, but a cost they send is ignored.
-    client.put(f"/api/v1/products/{tea.id}", json={"name": "Tea 250g", "cost_price": "1"}, headers=manager_headers)
+    # The manager enters products and purchases, so sees and sets the cost.
+    assert client.get(f"/api/v1/products/{tea.id}", headers=manager_headers).get_json()["cost_price"] == "70.0000"
+    client.put(f"/api/v1/products/{tea.id}", json={"name": "Tea 250g", "cost_price": "72"}, headers=manager_headers)
     admin_view = client.get(f"/api/v1/products/{tea.id}", headers=admin_headers).get_json()
-    assert (admin_view["name"], admin_view["cost_price"]) == ("Tea 250g", "70.0000")
+    assert (admin_view["name"], admin_view["cost_price"]) == ("Tea 250g", "72.0000")
+
+    # A cashier never sees it.
+    seen = client.get(f"/api/v1/products/{tea.id}", headers=cashier_headers).get_json()
+    assert seen["cost_price"] is None and seen["store_avg_cost"] is None

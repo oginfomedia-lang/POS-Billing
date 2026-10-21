@@ -1,6 +1,6 @@
 """Login, refresh, and current-user endpoints."""
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.schemas.auth_schemas import LoginRequest, RefreshResponse, TokenResponse, UserOut
 from app.services import auth_service
@@ -25,10 +25,7 @@ def login():
 def refresh():
     """Issue a fresh access token using a valid refresh token."""
     user = auth_service.current_user()
-    new_access = create_access_token(
-        identity=str(user.id),
-        additional_claims={"role": user.role.value, "username": user.username},
-    )
+    new_access = auth_service.new_access_token(user)
     resp = RefreshResponse(access_token=new_access)
     return jsonify(resp.model_dump(mode="json")), 200
 

@@ -1,6 +1,6 @@
 // Report, discount and settings API calls (admin / manager screens).
 import type {
-  CollectionReportOut, DailyReportLog, DailyReportSendResult, DashboardOut, DiscountIn, DiscountOut, ProfitReportOut, SalesReportOut, SettingsData, ShiftRow,
+  BillListOut, CollectionReportOut, DailyReportLog, DailyReportSendResult, DashboardOut, DiscountIn, DiscountOut, ProfitReportOut, ReturnListOut, SalesReportOut, SettingsData, ShiftRow,
 } from '../../types/report';
 import { httpClient } from './httpClient';
 
@@ -72,5 +72,31 @@ export async function sendDailyReportNow(): Promise<DailyReportSendResult[]> {
 
 export async function getDailyReportLogs(): Promise<DailyReportLog[]> {
   const resp = await httpClient.get<DailyReportLog[]>('/settings/daily-report/logs');
+  return resp.data;
+}
+
+export interface BillFilter extends ReportFilter {
+  status?: 'paid' | 'voided';
+  method?: 'cash' | 'card' | 'upi';
+  discounted?: boolean;
+  q?: string;
+  page?: number;
+  per_page?: number;
+}
+
+/** The bills behind the sales tiles (same dates / store rules as the sales report). */
+export async function getBills(f: BillFilter): Promise<BillListOut> {
+  const resp = await httpClient.get<BillListOut>('/reports/bills', {
+    params: {
+      ...params(f), status: f.status, method: f.method || undefined, discounted: f.discounted || undefined,
+      q: f.q || undefined, page: f.page, per_page: f.per_page,
+    },
+  });
+  return resp.data;
+}
+
+/** Refunds (credit notes) paid in the period. */
+export async function getReturns(f: ReportFilter & { page?: number; per_page?: number }): Promise<ReturnListOut> {
+  const resp = await httpClient.get<ReturnListOut>('/reports/returns', { params: { ...params(f), page: f.page, per_page: f.per_page } });
   return resp.data;
 }

@@ -18,14 +18,16 @@ def list_audit_logs():
     user_id = request.args.get("user_id", type=int)
     entity_type = request.args.get("entity_type")
     action = request.args.get("action")
+    user = request.args.get("user")  # role, or part of a username / full name
 
     repo = AuditRepository()
     items, total = repo.list(
         page=page,
         per_page=per_page,
         user_id=user_id,
-        entity_type=entity_type,
+        entity_type=entity_type or None,
         action=action,
+        user=user,
     )
 
     def _serialize(log):
@@ -44,3 +46,10 @@ def list_audit_logs():
 
     resp = PagedResponse.build([_serialize(l) for l in items], total, page, per_page)
     return jsonify(resp.model_dump()), 200
+
+
+@audit_bp.get("/audit-logs/filters")
+@require_permission("audit.read")
+def audit_filter_values():
+    """Suggestions for the filter boxes: actions, record types, roles and people found in the log."""
+    return jsonify(AuditRepository().filter_values()), 200

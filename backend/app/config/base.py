@@ -33,6 +33,9 @@ class BaseConfig:
     )
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
+    # Wrong PINs (login, manager approvals): after this many in a row, that user is locked for a while.
+    PIN_MAX_FAILURES = int(os.environ.get("PIN_MAX_FAILURES", "5"))
+    PIN_LOCK_MINUTES = int(os.environ.get("PIN_LOCK_MINUTES", "5"))
 
     # Refuse API calls (except /health and /license) until the shop licence is activated.
     # On in production (the installed server); development and tests skip it.

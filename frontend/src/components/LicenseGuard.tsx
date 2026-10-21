@@ -35,7 +35,7 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif',
         flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center',
       }}>
-        <div style={{ fontSize: '1.2em', fontWeight: 700 }}>Cannot reach the LiteRetailer server</div>
+        <div style={{ fontSize: '1.2em', fontWeight: 700 }}>Cannot reach the LiteRetail server</div>
         <div style={{ color: '#94a3b8', fontSize: '0.9em', maxWidth: 460 }}>
           Check that the Main PC is switched on and connected to the store network.
           Server address: <code>{apiUrl}</code>

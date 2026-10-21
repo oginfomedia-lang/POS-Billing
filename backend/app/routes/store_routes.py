@@ -62,6 +62,7 @@ def list_counters(store_id: int):
 def create_counter(store_id: int):
     data = CounterCreate.model_validate(request.get_json(force=True))
     actor = auth_service.current_user()
+    require_store_access(actor, store_id)
     counter = store_service.create_counter(store_id, data, actor)
     return jsonify(CounterOut.model_validate(counter).model_dump(mode="json")), 201
 
@@ -79,5 +80,6 @@ def get_counter(store_id: int, counter_id: int):
 def update_counter(store_id: int, counter_id: int):
     data = CounterUpdate.model_validate(request.get_json(force=True))
     actor = auth_service.current_user()
+    require_store_access(actor, store_id)
     counter = store_service.update_counter(store_id, counter_id, data, actor)
     return jsonify(CounterOut.model_validate(counter).model_dump(mode="json")), 200

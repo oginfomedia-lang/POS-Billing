@@ -2,7 +2,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { IconArrowLeft, IconDashboard } from '../../components/common/Icons';
 import { EbillBar } from '../../components/pos/EbillBar';
+import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getReceipt } from '../../services/api/billingApi';
@@ -18,7 +20,12 @@ export function ReprintPage() {
   // ?print=1 (straight after payment) prints automatically; reopening a past bill doesn't.
   const [searchParams] = useSearchParams();
   const autoPrint = searchParams.get('print') === '1';
+  // ?from=shift: opened from the cashier's shift bill list.
+  const fromShift = searchParams.get('from') === 'shift';
+  const fromBills = searchParams.get('from') === 'bills';
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
   const [receipt, setReceipt] = useState<ReceiptOut | null>(null);
   const [error, setError] = useState('');
   const { print, printing, printError } = useReceiptPrint(receipt !== null, autoPrint);
@@ -35,7 +42,7 @@ export function ReprintPage() {
   }, [saleId]);
 
   // The print job (and any print header the printer driver adds) is titled with the store name,
-  // not the app's window title ("LiteRetailer"). Restored when leaving the page.
+  // not the app's window title ("LiteRetail"). Restored when leaving the page.
   useEffect(() => {
     if (!receipt) return;
     const previous = document.title;
@@ -48,12 +55,6 @@ export function ReprintPage() {
     ? toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) - toPaise(receipt.reward_discount)
     : 0;
 
-  // "Items / Qty" line: number of different products, and total pieces (a loose item weighed in kg counts as 1).
-  const itemCount = receipt?.items.length ?? 0;
-  const totalQty = receipt
-    ? receipt.items.reduce((sum, i) => sum + (i.is_variable_weight ? 1 : Number(i.qty)), 0)
-    : 0;
-
   return (
     <div className="reprint-page">
       {/* No page margins: stops the browser printing its own header/footer (window title, file path, date). */}
@@ -61,6 +62,24 @@ export function ReprintPage() {
       <div className="admin-header no-print">
         <h2>{t('receipt.title')}{receipt ? ` — ${receipt.store_name}` : ''}</h2>
         <div className="admin-actions">
+          {fromShift && (
+            <button className="btn-secondary btn-icon" onClick={() => navigate('/pos/shift/bills')}>
+              <IconArrowLeft size={15} />
+              <span>{t('receipt.backToShiftBills')}</span>
+            </button>
+          )}
+          {fromBills && (
+            <button className="btn-secondary btn-icon" onClick={() => navigate(-1)}>
+              <IconArrowLeft size={15} />
+              <span>{t('bills.backToBills')}</span>
+            </button>
+          )}
+          {isAdmin && (
+            <button className="btn-secondary btn-icon" onClick={() => navigate('/admin')}>
+              <IconDashboard size={15} />
+              <span>{t('receipt.backToDashboard')}</span>
+            </button>
+          )}
           <button className="btn-secondary" disabled={!receipt || printing} onClick={print}>
             {printing ? t('receipt.printing') : t('common.print')}
           </button>
@@ -100,10 +119,10 @@ export function ReprintPage() {
               <tr><th>{t('receipt.item')}</th><th className="num">{t('receipt.qty')}</th><th className="num">{t('receipt.rate')}</th><th className="num">{t('receipt.amount')}</th></tr>
             </thead>
             <tbody>
-              {receipt.items.map((i) => (
+              {receipt.items.map((i, n) => (
                 <Fragment key={i.id}>
                   <tr>
-                    <td>{i.product_name}</td>
+                    <td>{n + 1}. {i.product_name}</td>
                     <td className="num">{i.is_variable_weight ? `${i.qty} ${i.uom}` : i.qty}</td>
                     <td className="num">{i.unit_price}</td>
                     <td className="num">{i.line_total}</td>
@@ -136,10 +155,12 @@ export function ReprintPage() {
           </table>
           
 
-            <div className="receipt-row receipt-items-qty">
-              <span>{t('receipt.item')} / {t('receipt.qty')}</span>
-              <span>{itemCount} / {totalQty}</span>
-            </div>
+          {/* Summary from the saved bill: bill lines, and the sum of their quantities (kg counted as kg). */}
+          <hr />
+          <div className="receipt-row receipt-items-qty">
+            <span>{t('receipt.totalItems', { n: receipt.item_lines })}</span>
+            <span>{t('receipt.totalQty', { qty: receipt.total_qty })}</span>
+          </div>
           <hr />
 
           <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(receipt.subtotal)}</span></div>

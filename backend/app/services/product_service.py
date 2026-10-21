@@ -32,8 +32,9 @@ def list_categories(active_only: bool = False) -> list[Category]:
 
 def create_category(data: CategoryCreate) -> Category:
     repo = CategoryRepository()
-    if repo.get_by_name(data.name):
-        raise ConflictError(f"Category '{data.name}' already exists.")
+    _check_category_name_free(data.name)
+    if data.parent_id is not None:
+        _get_category_or_404(data.parent_id)
     cat = Category(name=data.name, parent_id=data.parent_id)
     with transaction():
         repo.add(cat)
@@ -43,15 +44,57 @@ def create_category(data: CategoryCreate) -> Category:
 
 def update_category(category_id: int, data: CategoryUpdate) -> Category:
     cat = _get_category_or_404(category_id)
-    if data.name is not None:
+    sent = data.model_fields_set
+    if data.name is not None and data.name != cat.name:
+        _check_category_name_free(data.name, except_id=cat.id)
         cat.name = data.name
-    if data.parent_id is not None:
+    if "parent_id" in sent:
+        _check_parent(cat, data.parent_id)
         cat.parent_id = data.parent_id
     if data.is_active is not None:
         cat.is_active = data.is_active
     with transaction():
         pass
     return cat
+
+
+def delete_category(category_id: int) -> None:
+    """Only an unused category can be deleted; one in use can be deactivated instead (history stays intact)."""
+    cat = _get_category_or_404(category_id)
+    from app.models.discount import Discount
+
+    in_use = [
+        (db.session.scalar(db.select(db.func.count()).select_from(Product).where(Product.category_id == cat.id)), "product"),
+        (db.session.scalar(db.select(db.func.count()).select_from(Category).where(Category.parent_id == cat.id)), "sub-category"),
+        (db.session.scalar(db.select(db.func.count()).select_from(Discount).where(Discount.category_id == cat.id)), "offer"),
+    ]
+    used = [f"{n} {what}{'s' if n != 1 else ''}" for n, what in in_use if n]
+    if used:
+        raise ConflictError(
+            f"Category '{cat.name}' is used by {', '.join(used)}, so it can't be deleted. "
+            "Move them to another category first, or deactivate this category instead."
+        )
+    with transaction():
+        db.session.delete(cat)
+
+
+def _check_category_name_free(name: str, except_id: int | None = None) -> None:
+    existing = CategoryRepository().get_by_name_ci(name)
+    if existing is not None and existing.id != except_id:
+        raise ConflictError(f"Category '{existing.name}' already exists.")
+
+
+def _check_parent(cat: Category, parent_id: int | None) -> None:
+    """A category can't sit under itself or under one of its own sub-categories."""
+    if parent_id is None:
+        return
+    _get_category_or_404(parent_id)
+    parents = CategoryRepository().parent_map()
+    node: int | None = parent_id
+    while node is not None:
+        if node == cat.id:
+            raise BadRequestError("A category can't be placed under itself or one of its own sub-categories.")
+        node = parents.get(node)
 
 
 # ── Products ──────────────────────────────────────────────────────────────────

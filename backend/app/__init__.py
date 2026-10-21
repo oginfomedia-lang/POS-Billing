@@ -31,6 +31,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     register_blueprints(app)
     register_error_handlers(app)
+    _security_headers(app)
     _require_shop_license(app)
     register_cli(app)
 
@@ -39,8 +40,26 @@ def create_app(config_name: str | None = None) -> Flask:
         from app.scheduler.setup import init_scheduler
         init_scheduler(app)
 
-    app.logger.info("LiteRetailer backend started (%s)", config_class.ENV_NAME)
+    app.logger.info("LiteRetail backend started (%s)", config_class.ENV_NAME)
     return app
+
+
+def _security_headers(app: Flask) -> None:
+    """API replies hold bills, customers' mobiles and staff data: never cache them (shared PCs, proxies),
+    never let the browser guess another content type, and never show them inside another site's frame."""
+    from flask import request
+
+    prefix = app.config["API_PREFIX"]
+
+    @app.after_request
+    def add_headers(resp):
+        if request.path.startswith(prefix):
+            resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+            resp.headers.setdefault("X-Frame-Options", "DENY")
+            resp.headers.setdefault("Referrer-Policy", "no-referrer")
+            if "Cache-Control" not in resp.headers:
+                resp.headers["Cache-Control"] = "no-store"
+        return resp
 
 
 def _require_shop_license(app: Flask) -> None:
@@ -58,7 +77,7 @@ def _require_shop_license(app: Flask) -> None:
         status = license_service.current_status()
         if not status.valid:
             return error_response(403, "LICENSE_REQUIRED",
-                                  "This shop's LiteRetailer licence is not active. Activate it on any PC.",
+                                  "This shop's LiteRetail licence is not active. Activate it on any PC.",
                                   status.to_dict())
         return None
 
@@ -76,6 +95,15 @@ def _configure_jwt_handlers(jwt_manager) -> None:
     def invalid(reason: str):
         return error_response(401, "INVALID_TOKEN", reason)
 
+    @jwt_manager.token_in_blocklist_loader
+    def session_ended(jwt_header, jwt_data) -> bool:
+        from app.services import auth_service
+        return auth_service.session_ended(jwt_data)
+
     @jwt_manager.revoked_token_loader
     def revoked(jwt_header, jwt_data):
-        return error_response(401, "TOKEN_REVOKED", "Token has been revoked.")
+        return error_response(
+            401, "SESSION_ENDED",
+            "Your login was changed by an admin (new PIN, role or store, or the account was turned off). "
+            "Please log in again.",
+        )

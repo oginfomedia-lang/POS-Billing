@@ -212,7 +212,7 @@ def test_product_form_supplier_link(client, admin_headers, supplier):
     assert client.post("/api/v1/products", json={"name": "X", "price": "1", "supplier_id": 9999}, headers=admin_headers).status_code == 400
 
 
-def test_cost_price_column_is_admin_only(client, admin_headers, store):
+def test_cost_price_column_is_admin_and_manager_only(client, admin_headers, store):
     from tests.factories import make_user
 
     content = (
@@ -229,4 +229,9 @@ def test_cost_price_column_is_admin_only(client, admin_headers, store):
     assert _import(client, {"Authorization": f"Bearer {token}"}, update, store_id=store.id).status_code == 201
     db.session.expire_all()
     atta = _product("Atta 5kg")
-    assert (atta.price, atta.cost_price) == (Decimal("245.00"), Decimal("205.5"))  # manager's cost ignored
+    assert (atta.price, atta.cost_price) == (Decimal("245.00"), Decimal("1"))  # managers may set the cost
+
+    make_user(role="cashier", username="till", pin="5555", store=store)
+    token = client.post("/api/v1/auth/login", json={"username": "till", "pin": "5555"}).get_json()["access_token"]
+    resp = _import(client, {"Authorization": f"Bearer {token}"}, update, store_id=store.id)
+    assert resp.status_code == 403  # cashiers can't import at all

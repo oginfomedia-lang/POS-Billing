@@ -211,4 +211,84 @@ class DashboardOut(BaseModel):
     by_method: list[MethodRow]
     open_shifts: int
     low_stock: int
+    # products with stock whose batch expires within 30 days (Stock / Inventory → Expiry alerts)
+    near_expiry: int = 0
     recent_sales: list[RecentSale]
+
+
+# ── Bill and return lists (where the dashboard / report tiles lead) ──────────────────
+
+class BillListQuery(ReportQuery):
+    """Same dates and store as the sales report, so the list adds up to its tiles."""
+
+    status: Literal["paid", "voided"] = "paid"
+    method: PaymentMethod | None = None  # bills with a payment of this kind
+    discounted: bool = False  # only bills with a discount
+    q: str | None = None  # part of the bill number
+    page: int = 1
+    per_page: int = 50
+
+    @model_validator(mode="after")
+    def _paging(self) -> "BillListQuery":
+        self.page = max(self.page, 1)
+        self.per_page = min(max(self.per_page, 1), 200)
+        return self
+
+
+class BillRow(BaseModel):
+    id: int
+    bill_number: str | None
+    status: str
+    at: datetime  # paid at (completed_at), or cancelled at for a voided bill
+    cashier_name: str
+    counter_code: str | None
+    items_count: int
+    customer_mobile: str | None  # masked
+    subtotal: Decimal
+    discount: Decimal
+    tax: Decimal
+    total: Decimal
+    methods: list[PaymentMethod]
+    refunded: Decimal = Decimal("0")
+
+
+class ListTotals(BaseModel):
+    count: int
+    subtotal: Decimal = Decimal("0")
+    discount: Decimal = Decimal("0")
+    tax: Decimal = Decimal("0")
+    total: Decimal = Decimal("0")
+
+
+class BillListOut(BaseModel):
+    date_from: date
+    date_to: date
+    items: list[BillRow]
+    totals: ListTotals  # of every bill matching the filters, not just this page
+    page: int
+    per_page: int
+    pages: int
+
+
+class ReturnListRow(BaseModel):
+    id: int
+    return_number: str | None
+    created_at: datetime
+    bill_number: str | None
+    sale_id: int
+    cashier_name: str
+    approved_by_name: str
+    reason: str
+    refund_method: PaymentMethod
+    refund_amount: Decimal
+    items_count: int
+
+
+class ReturnListOut(BaseModel):
+    date_from: date
+    date_to: date
+    items: list[ReturnListRow]
+    totals: ListTotals  # count and total refunded
+    page: int
+    per_page: int
+    pages: int

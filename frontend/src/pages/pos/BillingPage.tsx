@@ -182,10 +182,17 @@ export function BillingPage() {
           storeId={shiftStoreId}
         />
         <div className="billing-meta">
-          <div className="cashier-chip">
+          {/* The cashier's name opens their bills on this shift (to check the cash before closing). */}
+          <button
+            type="button"
+            className="cashier-chip cashier-chip-link"
+            onClick={() => navigate('/pos/shift/bills')}
+            title={t('shift.myBillsHint')}
+            aria-label={t('shift.myBills')}
+          >
             <span className="cashier-name">{user?.full_name || user?.username}</span>
             <span className="bill-id-badge">{sale ? `#${sale.id}` : t('pos.starting')}</span>
-          </div>
+          </button>
           {(user?.role === 'admin' || user?.role === 'manager') && (
             <button className="btn-secondary btn-icon" onClick={() => navigate('/admin')}>
               <IconDashboard size={15} />

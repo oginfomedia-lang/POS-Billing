@@ -10,7 +10,7 @@ import { openDrawer } from '../../services/hardware/printerService';
 import type { BillForMobile, ReturnableBill, ReturnableLine } from '../../types/returns';
 import { formatDateTime } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
-import { isMobile, normalizeMobile } from '../../utils/phone';
+import { isMobile, looksLikeMobile, normalizeMobile } from '../../utils/phone';
 
 const REASONS = ['damaged', 'expired', 'wrongItem', 'changedMind', 'other'] as const;
 type Reason = (typeof REASONS)[number];
@@ -56,6 +56,8 @@ export function ReturnsPage() {
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Shown under the search box when digits were typed that aren't a valid mobile.
+  const [mobileError, setMobileError] = useState('');
   const [approving, setApproving] = useState(false);
 
   useKeyboardShortcuts({ Escape: () => navigate('/pos/billing') }, !approving);
@@ -65,6 +67,11 @@ export function ReturnsPage() {
     e.preventDefault();
     const text = billNumber.trim();
     if (!text) return;
+    if (looksLikeMobile(text) && !isMobile(text)) {
+      setMobileError(t('returns.badMobile'));
+      return;
+    }
+    setMobileError('');
     if (isMobile(text)) {
       setLoading(true);
       setError('');
@@ -154,7 +161,9 @@ export function ReturnsPage() {
           className="field-input"
           placeholder={t('returns.billPlaceholder')}
           value={billNumber}
-          onChange={(e) => setBillNumber(e.target.value)}
+          onChange={(e) => { setBillNumber(e.target.value); setMobileError(''); }}
+          aria-invalid={mobileError !== ''}
+          aria-describedby={mobileError ? 'returns-mobile-error' : undefined}
           autoFocus
         />
         <button className="btn-primary btn-icon" type="submit" disabled={loading || !billNumber.trim()}>
@@ -162,6 +171,7 @@ export function ReturnsPage() {
           <span>{loading ? t('common.loading') : t('returns.find')}</span>
         </button>
       </form>
+      {mobileError && <div id="returns-mobile-error" className="field-error" role="alert">{mobileError}</div>}
 
       {error && <div className="page-error">{error}</div>}
 

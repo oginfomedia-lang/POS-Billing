@@ -379,6 +379,14 @@ export interface GoodsReceiptOut {
   created_at: string;
 }
 
+/** Suggestions for the audit log filters (GET /audit-logs/filters). */
+export interface AuditFilterValues {
+  actions: string[];
+  entity_types: string[];
+  roles: UserRole[];
+  users: { username: string; full_name: string; role: UserRole }[];
+}
+
 export interface AuditLogOut {
   id: number;
   user_id: number | null;

@@ -1,16 +1,21 @@
 // Zustand store: JWT tokens + logged-in user, with silent auto-refresh on 401.
+import axios from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { login as apiLogin, refreshToken as apiRefresh } from '../services/api/authApi';
 import { httpClient } from '../services/api/httpClient';
+import i18n from '../i18n';
 import type { UserOut } from '../types/api';
 
 interface AuthState {
   token: string | null;
   refreshToken: string | null;
   user: UserOut | null;
+  /** Why the app logged the person out by itself (shown on the login screen), or null. */
+  endedReason: string | null;
   login: (username: string, pin: string) => Promise<void>;
   logout: () => void;
+  endSession: (reason: string) => void;
   refreshAccessToken: () => Promise<string>;
 }
 
@@ -20,16 +25,22 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       refreshToken: null,
       user: null,
+      endedReason: null,
 
       login: async (username, pin) => {
         const data = await apiLogin(username, pin);
         httpClient.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
-        set({ token: data.access_token, refreshToken: data.refresh_token, user: data.user });
+        set({ token: data.access_token, refreshToken: data.refresh_token, user: data.user, endedReason: null });
       },
 
       logout: () => {
         delete httpClient.defaults.headers.common['Authorization'];
         set({ token: null, refreshToken: null, user: null });
+      },
+
+      endSession: (reason) => {
+        delete httpClient.defaults.headers.common['Authorization'];
+        set({ token: null, refreshToken: null, user: null, endedReason: reason });
       },
 
       refreshAccessToken: async () => {
@@ -94,7 +105,10 @@ httpClient.interceptors.response.use(
         return httpClient(original);
       } catch (refreshErr) {
         flushQueue(refreshErr, null);
-        useAuthStore.getState().logout();
+        // An admin reset the PIN / changed role or store: say so on the login screen.
+        const ended = axios.isAxiosError(refreshErr) && refreshErr.response?.data?.error?.code === 'SESSION_ENDED';
+        if (ended) useAuthStore.getState().endSession(i18n.t('login.sessionEnded'));
+        else useAuthStore.getState().logout();
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;

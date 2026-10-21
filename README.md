@@ -70,7 +70,7 @@ The installer writes `C:\ProgramData\LiteRetailer\counter.json` (in development 
 
 Main PC: `C01` + `localhost`. Counter PC: the code and Main PC IP chosen in the installer.
 
-### Client installer (LiteRetailer-Setup-x.y.z.exe)
+### Client installer (LiteRetail-Setup-x.y.z.exe)
 
 Build everything (frozen backend + app + installer) with `scripts\build\build_installer.ps1`.
 See [documentation/installer.md](documentation/installer.md).

@@ -14,10 +14,11 @@ def test_list_users_cashier_forbidden(client, cashier_user, cashier_headers):
     assert resp.status_code == 403
 
 
-def test_create_user(client, admin_user, admin_headers):
+def test_create_user(client, admin_user, admin_headers, store):
     resp = client.post(
         "/api/v1/users",
-        json={"username": "newcashier", "full_name": "New Cashier", "pin": "1111", "role": "cashier"},
+        json={"username": "newcashier", "full_name": "New Cashier", "pin": "1111", "role": "cashier",
+              "store_id": store.id},
         headers=admin_headers,
     )
     assert resp.status_code == 201

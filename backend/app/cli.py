@@ -23,6 +23,7 @@ import pydantic
 from flask import Flask
 
 from app.errors.exceptions import AppError
+from app.extensions import db
 from app.models.enums import UserRole
 from app.repositories.store_repository import StoreRepository
 from app.schemas.user_schemas import UserCreate
@@ -87,7 +88,32 @@ def send_ebills() -> None:
         click.echo(f"{r.store_name} -> {r.recipient}: {r.status}{f' ({r.error})' if r.error else ''}")
 
 
+@click.command("check-products")
+def check_products() -> None:
+    """List products saved with a price, MRP or GST rate the product form no longer accepts (read-only).
+
+    Installed shop:  literetailer-backend.exe flask check-products
+    Fix each one in Admin → Products; nothing is changed here.
+    """
+    from app.models.product import Product
+
+    bad = db.session.scalars(
+        db.select(Product).where(
+            db.or_(Product.price < 0, Product.mrp < 0, Product.tax_rate < 0, Product.tax_rate > 100)
+        ).order_by(Product.id)
+    ).all()
+    if not bad:
+        click.echo("All products have a valid price, MRP and GST rate.")
+        return
+    click.echo(f"{len(bad)} product(s) to correct in Admin → Products:")
+    for p in bad:
+        click.echo(f"  #{p.id} {p.sku}  {p.name}: price {p.price}, MRP {p.mrp}, GST {p.tax_rate}%"
+                   f"{'' if p.is_active else '  (inactive)'}")
+    raise SystemExit(1)
+
+
 def register_cli(app: Flask) -> None:
+    app.cli.add_command(check_products)
     app.cli.add_command(create_admin)
     app.cli.add_command(send_daily_collection)
     app.cli.add_command(send_ebills)

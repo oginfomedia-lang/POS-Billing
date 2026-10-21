@@ -1,7 +1,7 @@
 // Stock-in, adjustments, ledger, low stock, and expiry alerts.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { adjustStock, getExpiringProducts, getLedger, getStockLevels, setStorePrice, setThreshold, stockIn } from '../../services/api/inventoryApi';
@@ -30,7 +30,9 @@ export function InventoryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<Tab>('stock');
+  // ?tab=expiry opens the expiry alerts straight away (the dashboard's near-expiry tile links here).
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'expiry' ? 'expiry' : 'stock');
   const stores = useStores().filter((s) => s.is_active);
   const selectStore = useStoreContext((s) => s.select);
   // The branch picked in the sidebar switcher (null = head office, must pick one).

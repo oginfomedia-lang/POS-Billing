@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: CounterConfig = {
 
 export function getConfigPath(): string {
   if (app.isPackaged) {
-    return join(process.env.ProgramData ?? 'C:\\ProgramData', 'LiteRetailer', 'counter.json');
+    return join(process.env.ProgramData ?? 'C:\\ProgramData', 'LiteRetail', 'counter.json');
   }
   return join(app.getPath('userData'), 'counter.json');
 }

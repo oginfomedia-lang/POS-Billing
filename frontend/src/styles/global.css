@@ -1,4 +1,4 @@
-/* LiteRetailer — design system.
+/* LiteRetail — design system.
    Sections: tokens · base · layout · admin navigation · page chrome · forms · buttons ·
    tables & badges · modals · POS billing · payment · dashboard & reports · settings ·
    labels · receipt · shift pages · login · responsive · print. */
@@ -1096,6 +1096,39 @@ select.field-input {
   color: var(--brand-600);
 }
 
+/* Destructive actions (delete): red outline in tables, solid red in confirm dialogs. */
+.btn-sm.btn-sm-danger {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.btn-sm.btn-sm-danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 18px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.btn-danger:hover:not(:disabled) { background: #b91c1c; border-color: #b91c1c; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .btn-compact {
   min-height: 34px;
   padding: 6px 14px;
@@ -1106,6 +1139,42 @@ select.field-input {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Icon-only action buttons in table rows (view / edit / deactivate on Suppliers and others). */
+.data-table button.btn-icon:not(.btn-primary):not(.btn-secondary) {
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 130ms ease;
+}
+
+.data-table button.btn-icon:not(.btn-primary):not(.btn-secondary):hover:not(:disabled) {
+  color: var(--brand-600);
+  background: var(--brand-50);
+  border-color: var(--brand-200);
+}
+
+.data-table button.btn-icon.btn-icon-danger {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.data-table button.btn-icon.btn-icon-danger:hover:not(:disabled) {
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.data-table button.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .page-back-button span {
@@ -2505,6 +2574,7 @@ select.field-input {
 .stat-tile-tax { --accent: #64748b; }
 .stat-tile-shifts { --accent: #f59e0b; }
 .stat-tile-lowstock { --accent: #ef4444; }
+.stat-tile-expiry { --accent: #f59e0b; }
 
 button.stat-tile {
   cursor: pointer;
@@ -2533,6 +2603,7 @@ button.stat-tile:hover {
 .stat-icon-wrapper.shifts { background: #fef3c7; color: #b45309; }
 .stat-icon-wrapper.ok { background: #dcfce7; color: #15803d; }
 .stat-icon-wrapper.alert { background: #fee2e2; color: #b91c1c; }
+.stat-icon-wrapper.warn { background: #fef3c7; color: #b45309; }
 
 .stat-label {
   font-size: 13px;
@@ -2644,6 +2715,53 @@ button.stat-tile:hover {
   color: var(--brand-600);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+}
+
+/* Tab buttons written as .tab-btn / .tab-active (e.g. Stock / Expiry alerts): same look as .tab. */
+.tab-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 18px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.tab-btn:hover:not(.tab-active) {
+  color: var(--text-2);
+  background: var(--surface-2);
+}
+
+.tab-btn.tab-active {
+  color: var(--brand-600);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Count pill on a tab, e.g. how many products are near expiry. */
+.badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 999px;
 }
 
 .tab-count {
@@ -2913,6 +3031,9 @@ button.stat-tile:hover {
 .receipt-items { width: 100%; border-collapse: collapse; }
 .receipt-items th,
 .receipt-items td { padding: 1px 0; text-align: left; font-weight: normal; }
+/* A small gap between columns so Qty / Rate / Amount numbers never run together. */
+.receipt-items th + th,
+.receipt-items td + td { padding-left: 6px; }
 .receipt-footer { margin-top: 8px; }
 .receipt-items-qty { font-weight: 700; }
 .receipt-credit { margin-top: 10px; padding-top: 4px; border-top: 1px solid #000; font-size: 10.5px; }
@@ -3089,6 +3210,85 @@ button.stat-tile:hover {
 
 .shift-panel .modal-buttons .btn-primary {
   flex: 1;
+}
+
+/* Expected-cash breakdown (Close Shift page and Shift Bills page) */
+.shift-cash .hint-text { margin: 0 0 10px; }
+.shift-expected-row span { display: flex; flex-direction: column; gap: 2px; color: var(--text); font-weight: 600; }
+.shift-expected-row small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.shift-expected-row strong { font-size: 17px; color: var(--brand-700); }
+.shift-digital { background: var(--info-bg); }
+.shift-digital .hint-text { padding-bottom: 8px; }
+
+.shift-diff {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.shift-diff-ok { background: var(--ok-bg); border-color: var(--ok-border); color: var(--ok-text); }
+.shift-diff-short { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.shift-diff-over { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+
+/* Cashier's name on the POS top bar opens their shift bills */
+button.cashier-chip-link {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+button.cashier-chip-link:hover { border-color: var(--brand); background: var(--brand-50); }
+button.cashier-chip-link:hover .cashier-name { color: var(--brand-700); text-decoration: underline; }
+button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* Shift Bills page */
+.shift-bills-page .admin-header .hint-text { margin: 2px 0 0; }
+.shift-bills-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.shift-total-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  font-variant-numeric: tabular-nums;
+}
+.shift-total-tile span { font-size: 12.5px; color: var(--muted); }
+.shift-total-tile strong { font-size: 18px; color: var(--text); }
+.shift-total-expected { border-color: var(--brand-200); background: var(--brand-50); }
+.shift-total-expected strong { color: var(--brand-700); }
+.shift-bills-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+.shift-bills-table { overflow-x: auto; }
+.shift-bills-table .section-title { margin: 18px 14px 8px; }
+.shift-bills-page .mono { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+@media (max-width: 1023px) {
+  .shift-bills-body { grid-template-columns: 1fr; }
+}
+
+/* Inline message under a single input (e.g. Returns search box) */
+.field-error {
+  max-width: 560px;
+  margin: -8px 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger-text);
 }
 
 /* ───────────────────────── Login ───────────────────────── */
@@ -3731,3 +3931,146 @@ button.stat-tile:hover {
     box-shadow: none;
   }
 }
+
+/* ───────────────────────── Marathi typing (MarathiInput) ───────────────────────── */
+.mr-input { position: relative; width: 100%; min-width: 0; }
+.mr-input .mr-field { padding-right: 70px; }
+.mr-input .mr-field:lang(mr) { line-height: 1.6; }
+
+/* EN | म switch inside the right edge of the box */
+.mr-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.mr-input-multi .mr-toggle { top: 6px; transform: none; }
+.mr-toggle span { padding: 4px 7px; border-radius: 999px; color: var(--muted); }
+.mr-toggle-mr span.mr-toggle-mr,
+.mr-toggle-en span.mr-toggle-en { background: var(--brand); color: #fff; }
+.mr-toggle span.mr-toggle-mr { font-size: 13px; }
+.mr-toggle:focus-visible { outline: none; box-shadow: var(--ring); }
+.mr-toggle:disabled { opacity: 0.5; cursor: default; }
+
+/* Suggestions under the box (scrolls with the form / dialog it is in) */
+.mr-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1200;
+  min-width: 220px;
+  max-width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.mr-suggest li {
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+  cursor: pointer;
+}
+.mr-suggest li.active,
+.mr-suggest li:hover { background: var(--brand-50); color: var(--brand-700); }
+.mr-suggest li.mr-suggest-hint {
+  margin-top: 2px;
+  padding: 4px 10px 2px;
+  border-top: 1px solid var(--border-subtle);
+  border-radius: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  cursor: default;
+  background: none;
+}
+@media (max-width: 640px) {
+  .mr-toggle span { padding: 6px 9px; } /* bigger touch target */
+  .mr-input .mr-field { padding-right: 82px; }
+}
+
+/* ───────────────────────── Bills page ───────────────────────── */
+.bills-page .admin-header .hint-text { margin: 2px 0 0; }
+.bills-page .mono { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+.bills-totals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.bills-totals strong { color: var(--text); }
+.btn-sm.btn-sm-active { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* ───────────────────────── Sidebar: Settings tree ───────────────────────── */
+.nav-link-row { position: relative; }
+.nav-link-row .admin-nav-link { padding-right: 38px; }
+.nav-tree-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 150ms ease, background 150ms ease;
+}
+.nav-tree-toggle:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.nav-tree-toggle.open { transform: translateY(-50%) rotate(90deg); }
+.nav-tree-toggle:focus-visible { outline: 2px solid #818cf8; }
+.nav-subtree {
+  margin: 2px 0 6px 21px;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+.admin-nav-sublink {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  opacity: 0.85;
+}
+.admin-nav-sublink:hover { color: #fff; background: rgba(255, 255, 255, 0.06); opacity: 1; }
+.admin-nav-sublink.active { color: #fff; background: rgba(99, 102, 241, 0.22); opacity: 1; }
+.admin-nav-sublink:focus-visible { outline: 2px solid #818cf8; outline-offset: 0; }
+/* Section scrolled to from the tree: a little room above it */
+.settings-anchor { scroll-margin-top: 16px; }

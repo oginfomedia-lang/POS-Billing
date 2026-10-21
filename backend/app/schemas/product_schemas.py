@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel, field_validator, ValidationInfo
 
@@ -19,15 +19,31 @@ class CategoryOut(BaseModel):
     is_active: bool
 
 
+def _category_name(v: str | None) -> str | None:
+    if v is None:
+        return v
+    v = " ".join(v.split())
+    if not v:
+        raise ValueError("Enter a category name.")
+    if len(v) > 100:
+        raise ValueError("Category name can be at most 100 characters.")
+    return v
+
+
 class CategoryCreate(BaseModel):
     name: str
     parent_id: int | None = None
 
+    _name = field_validator("name")(_category_name)
+
 
 class CategoryUpdate(BaseModel):
+    """Only the fields sent are changed; "parent_id": null moves the category to the top level."""
     name: str | None = None
     parent_id: int | None = None
     is_active: bool | None = None
+
+    _name = field_validator("name")(_category_name)
 
 
 class BarcodeOut(BaseModel):
@@ -46,11 +62,52 @@ class BarcodeCreatePayload(BaseModel):
     is_primary: bool = False
 
 
+# Largest values the columns hold: NUMERIC(12, 2) money, NUMERIC(12, 4) cost, a GST rate up to 100 %.
+MAX_MONEY = Decimal("9999999999.99")
+MAX_COST = Decimal("99999999.9999")
+
+
+def _number(v, label: str) -> Decimal:
+    """A number from the form / API, or a clear 422 (not a server error) for text like "abc"."""
+    try:
+        value = Decimal(str(v).strip())
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{label} must be a number.") from None
+    if not value.is_finite():
+        raise ValueError(f"{label} must be a number.")
+    return value
+
+
+def _price(v):
+    """Selling price before GST: 0 (free item) up to the largest amount a bill can hold. Never negative:
+    a negative price makes a bill with a negative amount and discount."""
+    value = _number(v, "Selling price")
+    if value < 0:
+        raise ValueError("Selling price can't be negative.")
+    if value > MAX_MONEY:
+        raise ValueError(f"Selling price can be at most {MAX_MONEY}.")
+    return value
+
+
+def _tax_rate(v):
+    value = _number(v, "GST rate")
+    if not Decimal("0") <= value <= Decimal("100"):
+        raise ValueError("GST rate must be between 0 and 100 %.")
+    return value
+
+
 def _optional_decimal(v):
     """"" or None = no value (e.g. a blank MRP box)."""
     if v is None or (isinstance(v, str) and not v.strip()):
         return None
-    return Decimal(str(v))
+    return _number(v, "Value")
+
+
+def _optional_mrp(v):
+    value = _optional_decimal(v)
+    if value is not None and not Decimal("0") <= value <= MAX_MONEY:
+        raise ValueError(f"MRP must be between 0 and {MAX_MONEY}.")
+    return value
 
 
 def _optional_cost(v):
@@ -58,7 +115,32 @@ def _optional_cost(v):
     value = _optional_decimal(v)
     if value is not None and value < 0:
         raise ValueError("Cost price can't be negative.")
+    if value is not None and value > MAX_COST:
+        raise ValueError(f"Cost price can be at most {MAX_COST}.")
     return value
+
+
+def _product_name(v):
+    """Trimmed, not blank, fits the column (200)."""
+    if v is None:
+        return v
+    v = " ".join(str(v).split())
+    if not v:
+        raise ValueError("Enter a product name.")
+    if len(v) > 200:
+        raise ValueError("Product name can be at most 200 characters.")
+    return v
+
+
+def _optional_text(limit: int, label: str):
+    def check(v):
+        if v is None:
+            return v
+        v = str(v).strip()
+        if len(v) > limit:
+            raise ValueError(f"{label} can be at most {limit} characters.")
+        return v or None
+    return check
 
 
 def _optional_hsn(v):
@@ -106,7 +188,7 @@ class ProductOut(BaseModel):
     barcodes: list[BarcodeOut] = []
     # Only when the request names a store: that store's own selling price (None = sells at `price`).
     store_price: Decimal | None = None
-    # Admin only (filled in by the product routes, never from the model): default cost before GST, and
+    # Admin / manager only (filled in by the product routes, never from the model): default cost before GST, and
     # the selected store's weighted-average cost from goods receipts.
     cost_price: Decimal | None = None
     store_avg_cost: Decimal | None = None
@@ -114,7 +196,7 @@ class ProductOut(BaseModel):
     @field_validator("cost_price", mode="before")
     @classmethod
     def _hide_cost(cls, v):
-        return None  # see the comment above: the route sets it after validation for admins
+        return None  # see the comment above: the route sets it after validation for admin / manager
 
 
 class ProductCreate(BaseModel):
@@ -132,16 +214,21 @@ class ProductCreate(BaseModel):
     store_id: int | None = None
     supplier_id: int | None = None  # usual supplier (for information; any supplier can be used on a PO)
     barcodes: list[str | BarcodeCreatePayload] = []
-    cost_price: Decimal | None = None  # purchase cost before GST (admin only; ignored for others)
+    cost_price: Decimal | None = None  # purchase cost before GST (admin / manager; ignored for others)
 
-    @field_validator("price", "tax_rate", mode="before")
+    @field_validator("price", mode="before")
     @classmethod
-    def coerce_decimal(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal:
-        if v is None:
-            return Decimal("0")
-        return Decimal(str(v))
+    def coerce_price(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal:
+        return _price(0 if v is None else v)
 
-    _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
+    @field_validator("tax_rate", mode="before")
+    @classmethod
+    def coerce_tax(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal:
+        return _tax_rate(0 if v is None else v)
+
+    _name = field_validator("name", mode="before")(classmethod(lambda cls, v: _product_name(v)))
+    _sku = field_validator("sku", mode="before")(classmethod(lambda cls, v: _optional_text(50, "SKU")(v)))
+    _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_mrp(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
     _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
     _cost = field_validator("cost_price", mode="before")(classmethod(lambda cls, v: _optional_cost(v)))
@@ -166,20 +253,25 @@ class ProductUpdate(BaseModel):
     # Leave out to keep; null removes the supplier.
     supplier_id: int | None = None
     barcodes: list[str | BarcodeCreatePayload] | None = None
-    # Leave out to keep; null or "" clears. Admin only (ignored for others).
+    # Leave out to keep; null or "" clears. Admin / manager only (ignored for others).
     cost_price: Decimal | None = None
 
-    _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_decimal(v)))
+    _name = field_validator("name", mode="before")(classmethod(lambda cls, v: _product_name(v)))
+    _sku = field_validator("sku", mode="before")(classmethod(lambda cls, v: _optional_text(50, "SKU")(v)))
+    _mrp = field_validator("mrp", mode="before")(classmethod(lambda cls, v: _optional_mrp(v)))
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
     _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
     _cost = field_validator("cost_price", mode="before")(classmethod(lambda cls, v: _optional_cost(v)))
 
-    @field_validator("price", "tax_rate", mode="before")
+    @field_validator("price", mode="before")
     @classmethod
-    def coerce_decimal_optional(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal | None:
-        if v is None:
-            return None
-        return Decimal(str(v))
+    def coerce_price_optional(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal | None:
+        return None if v is None else _price(v)
+
+    @field_validator("tax_rate", mode="before")
+    @classmethod
+    def coerce_tax_optional(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal | None:
+        return None if v is None else _tax_rate(v)
 
 
 class ProductBarcodeOut(BaseModel):

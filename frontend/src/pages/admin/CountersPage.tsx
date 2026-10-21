@@ -1,8 +1,9 @@
 // Store and counter management. Admins edit; managers can view.
 // A counter's code must match "counterCode" in counter.json on that till's PC.
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -46,7 +47,9 @@ export function CountersPage() {
     try {
       const list = await listStores();
       setStores(list);
-      setSelected(list.find((s) => s.id === (keepId ?? selected?.id)) ?? list[0] ?? null);
+      // Start on the branch picked in the sidebar, if any.
+      const want = keepId ?? selected?.id ?? useStoreContext.getState().selectedId;
+      setSelected(list.find((s) => s.id === want) ?? list[0] ?? null);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -54,11 +57,16 @@ export function CountersPage() {
     }
   }
 
+  // The store whose counters are wanted now: a slow answer for a previously selected store is ignored.
+  const countersFor = useRef<number | null>(null);
+
   async function fetchCounters(storeId: number) {
+    countersFor.current = storeId;
     try {
-      setCounters(await listCounters(storeId));
+      const list = await listCounters(storeId);
+      if (countersFor.current === storeId) setCounters(list);
     } catch (err) {
-      setError(getErrorMessage(err));
+      if (countersFor.current === storeId) setError(getErrorMessage(err));
     }
   }
 
@@ -74,8 +82,11 @@ export function CountersPage() {
     if (!visibleStores.some((s) => s.id === selected?.id)) setSelected(visibleStores[0] ?? null);
   }, [storeView, stores]);
   useEffect(() => {
+    // Switching store: never show (or edit) the previous store's counters while the new ones load.
+    setCounters([]);
+    setModal((m) => (m?.kind === 'counter' ? null : m));
     if (selected) fetchCounters(selected.id);
-    else setCounters([]);
+    else countersFor.current = null;
   }, [selected?.id]);
 
   function openStore(store: StoreOut | null) {
@@ -206,6 +217,7 @@ export function CountersPage() {
           <p className="hint-text">
             <Trans i18nKey="stores.counterHint" components={{ code: <code /> }} />
           </p>
+          <p className="hint-text">{t('stores.counterUniqueHint')}</p>
           <StatusTabs value={counterView} onChange={setCounterView} counts={counterCounts} />
           <div className="table-card">
             <table className="data-table">
@@ -251,10 +263,10 @@ export function CountersPage() {
               {modal.kind === 'store' ? (
                 <>
                   <label className="field-label">{t('common.name')}
-                    <input className="field-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={150} autoFocus />
+                    <MarathiInput className="field-input" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required maxLength={150} autoFocus />
                   </label>
                   <label className="field-label">{t('stores.address')}
-                    <input className="field-input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+                    <MarathiInput className="field-input" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
                   </label>
                   <label className="field-label">{t('stores.phone')}
                     <input className="field-input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} maxLength={20} />
@@ -279,7 +291,7 @@ export function CountersPage() {
                     />
                   </label>
                   <label className="field-label">{t('stores.label')}
-                    <input className="field-input" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required maxLength={100} placeholder={t('stores.labelPlaceholder')} />
+                    <MarathiInput className="field-input" value={form.label} onChange={(v) => setForm({ ...form, label: v })} required maxLength={100} placeholder={t('stores.labelPlaceholder')} />
                   </label>
                   <label className="field-label">Card machine ID (Razorpay POS)
                     <input
