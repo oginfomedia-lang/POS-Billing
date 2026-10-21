@@ -67,8 +67,10 @@ class ProductBarcode(db.Model):
     __tablename__ = "product_barcodes"
 
     id = db.Column(db.Integer, primary_key=True)
+    __table_args__ = (db.UniqueConstraint("product_id", name="uq_product_barcodes_product_id"),)  # one per product
+
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
-    barcode = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    barcode =db.Column(db.String(100), unique=True, nullable=False, index=True)
     barcode_type = db.Column(db.Enum(BarcodeType), nullable=False, default=BarcodeType.MANUFACTURER)
     is_primary = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_now)

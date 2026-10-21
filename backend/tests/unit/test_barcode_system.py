@@ -68,10 +68,9 @@ def test_barcode_services_crud(app):
         with pytest.raises(ConflictError):
             product_service.add_product_barcode(p.id, "8901234567890")
 
-        # 3. Generate in-house barcode
-        inhouse_pb = product_service.generate_and_save_inhouse_barcode(p.id)
-        assert inhouse_pb.barcode.startswith("290")
-        assert inhouse_pb.barcode_type == BarcodeType.IN_HOUSE
+        # 3. One barcode per product: no in-house code while it has a manufacturer barcode
+        with pytest.raises(ConflictError):
+            product_service.generate_and_save_inhouse_barcode(p.id)
 
         # 4. Scan variable weight barcode starting with '20'
         scan_res = product_service.scan_barcode("2000123015005")
@@ -85,3 +84,8 @@ def test_barcode_services_crud(app):
         product_service.remove_product_barcode(p.id, "8901234567890")
         with pytest.raises(NotFoundError):
             product_service.get_by_barcode("8901234567890")
+
+        # 6. With the old barcode gone, it can get an in-house one
+        inhouse_pb = product_service.generate_and_save_inhouse_barcode(p.id)
+        assert inhouse_pb.barcode.startswith("290")
+        assert inhouse_pb.barcode_type == BarcodeType.IN_HOUSE

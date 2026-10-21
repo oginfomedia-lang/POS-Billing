@@ -223,34 +223,28 @@ export function ProductsPage() {
     const code = barcodeInput.trim();
     if (!code) return;
 
-    if (barcodesList.some((b) => b.barcode === code)) {
-      setFormError(t('products.duplicateBarcode', { code }));
+    if (barcodesList.length > 0) {
+      setFormError(t('products.oneBarcodeHint'));
       return;
     }
 
-    const bType = inferBarcodeType(code);
-    setBarcodesList([...barcodesList, { barcode: code, barcode_type: bType }]);
+    setBarcodesList([{ barcode: code, barcode_type: inferBarcodeType(code) }]);
     setBarcodeInput('');
     setFormError('');
   }
 
   async function handleGenerateInHouse() {
+    if (barcodesList.length > 0) return; // one barcode per product
     setGenerating(true);
     setFormError('');
     try {
       if (target?.id) {
         const generated = await generateInhouseBarcode(target.id);
-        if (!barcodesList.some((b) => b.barcode === generated.barcode)) {
-          setBarcodesList([
-            ...barcodesList,
-            { barcode: generated.barcode, barcode_type: generated.barcode_type || 'IN_HOUSE' },
-          ]);
-        }
+        setBarcodesList([{ barcode: generated.barcode, barcode_type: generated.barcode_type || 'IN_HOUSE' }]);
       } else {
         // Product not saved yet: the server hands out an unused code; it's attached when you click Create.
-        if (barcodesList.some((b) => b.barcode_type === 'IN_HOUSE')) return;
         const code = await generateNewInhouseBarcode();
-        setBarcodesList([...barcodesList, { barcode: code, barcode_type: 'IN_HOUSE' }]);
+        setBarcodesList([{ barcode: code, barcode_type: 'IN_HOUSE' }]);
       }
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -675,6 +669,7 @@ export function ProductsPage() {
 
               <div className="field-label">
                 <span>{t('products.barcodes')}</span>
+                {barcodesList.length === 0 && (
                 <div className="barcode-scanner-box">
                   <input
                     ref={barcodeInputRef}
@@ -702,6 +697,7 @@ export function ProductsPage() {
                     {generating ? t('products.generating') : t('products.generate')}
                   </button>
                 </div>
+                )}
 
                 <div className="barcode-chips-list">
                   {barcodesList.map((b) => (
@@ -720,11 +716,9 @@ export function ProductsPage() {
                       </button>
                     </span>
                   ))}
-                  {barcodesList.length === 0 && (
-                    <span className="hint-text">
-                      {t('products.noBarcodes')}
-                    </span>
-                  )}
+                  <span className="hint-text">
+                    {barcodesList.length === 0 ? t('products.noBarcodes') : t('products.oneBarcodeHint')}
+                  </span>
                 </div>
               </div>
 

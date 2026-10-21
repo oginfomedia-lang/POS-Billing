@@ -117,10 +117,10 @@ def test_xlsx_with_numbers_and_dates(client, admin_headers, store):
 
 
 def test_existing_products_are_updated_not_duplicated(client, admin_headers, store):
-    biscuit = make_product(store, name="Biscuit", price="10", tax_rate="5", sku="BIS-1", barcode="1111111111111", mrp="12", stock=7)
+    biscuit = make_product(store, name="Biscuit", price="10", tax_rate="5", sku="BIS-1", mrp="12", stock=7)
     soap = make_product(store, name="Soap", price="30", tax_rate="18", barcode="2222222222222")
     content = _csv(
-        ",11,,,,,BIS-1,3333333333333,,,,500,",   # by SKU: new price, MRP kept, extra barcode, stock ignored
+        ",11,,,,,BIS-1,3333333333333,,,,500,",   # by SKU: new price, MRP kept, gets its barcode, stock ignored
         "Soap Big,32,,40,,,,2222222222222,,,,,",  # by barcode: renamed, new price + MRP
     )
     preview = _preview(client, admin_headers, content, store_id=store.id).get_json()
@@ -132,7 +132,7 @@ def test_existing_products_are_updated_not_duplicated(client, admin_headers, sto
     db.session.refresh(biscuit)
     db.session.refresh(soap)
     assert biscuit.price == Decimal("11.00") and biscuit.mrp == Decimal("12.00") and biscuit.tax_rate == Decimal("5.00")
-    assert sorted(b.barcode for b in biscuit.barcodes) == ["1111111111111", "3333333333333"]
+    assert [b.barcode for b in biscuit.barcodes] == ["3333333333333"]
     assert db.session.scalar(db.select(Inventory.qty_on_hand).where(Inventory.product_id == biscuit.id)) == Decimal("7")
     assert (soap.name, soap.price, soap.mrp) == ("Soap Big", Decimal("32.00"), Decimal("40.00"))
     assert db.session.scalar(db.select(db.func.count(Product.id))) == 2
@@ -167,10 +167,11 @@ def test_errors_block_the_whole_import(client, admin_headers, store, supplier):
     assert "plu_code is only for loose items" in errors["Packet with PLU"]
     assert "whole number" in errors["Half packet"]
     assert "Other" in errors["Clash"]
-    assert preview["errors"] == 9
+    assert "only one barcode" in errors["Mixed"]
+    assert preview["errors"] == 10
 
     resp = _import(client, admin_headers, content, store_id=store.id)
-    assert resp.status_code == 400 and resp.get_json()["preview"]["errors"] == 9
+    assert resp.status_code == 400 and resp.get_json()["preview"]["errors"] == 10
     assert _product("Good row") is None  # all or nothing
     assert db.session.scalar(db.select(db.func.count(Category.id))) == 0
 

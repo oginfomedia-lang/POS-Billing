@@ -132,6 +132,13 @@ def _product_name(v):
     return v
 
 
+def _one_barcode(v):
+    """A product has at most one barcode."""
+    if v is not None and len([b for b in v if (b if isinstance(b, str) else b.barcode).strip()]) > 1:
+        raise ValueError("A product can have only one barcode.")
+    return v
+
+
 def _optional_text(limit: int, label: str):
     def check(v):
         if v is None:
@@ -216,6 +223,8 @@ class ProductCreate(BaseModel):
     barcodes: list[str | BarcodeCreatePayload] = []
     cost_price: Decimal | None = None  # purchase cost before GST (admin / manager; ignored for others)
 
+    _barcodes = field_validator("barcodes")(classmethod(lambda cls, v: _one_barcode(v)))
+
     @field_validator("price", mode="before")
     @classmethod
     def coerce_price(cls, v: str | int | float | Decimal | None, info: ValidationInfo) -> Decimal:
@@ -255,6 +264,8 @@ class ProductUpdate(BaseModel):
     barcodes: list[str | BarcodeCreatePayload] | None = None
     # Leave out to keep; null or "" clears. Admin / manager only (ignored for others).
     cost_price: Decimal | None = None
+
+    _barcodes = field_validator("barcodes")(classmethod(lambda cls, v: _one_barcode(v)))
 
     _name = field_validator("name", mode="before")(classmethod(lambda cls, v: _product_name(v)))
     _sku = field_validator("sku", mode="before")(classmethod(lambda cls, v: _optional_text(50, "SKU")(v)))

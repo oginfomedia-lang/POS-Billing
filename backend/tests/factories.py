@@ -71,7 +71,8 @@ def make_product(
         mrp=Decimal(mrp) if mrp is not None else None,
         hsn_code=hsn_code,
     )
-    product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
+    if barcode:
+        product.barcodes.append(ProductBarcode(barcode=barcode, is_primary=True))
     db.session.add(product)
     db.session.flush()
     db.session.add(Inventory(store_id=store.id, product_id=product.id, qty_on_hand=stock))
