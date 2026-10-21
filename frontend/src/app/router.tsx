@@ -19,6 +19,7 @@ import { ProductsPage } from '../pages/admin/ProductsPage';
 import { ReportsPage } from '../pages/admin/ReportsPage';
 import { SettingsPage } from '../pages/admin/SettingsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
+import { ChangePinPage } from '../pages/auth/ChangePinPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { BillingPage } from '../pages/pos/BillingPage';
 import { CloseShiftPage } from '../pages/pos/CloseShiftPage';
@@ -37,6 +38,8 @@ export const router = createHashRouter([
     element: <LicenseGuard><PosLayout /></LicenseGuard>,
     children: [
       { path: '/', element: <LoginPage /> },
+      // Logged in, but outside ProtectedRoute: that guard sends people here while their PIN must change.
+      { path: '/change-pin', element: <ChangePinPage /> },
 
       // Any authenticated user
       {

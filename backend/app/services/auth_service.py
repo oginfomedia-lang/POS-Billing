@@ -17,16 +17,21 @@ def login(username: str, pin: str) -> tuple[str, str, User]:
     if not check_user_pin(user, pin):
         raise UnauthorizedError("Invalid username or PIN.")
 
-    access_token = new_access_token(user)
-    refresh_token = create_refresh_token(identity=str(user.id), additional_claims={"sv": user.session_version})
+    access_token, refresh_token = new_tokens(user)
     return access_token, refresh_token, user
 
 
+def new_tokens(user: User) -> tuple[str, str]:
+    """(access_token, refresh_token) for a user who just proved their PIN."""
+    refresh_token = create_refresh_token(identity=str(user.id), additional_claims={"sv": user.session_version})
+    return new_access_token(user), refresh_token
+
+
 def new_access_token(user: User) -> str:
-    return create_access_token(
-        identity=str(user.id),
-        additional_claims={"role": user.role.value, "username": user.username, "sv": user.session_version},
-    )
+    claims = {"role": user.role.value, "username": user.username, "sv": user.session_version}
+    if user.must_change_pin:
+        claims["pc"] = True  # PIN change required: only the change-PIN screen works (see app.__init__)
+    return create_access_token(identity=str(user.id), additional_claims=claims)
 
 
 def session_ended(jwt_payload: dict) -> bool:

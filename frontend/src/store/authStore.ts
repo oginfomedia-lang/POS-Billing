@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { login as apiLogin, refreshToken as apiRefresh } from '../services/api/authApi';
+import { changePin as apiChangePin, login as apiLogin, refreshToken as apiRefresh } from '../services/api/authApi';
 import { httpClient } from '../services/api/httpClient';
 import i18n from '../i18n';
 import type { UserOut } from '../types/api';
@@ -17,6 +17,9 @@ interface AuthState {
   logout: () => void;
   endSession: (reason: string) => void;
   refreshAccessToken: () => Promise<string>;
+  changePin: (currentPin: string, newPin: string) => Promise<void>;
+  /** The server refused a request until the PIN is changed (PIN_CHANGE_REQUIRED). */
+  requirePinChange: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -51,6 +54,17 @@ export const useAuthStore = create<AuthState>()(
         set({ token: data.access_token });
         return data.access_token;
       },
+
+      changePin: async (currentPin, newPin) => {
+        const data = await apiChangePin(currentPin, newPin);
+        httpClient.defaults.headers.common['Authorization'] = `Bearer ${data.access_token}`;
+        set({ token: data.access_token, refreshToken: data.refresh_token, user: data.user });
+      },
+
+      requirePinChange: () => {
+        const user = get().user;
+        if (user && !user.must_change_pin) set({ user: { ...user, must_change_pin: true } });
+      },
     }),
     {
       name: 'pos-auth',
@@ -79,6 +93,12 @@ httpClient.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config as typeof error.config & { _retry?: boolean };
+
+    // The PIN must be changed first: the route guard then shows the Change PIN screen.
+    if (error.response?.status === 403 && error.response?.data?.error?.code === 'PIN_CHANGE_REQUIRED') {
+      useAuthStore.getState().requirePinChange();
+      return Promise.reject(error);
+    }
 
     // Only intercept 401s on non-auth endpoints, and only once per request.
     const isAuthEndpoint =

@@ -7,6 +7,12 @@ export async function login(username: string, pin: string): Promise<TokenRespons
   return resp.data;
 }
 
+/** Own PIN. Returns fresh tokens: the old ones stop working. */
+export async function changePin(currentPin: string, newPin: string): Promise<TokenResponse> {
+  const resp = await httpClient.post<TokenResponse>('/auth/change-pin', { current_pin: currentPin, new_pin: newPin });
+  return resp.data;
+}
+
 /** Exchange a refresh token for a new access token. */
 export async function refreshToken(token: string): Promise<RefreshResponse> {
   const resp = await httpClient.post<RefreshResponse>(

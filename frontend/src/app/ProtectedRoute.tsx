@@ -15,6 +15,9 @@ export function ProtectedRoute({ roles }: Props) {
   if (!isAuthenticated) {
     return <Navigate to="/" replace />;
   }
+  if (user?.must_change_pin) {
+    return <Navigate to="/change-pin" replace />;
+  }
 
   if (roles && user && !roles.includes(user.role)) {
     return (

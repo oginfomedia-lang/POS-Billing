@@ -251,6 +251,14 @@ export function AdminNav() {
                 <span className="user-name">{displayName}</span>
                 <span className={`role-badge role-${user.role}`}>{t(`roles.${user.role}`)}</span>
               </div>
+              <button
+                className="btn-logout"
+                onClick={() => navigate('/change-pin')}
+                title={t('changePin.voluntary')}
+                aria-label={t('changePin.voluntary')}
+              >
+                <IconSettings size={18} />
+              </button>
               <button className="btn-logout" onClick={logout} title={t('nav.signOut')} aria-label={t('nav.signOut')}>
                 <IconLogOut size={18} />
               </button>

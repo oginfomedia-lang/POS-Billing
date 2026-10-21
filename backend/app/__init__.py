@@ -33,6 +33,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_error_handlers(app)
     _security_headers(app)
     _require_shop_license(app)
+    _require_own_pin(app)
     register_cli(app)
 
     # The installer's one-off commands (setup, flask ...) set LITERETAILER_NO_SCHEDULER so no backup job starts.
@@ -79,6 +80,29 @@ def _require_shop_license(app: Flask) -> None:
             return error_response(403, "LICENSE_REQUIRED",
                                   "This shop's LiteRetail licence is not active. Activate it on any PC.",
                                   status.to_dict())
+        return None
+
+
+def _require_own_pin(app: Flask) -> None:
+    """Someone whose PIN was set by an admin (or is the installer default) can only change it until they do."""
+    from flask import request
+    from flask_jwt_extended import get_jwt, verify_jwt_in_request
+
+    open_paths = {f"{app.config['API_PREFIX']}/{p}"
+                  for p in ("health", "license", "license/activate", "auth/login", "auth/refresh", "auth/me",
+                            "auth/change-pin")}
+
+    @app.before_request
+    def check_pin_changed():
+        if request.method == "OPTIONS" or request.path in open_paths:
+            return None
+        try:
+            if verify_jwt_in_request(optional=True) is None:
+                return None
+        except Exception:  # noqa: BLE001 - expired / bad token: the endpoint itself answers 401 as usual
+            return None
+        if get_jwt().get("pc"):
+            return error_response(403, "PIN_CHANGE_REQUIRED", "Choose your own PIN before continuing.")
         return None
 
 

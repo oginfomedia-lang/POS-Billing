@@ -3,7 +3,8 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.schemas.auth_schemas import LoginRequest, RefreshResponse, TokenResponse, UserOut
-from app.services import auth_service
+from app.schemas.user_schemas import PinChange
+from app.services import auth_service, user_service
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -35,3 +36,14 @@ def refresh():
 def me():
     user = auth_service.current_user()
     return jsonify(UserOut.model_validate(user).model_dump(mode="json")), 200
+
+
+@auth_bp.post("/auth/change-pin")
+@jwt_required()
+def change_pin():
+    """Own PIN. Other sessions end; this one gets new tokens so the person carries on without logging in again."""
+    data = PinChange.model_validate(request.get_json(force=True))
+    user = user_service.change_own_pin(auth_service.current_user(), data)
+    access_token, refresh_token = auth_service.new_tokens(user)
+    resp = TokenResponse(access_token=access_token, refresh_token=refresh_token, user=UserOut.model_validate(user))
+    return jsonify(resp.model_dump(mode="json")), 200

@@ -53,7 +53,8 @@ def create_admin(username: str, full_name: str, store_id: int | None, pin: str) 
         raise click.ClickException(f"Store {store_id} does not exist.")
 
     try:
-        user = user_service.create_user(data, actor=None)  # audited with no actor = created from the CLI
+        # Audited with no actor = created from the CLI. The person typed their own PIN, so no forced change.
+        user = user_service.create_user(data, actor=None, must_change_pin=False)
     except AppError as err:
         raise click.ClickException(err.message) from None
     click.echo(f"Admin '{user.username}' created (id {user.id}). Sign in to the app with this username and PIN.")

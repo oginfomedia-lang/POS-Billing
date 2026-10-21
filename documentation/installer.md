@@ -55,7 +55,7 @@ C:\ProgramData\LiteRetailer\
 
 0. Activate the shop licence (licence screen on any PC). The key must be issued for the **Main PC's**
    machine ID, which every PC shows. Counters work as soon as the Main PC's server is licensed.
-1. Sign in as **admin / admin123** and change the PIN (Admin → Users → Reset PIN).
+1. Sign in as **admin / admin123**. The app asks for a new PIN straight away; nothing else works until it is changed.
 2. Admin → Stores: rename **My Store**, add address / GSTIN (printed on bills).
 3. Admin → Settings → Integrations: Razorpay / WhatsApp keys, if used.
 

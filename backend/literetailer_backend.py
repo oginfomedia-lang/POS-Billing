@@ -270,7 +270,7 @@ def _migrate_and_seed(store_name: str) -> None:
         user_service.create_user(UserCreate(username=DEFAULT_ADMIN_USERNAME, full_name="Administrator",
                                             pin=DEFAULT_ADMIN_PIN, role=UserRole.ADMIN, store_id=store.id), actor=None)
         print(f"Added store '{store.name}', counters {', '.join(DEFAULT_COUNTERS)} and user "
-              f"'{DEFAULT_ADMIN_USERNAME}' (PIN {DEFAULT_ADMIN_PIN}).")
+              f"'{DEFAULT_ADMIN_USERNAME}' (PIN {DEFAULT_ADMIN_PIN}, to be changed at first sign-in).")
 
 
 # ---------------------------------------------------------------- serve / flask

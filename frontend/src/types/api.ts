@@ -24,6 +24,8 @@ export interface UserOut {
   role: UserRole;
   store_id: number | null;
   is_active: boolean;
+  /** The PIN was set by an admin (or is the default): the person must choose their own before anything else. */
+  must_change_pin?: boolean;
   created_at: string;
 }
 

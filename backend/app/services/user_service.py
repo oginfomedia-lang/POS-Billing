@@ -1,21 +1,24 @@
 """Create/update/reset-pin for users (all actions are audited)."""
 from __future__ import annotations
 
-from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError, UnauthorizedError
 from app.extensions import db
 from app.models.enums import UserRole
 from app.models.store import Store
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
-from app.schemas.user_schemas import PinReset, UserCreate, UserUpdate
+from app.schemas.user_schemas import PinChange, PinReset, UserCreate, UserUpdate
 from app.services import audit_service
-from app.utils.security import hash_pin
+from app.utils.security import check_user_pin, hash_pin
 from app.utils.transactions import transaction
 
 
-def create_user(data: UserCreate, actor: User) -> User:
+def create_user(data: UserCreate, actor: User | None, must_change_pin: bool = True) -> User:
     """The login (username) is unique across all stores, because staff log in with username + PIN only.
-    The full name may repeat: "Rahul" can work at Store A and Store B with logins rahul_a and rahul_b."""
+    The full name may repeat: "Rahul" can work at Store A and Store B with logins rahul_a and rahul_b.
+
+    must_change_pin: the person picks their own PIN at first login (the admin who typed this one knows it).
+    False only when the person chose the PIN themselves (flask create-admin)."""
     repo = UserRepository()
     taken = repo.get_by_username(data.username)
     if taken:
@@ -32,6 +35,7 @@ def create_user(data: UserCreate, actor: User) -> User:
         pin_hash=hash_pin(data.pin),
         role=data.role,
         store_id=data.store_id,
+        must_change_pin=must_change_pin,
     )
     with transaction():
         repo.add(user)
@@ -68,10 +72,32 @@ def reset_pin(user_id: int, data: PinReset, actor: User) -> User:
     user = _get_or_404(user_id)
     user.pin_hash = hash_pin(data.new_pin)
     user.pin_failures, user.pin_locked_until = 0, None  # a new PIN also lifts a lock from wrong guesses
+    user.must_change_pin = True  # the admin knows this PIN: the person picks their own at next login
     _end_sessions(user)  # whoever is logged in with the old PIN is logged out
     with transaction():
         audit_service.log(actor, "user.reset_pin", "user", user.id, None, {"pin_changed": True})
     return user
+
+
+def change_own_pin(user: User, data: PinChange) -> User:
+    """The person changes their own PIN (required after first login or an admin reset). Ends their other
+    sessions; the caller hands out new tokens."""
+    if not check_user_pin(user, data.current_pin):
+        raise UnauthorizedError("Current PIN is wrong.")
+    if data.new_pin == data.current_pin:
+        raise BadRequestError("Choose a new PIN, different from the current one.")
+    if data.new_pin.lower() in WEAK_PINS:
+        raise BadRequestError("This PIN is too easy to guess. Choose another.")
+    user.pin_hash = hash_pin(data.new_pin)
+    user.must_change_pin = False
+    _end_sessions(user)
+    with transaction():
+        audit_service.log(user, "user.change_pin", "user", user.id, None, {"pin_changed": True})
+    return user
+
+
+# Never accepted as someone's own PIN: the installer default and the obvious ones.
+WEAK_PINS = {"admin123", "1234", "0000", "1111", "123456", "12345678", "password"}
 
 
 def get_user(user_id: int) -> User:

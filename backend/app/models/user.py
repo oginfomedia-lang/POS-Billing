@@ -20,6 +20,9 @@ class User(TimestampMixin, db.Model):
     # Wrong PINs in a row (login or manager approval), and until when the account is locked after too many.
     pin_failures = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     pin_locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    # The person must choose their own PIN before using the app: set for the installer's default admin, users an
+    # admin creates, and PINs an admin resets. Cleared by POST /auth/change-pin.
+    must_change_pin = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     store = db.relationship("Store", back_populates="users")
     audit_logs = db.relationship("AuditLog", back_populates="user")

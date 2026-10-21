@@ -25,8 +25,9 @@ export function LoginPage() {
   // Redirect when already authenticated (or just after a successful login).
   useEffect(() => {
     if (isAuthenticated && user) {
-      const dest =
-        user.role === 'admin' || user.role === 'manager' ? '/admin' : '/pos';
+      const dest = user.must_change_pin
+        ? '/change-pin'
+        : user.role === 'admin' || user.role === 'manager' ? '/admin' : '/pos';
       navigate(dest, { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
