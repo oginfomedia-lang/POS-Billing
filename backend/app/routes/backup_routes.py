@@ -194,6 +194,7 @@ def list_restores():
     pages = math.ceil(total / per_page) if per_page else 1
     return jsonify({
         "items": [_serialize_restore(r) for r in records],
+        "current_db": restore_service.current_db_name(),  # the database a normal restore targets
         "total": total,
         "page": page,
         "per_page": per_page,

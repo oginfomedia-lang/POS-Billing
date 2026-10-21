@@ -61,12 +61,14 @@ export const backupApi = {
 
   // ── Restore ───────────────────────────────────────────────────────────────
 
+  /** Runs the whole restore before answering: can take minutes on a big database. */
   triggerRestore(id: number, targetDb: string) {
-    return httpClient.post<RestoreRecordOut>(`/backups/${id}/restore`, { target_db: targetDb });
+    return httpClient.post<RestoreRecordOut>(`/backups/${id}/restore`, { target_db: targetDb }, { timeout: 15 * 60_000 });
   },
 
+  /** current_db: the database this server uses (what a normal restore targets). */
   listRestores(page = 1, perPage = 20) {
-    return httpClient.get<PagedResponse<RestoreRecordOut>>('/backups/restores', {
+    return httpClient.get<PagedResponse<RestoreRecordOut> & { current_db: string }>('/backups/restores', {
       params: { page, per_page: perPage },
     });
   },

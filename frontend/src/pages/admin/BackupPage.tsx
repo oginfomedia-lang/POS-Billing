@@ -367,6 +367,7 @@ function RestoreTab() {
   const { t } = useTranslation();
   const [backupId, setBackupId] = useState('');
   const [targetDb, setTargetDb] = useState('');
+  const [currentDb, setCurrentDb] = useState('');
   const [restores, setRestores] = useState<RestoreRecordOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -381,6 +382,8 @@ function RestoreTab() {
     try {
       const r = await backupApi.listRestores(p, perPage);
       setRestores(r.data.items); setTotal(r.data.total);
+      setCurrentDb(r.data.current_db);
+      setTargetDb((t) => t || r.data.current_db);
     } catch (e) { setError(getErrorMessage(e)); }
     finally { setLoading(false); }
   }
@@ -391,7 +394,7 @@ function RestoreTab() {
     setConfirm(false); setSubmitting(true); setError('');
     try {
       await backupApi.triggerRestore(parseInt(backupId), targetDb);
-      setBackupId(''); setTargetDb('');
+      setBackupId(''); setTargetDb(currentDb);
       await loadRestores(1); setPage(1);
     } catch (e) { setError(getErrorMessage(e)); }
     finally { setSubmitting(false); }
@@ -410,9 +413,15 @@ function RestoreTab() {
           </label>
           <label className="field-label">
             Target Database *
-            <input className="field-input" placeholder="e.g. pos_db_staging" value={targetDb} onChange={(e) => setTargetDb(e.target.value)} />
+            <input className="field-input" placeholder={currentDb} value={targetDb} onChange={(e) => setTargetDb(e.target.value)} />
           </label>
         </div>
+        {currentDb && (
+          <p className="hint-text">
+            This shop's database is <strong>{currentDb}</strong>. Restoring it replaces all current data with the
+            backup (a safety copy is taken first).
+          </p>
+        )}
         <div style={{ marginTop: 12 }}>
           <button
             className="btn-primary btn-warning-bg"
@@ -426,7 +435,9 @@ function RestoreTab() {
 
       {confirm && (
         <ConfirmModal
-          message={`This will overwrite database "${targetDb}" with backup #${backupId}. A safety dump will be taken first. Continue?`}
+          message={`This will overwrite database "${targetDb}" with backup #${backupId}. A safety dump will be taken first.${
+            targetDb === currentDb ? ' All bills and changes made after this backup will be lost.' : ''
+          } Continue?`}
           confirmLabel="Yes, Restore"
           danger
           loading={submitting}
