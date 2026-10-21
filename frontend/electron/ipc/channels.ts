@@ -5,4 +5,7 @@ export const IPC = {
   printReceipt: 'printer:print',
   listPrinters: 'printer:list',
   openDrawer: 'drawer:open',
+  getUpdateReady: 'update:get-ready',
+  installUpdate: 'update:install',
+  updateReady: 'update:ready', // main -> renderer event
 } as const;

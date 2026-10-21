@@ -3,6 +3,7 @@ import type { ParseKeys } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { useServerStatus, type ServerStatus } from '../../hooks/useServerStatus';
 import { LanguageSwitcher } from '../common/LanguageSwitcher';
+import { UpdateNotice } from './UpdateNotice';
 import { useCounterStore } from '../../store/counterStore';
 import { VENDOR_NAME, VENDOR_PHONE } from '../../utils/brand';
 
@@ -23,6 +24,7 @@ export function StatusBar() {
       <span>{t('status.counter', { code: config?.counterCode ?? '—' })}</span>
       <span className={`status-pill status-${status}`}>{t(STATUS_TEXT[status])}</span>
       <span className="status-muted">{config?.apiUrl}</span>
+      <UpdateNotice />
       <LanguageSwitcher className="no-print" />
       <span className="status-vendor">{VENDOR_NAME} · {VENDOR_PHONE}</span>
     </footer>

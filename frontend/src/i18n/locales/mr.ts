@@ -77,6 +77,10 @@ export const mr: typeof en = {
     dbDown: 'सर्व्हर चालू, डेटाबेस बंद',
     offline: 'सर्व्हर ऑफलाइन',
   },
+  update: {
+    ready: 'नवीन आवृत्ती {{version}} तयार आहे. LiteRetail बंद केल्यावर ती install होईल.',
+    restartNow: 'आत्ता restart करून update करा',
+  },
   marathi: {
     toggleLabel: 'मराठी टायपिंग',
     toggleTitle: 'इंग्रजी अक्षरांनी मराठी लिहा (Ctrl+M): sakhar + Space = साखर',

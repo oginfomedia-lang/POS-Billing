@@ -336,8 +336,17 @@ FunctionEnd
   CreateDirectory "$R8\logs"
 
   ${If} ${Silent}
-    ; Silent update: keep the existing setup, just bring the service back.
+    ; Silent update (auto-update): keep the existing setup. On the Main PC bring the database up to this
+    ; version (seed = migrations with the app's own login from backend.env; first data only on an empty
+    ; database), then bring the service back. Output: logs\update.log.
     ${If} ${FileExists} "$R8\backend.env"
+      nsExec::ExecToStack '"$R9" seed'
+      Pop $0
+      Pop $1
+      FileOpen $2 "$R8\logs\update.log" a
+      FileSeek $2 0 END
+      FileWrite $2 "--- silent update to ${VERSION}: seed exit $0$\r$\n$1$\r$\n"
+      FileClose $2
       nsExec::Exec '"$INSTDIR\resources\backend\winsw\${SERVICE_NAME}.exe" install'
       Pop $0
       nsExec::Exec 'sc.exe start ${SERVICE_NAME}'

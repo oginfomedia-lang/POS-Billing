@@ -111,3 +111,10 @@ def run_scheduled_replication_snapshot(app) -> None:
             )
         except Exception:  # noqa: BLE001
             logger.exception("Replication snapshot failed")
+
+
+def run_update_mirror(app) -> None:
+    """Copies a new LiteRetail version from UPDATE_FEED_URL for the PCs to update from."""
+    with app.app_context():
+        from app.services import update_mirror_service
+        update_mirror_service.sync()

@@ -75,6 +75,8 @@ def _require_shop_license(app: Flask) -> None:
     def check_license():
         if not app.config.get("LICENSE_REQUIRED") or request.method == "OPTIONS" or request.path in open_paths:
             return None
+        if request.path.startswith(f"{app.config['API_PREFIX']}/updates/"):
+            return None  # app updates still reach the counters (a new version may be what fixes the licence)
         status = license_service.current_status()
         if not status.valid:
             return error_response(403, "LICENSE_REQUIRED",

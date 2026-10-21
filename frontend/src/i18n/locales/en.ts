@@ -77,6 +77,10 @@ export const en = {
     dbDown: 'Server up, database DOWN',
     offline: 'Server OFFLINE',
   },
+  update: {
+    ready: 'Version {{version}} is ready. It installs when you close LiteRetail.',
+    restartNow: 'Restart & update now',
+  },
   marathi: {
     toggleLabel: 'Marathi typing',
     toggleTitle: 'Type Marathi with English letters (Ctrl+M): sakhar + Space = साखर',

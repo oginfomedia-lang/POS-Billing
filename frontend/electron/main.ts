@@ -4,6 +4,7 @@ import { app, BrowserWindow } from 'electron';
 import { loadCounterConfig } from './config/counterConfig';
 import { registerConfigHandlers } from './ipc/configHandlers';
 import { registerPrinterHandlers } from './ipc/printerHandlers';
+import { initAutoUpdater } from './updater';
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -81,6 +82,11 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     registerConfigHandlers();
     registerPrinterHandlers();
+    try {
+      initAutoUpdater(loadCounterConfig());
+    } catch (err) {
+      console.warn('Auto-update not started:', err); // e.g. a broken counter.json; the window reports that
+    }
     createWindow();
   });
 

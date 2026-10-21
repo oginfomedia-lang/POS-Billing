@@ -98,6 +98,14 @@ class BaseConfig:
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None
     UPLOAD_MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES") or str(20 * 1024 * 1024))  # 20 MB
 
+    # --- App updates (services/update_mirror_service.py) ---
+    # HTTPS folder holding latest.yml + LiteRetail-Setup-<version>.exe. The Main PC copies new versions from it
+    # and serves them to every PC's app at /api/v1/updates. Blank = no automatic updates.
+    UPDATE_FEED_URL = os.environ.get("UPDATE_FEED_URL", "")
+    # Where the copies are kept. Default: <data dir>/updates (%ProgramData%\LiteRetailer\updates when installed).
+    UPDATE_DIR = os.environ.get("UPDATE_DIR") or None
+    UPDATE_CHECK_HOURS = int(os.environ.get("UPDATE_CHECK_HOURS") or "6")
+
     # --- PostgreSQL replication ---
     PG_REPLICA_HOST       = os.environ.get("PG_REPLICA_HOST", "")
     # --- WhatsApp Business Cloud API (nightly collection summary to the owner) ---

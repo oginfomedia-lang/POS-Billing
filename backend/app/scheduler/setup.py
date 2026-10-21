@@ -21,7 +21,12 @@ def init_scheduler(app) -> None:
         )
         return
 
-    from app.scheduler.jobs import run_catchup_backup, run_scheduled_backup, run_scheduled_replication_snapshot
+    from app.scheduler.jobs import (
+        run_catchup_backup,
+        run_scheduled_backup,
+        run_scheduled_replication_snapshot,
+        run_update_mirror,
+    )
 
     cron_expr = app.config.get("BACKUP_CRON_SCHEDULE", "0 22 * * *")
     # Parse "minute hour dom month dow" cron format
@@ -68,6 +73,20 @@ def init_scheduler(app) -> None:
         coalesce=True,
         max_instances=1,
     )
+
+    # App updates: copy a new installer from UPDATE_FEED_URL for the PCs to update from (no-op when blank).
+    if app.config.get("UPDATE_FEED_URL"):
+        _scheduler.add_job(
+            run_update_mirror,
+            "interval",
+            hours=max(1, int(app.config.get("UPDATE_CHECK_HOURS", 6))),
+            next_run_time=datetime.now() + timedelta(minutes=3),
+            args=[app],
+            id="update_mirror",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
 
     _scheduler.start()
     logger.info("Backup scheduler started (cron=%s, catch-up after %sh)", cron_expr,
