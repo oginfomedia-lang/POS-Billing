@@ -32,6 +32,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_blueprints(app)
     register_error_handlers(app)
     _security_headers(app)
+    _pause_during_restore(app)
     _require_shop_license(app)
     _require_own_pin(app)
     register_cli(app)
@@ -63,6 +64,24 @@ def _security_headers(app: Flask) -> None:
         return resp
 
 
+def _pause_during_restore(app: Flask) -> None:
+    """While this server's own database is being restored its tables are dropped and reloaded: every request would
+    wait on them (and make the restore wait). Answer at once instead. Registered first, before anything that reads
+    the database (licence, login checks)."""
+    from flask import request
+
+    from app.services import restore_service
+
+    open_paths = {f"{app.config['API_PREFIX']}/{p}" for p in ("health", "license", "backups/restore-status")}
+
+    @app.before_request
+    def restore_in_progress():
+        if request.method == "OPTIONS" or request.path in open_paths or not restore_service.live_restore_running():
+            return None
+        return error_response(503, "RESTORE_IN_PROGRESS",
+                              "A backup is being restored on the Main PC. Try again in a minute.")
+
+
 def _require_shop_license(app: Flask) -> None:
     """Every counter goes through this server, so checking here covers the whole shop."""
     from flask import request
@@ -92,7 +111,7 @@ def _require_own_pin(app: Flask) -> None:
 
     open_paths = {f"{app.config['API_PREFIX']}/{p}"
                   for p in ("health", "license", "license/activate", "auth/login", "auth/refresh", "auth/me",
-                            "auth/change-pin")}
+                            "auth/change-pin", "backups/restore-status")}
 
     @app.before_request
     def check_pin_changed():

@@ -1,5 +1,5 @@
 // Backup Management page — admin only. 5 tabs: Backups · Cloud Uploads · Restore · Replication · Schedule
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { IconDatabase, IconDownload, IconShield, IconTrash, IconX } from '../../components/common/Icons';
@@ -10,6 +10,7 @@ import type {
   CloudUploadAttemptOut,
   ReplicationStatusOut,
   RestoreRecordOut,
+  RestoreStatusOut,
 } from '../../types/api';
 import { formatDateTime } from '../../utils/format';
 
@@ -363,6 +364,12 @@ function CloudUploadsTab() {
 
 // ── Tab: Restore ──────────────────────────────────────────────────────────────
 
+const RESTORE_PHASE: Record<string, string> = {
+  safety_copy: 'Step 1 of 3: saving a safety copy of the current data…',
+  restoring: 'Step 2 of 3: loading the backup…',
+  updating: 'Step 3 of 3: updating the database to this version…',
+};
+
 function RestoreTab() {
   const { t } = useTranslation();
   const [backupId, setBackupId] = useState('');
@@ -373,8 +380,12 @@ function RestoreTab() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // The restore runs on the server: leaving this tab (or the page) does not stop it, it is picked up again here.
+  const [active, setActive] = useState<RestoreStatusOut['active']>(null);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const watched = useRef<number | null>(null);
   const perPage = 20;
 
   async function loadRestores(p = page) {
@@ -388,14 +399,41 @@ function RestoreTab() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { loadRestores(); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Reads the server's restore status; true while one is running. */
+  async function checkStatus(): Promise<boolean> {
+    try {
+      const { data } = await backupApi.restoreStatus();
+      setActive(data.active);
+      if (data.active) { watched.current = data.active.id; return true; }
+      if (watched.current !== null && data.last) {
+        watched.current = null;
+        setNotice(data.last.status === 'success'
+          ? data.last.live
+            ? 'Restore finished. The shop now has the data from the backup: everyone, on every counter, should sign in again.'
+            : `Restore into "${data.last.target_db}" finished.`
+          : 'Restore failed: see the error in the list below.');
+        loadRestores(1); setPage(1);
+      }
+    } catch { /* server restarting: try again on the next tick */ }
+    return false;
+  }
+
+  useEffect(() => {
+    checkStatus().then((running) => { if (!running) loadRestores(); });
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(checkStatus, 2000);
+    return () => clearInterval(timer);
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRestore() {
-    setConfirm(false); setSubmitting(true); setError('');
+    setConfirm(false); setSubmitting(true); setError(''); setNotice('');
     try {
       await backupApi.triggerRestore(parseInt(backupId), targetDb);
       setBackupId(''); setTargetDb(currentDb);
-      await loadRestores(1); setPage(1);
+      await checkStatus();
     } catch (e) { setError(getErrorMessage(e)); }
     finally { setSubmitting(false); }
   }
@@ -425,13 +463,22 @@ function RestoreTab() {
         <div style={{ marginTop: 12 }}>
           <button
             className="btn-primary btn-warning-bg"
-            disabled={submitting || !backupId || !targetDb}
+            disabled={submitting || active !== null || !backupId || !targetDb}
             onClick={() => setConfirm(true)}
           >
-            {submitting ? 'Restoring…' : 'Restore Backup'}
+            {submitting || active ? 'Restoring…' : 'Restore Backup'}
           </button>
         </div>
+        {active && (
+          <div className="hint-text" style={{ marginTop: 12 }}>
+            <strong>Restore #{active.id} into {active.target_db} is running.</strong>{' '}
+            {RESTORE_PHASE[active.phase] ?? ''} You can leave this screen: it keeps going on the Main PC.
+            {active.live && ' Billing on the counters pauses until it finishes (usually under a minute).'}
+          </div>
+        )}
       </fieldset>
+
+      {notice && <div className="hint-text" style={{ marginBottom: 12 }}><strong>{notice}</strong></div>}
 
       {confirm && (
         <ConfirmModal

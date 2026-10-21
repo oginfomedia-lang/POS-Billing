@@ -87,6 +87,15 @@ export interface CloudUploadAttemptOut {
   completed_at: string | null;
 }
 
+/** safety_copy: copying the current data first; restoring: loading the backup; updating: bringing it to this version. */
+export type RestorePhase = 'safety_copy' | 'restoring' | 'updating';
+
+export interface RestoreStatusOut {
+  running: boolean;
+  active: { id: number; target_db: string; live: boolean; phase: RestorePhase; started_at: string } | null;
+  last: { id: number; status: RestoreStatus; target_db: string; live: boolean; completed_at: string } | null;
+}
+
 export interface RestoreRecordOut {
   id: number;
   backup_run_id: number | null;
