@@ -3,11 +3,13 @@
 //   transliterate('sakhar dudh')    -> 'साखर दूध'
 //   suggest('sakhar')               -> ['साखर', 'सखर', 'साखार', ...]   (best first)
 //
-// Three layers, best first:
+// Layers, best first:
 //   1. choices this PC's users picked before (passed in as `learned`)
-//   2. a built-in list of common shop / grocery words (WORDS below)
+//   2. a built-in list of common shop words: Marathi (WORDS) and English / brands (ENGLISH_WORDS)
 //   3. rules: longest match first ("kh" before "k"), inherent "a", vowel signs, ् for conjuncts,
-//      ं ः ँ, and alternatives for ambiguous letters (a: अ/आ, t: त/ट, n: न/ण/ं, l: ल/ळ, ...)
+//      ं ः ँ, and alternatives for ambiguous letters (a: अ/आ, d: ड/द, t: त/ट, n: न/ण/ं, l: ल/ळ, ...)
+//   4. English pronunciation (englishSpellings): c = क / स, silent final e, double letters, cat = कॅट,
+//      shop = शॉप, butter = बटर. First for words that look English (kitkat, colgate, soap), else offered too.
 // Rules alone can't know every word (sakhar could be सखर or साखर), which is why suggestions exist.
 //
 // Capital letters pick the "hard" sounds when used inside a word: T ट, Th ठ, D ड, Dh ढ, N ण, L ळ, Sh ष,
@@ -36,7 +38,7 @@ const CONSONANTS: [string, string[]][] = [
   ['kh', ['ख']], ['gh', ['घ']], ['ch', ['च']], ['jh', ['झ']], ['Th', ['ठ']], ['Dh', ['ढ']],
   ['th', ['थ', 'ठ']], ['dh', ['ध', 'ढ']], ['ph', ['फ']], ['bh', ['भ']], ['Sh', ['ष']], ['sh', ['श', 'ष']],
   ['k', ['क']], ['q', ['क']], ['x', ['क्ष']], ['g', ['ग']], ['c', ['च']], ['j', ['ज']], ['z', ['झ', 'ज']],
-  ['T', ['ट']], ['D', ['ड']], ['N', ['ण']], ['t', ['त', 'ट']], ['d', ['द', 'ड']], ['n', ['न', 'ण']],
+  ['T', ['ट']], ['D', ['ड']], ['N', ['ण']], ['t', ['त', 'ट']], ['d', ['ड', 'द']], ['n', ['न', 'ण']],
   ['p', ['प']], ['f', ['फ']], ['b', ['ब']], ['m', ['म']], ['y', ['य']], ['r', ['र']],
   ['L', ['ळ']], ['l', ['ल', 'ळ']], ['v', ['व']], ['w', ['व']], ['s', ['स']], ['h', ['ह']],
 ];
@@ -73,8 +75,9 @@ function normaliseCase(word: string): string {
   return /^[A-Z][a-z.]*$/.test(word) ? word.toLowerCase() : word;
 }
 
-function lex(word: string): Token[] | null {
-  const w = normaliseCase(word);
+/** keepCase: the word is an internal spelling (englishSpellings) whose capitals are meant (E ॲ, T ट). */
+function lex(word: string, keepCase = false): Token[] | null {
+  const w = keepCase ? word : normaliseCase(word);
   const tokens: Token[] = [];
   let i = 0;
   while (i < w.length) {
@@ -128,8 +131,8 @@ function render(tokens: Token[], pick: number[]): string {
 const MAX_ALTERNATIVES = 2; // spellings that differ from the most likely one in at most 2 places
 
 /** Rule-based spellings, most likely first. */
-function ruleCandidates(word: string): string[] {
-  const tokens = lex(word);
+function ruleCandidates(word: string, keepCase = false): string[] {
+  const tokens = lex(word, keepCase);
   if (!tokens) return [];
   const ambiguous = tokens.map((t, k) => (t.opts.length > 1 ? k : -1)).filter((k) => k >= 0);
   const base = tokens.map(() => 0);
@@ -178,7 +181,103 @@ kirana=किराणा; supar,super=सुपर; mart=मार्ट; ved=�
 pudhe=पुढे; punha=पुन्हा; bhet=भेट; dya=द्या; abhari=आभारी; aahot,ahot=आहोत
 taja,taza=ताजा; tazi,taji=ताजी; khas=खास; special=स्पेशल; pack,paik=पॅक; pakit=पाकीट; pishvi=पिशवी
 sabudane=साबुदाणे; kokam=कोकम; chinch=चिंच; gulkand=गुलकंद; mangal=मंगल; diva=दिवा
+dev=देव; desh=देश; don=दोन; daha=दहा; divas=दिवस; dar=दर; darvaja,darwaja=दरवाजा; dagad=दगड; dukh,duhkh=दुःख
+mandir=मंदिर; udya=उद्या; dabba,daba=डबा; doke=डोके; dosa=डोसा; gadi=गाडी; sadi=साडी; vadi=वडी
+dhan=धन; dhobi=धोबी; dhol=ढोल; dhaba=ढाबा; dhag=ढग; kadhi=कढी; padva,padwa=पाडवा
 `;
+
+// English shop words and brands, as Marathi shops write them.
+const ENGLISH_WORDS = `
+kitkat=किटकॅट; apple=ॲपल; omlet,omelette=ऑम्लेट; cell=सेल; phone=फोन; cellphone=सेलफोन; mobile=मोबाइल
+charger=चार्जर; battery=बॅटरी; bulb=बल्ब; chocolate=चॉकलेट; cadbury=कॅडबरी; maggi=मॅगी; colgate=कोलगेट
+pepsi=पेप्सी; coca=कोका; cola=कोला; cocacola=कोकाकोला; sprite=स्प्राइट; fanta=फँटा; thumsup=थम्सअप
+bread=ब्रेड; butter=बटर; cheese=चीज; cake=केक; soap=सोप; oil=ऑइल; rice=राइस; toothpaste=टूथपेस्ट
+toothbrush=टूथब्रश; brush=ब्रश; paste=पेस्ट; powder=पावडर; cream=क्रीम; lotion=लोशन; conditioner=कंडिशनर
+detergent=डिटर्जंट; surf=सर्फ; tide=टाइड; rin=रिन; vim=विम; harpic=हार्पिक; lizol=लायझॉल; dettol=डेटॉल
+lifebuoy=लाइफबॉय; lux=लक्स; dove=डव्ह; parle=पार्ले; britannia=ब्रिटानिया; goodday=गुडडे; marie=मारी
+oreo=ओरिओ; bourbon=बोरबॉन; lays=लेज; kurkure=कुरकुरे; haldiram=हल्दीराम; amul=अमूल; gokul=गोकुळ
+nestle=नेस्ले; tata=टाटा; tea=टी; sugar=शुगर; salt=सॉल्ट; milk=मिल्क; water=वॉटर; bottle=बॉटल; juice=ज्यूस
+jam=जॅम; sauce=सॉस; ketchup=केचप; noodles=नूडल्स; pasta=पास्ता; pizza=पिझ्झा; burger=बर्गर; sandwich=सँडविच
+icecream=आइस्क्रीम; ice=आइस; candy=कँडी; toffee=टॉफी; chips=चिप्स; cookie,cookies=कुकीज; egg=एग; eggs=एग्ज
+banana=बनाना; mango=मँगो; orange=ऑरेंज; grapes=ग्रेप्स; lemon=लेमन; potato=पोटॅटो; onion=अनियन; carrot=कॅरट
+cabbage=कॅबेज; ginger=जिंजर; garlic=गार्लिक; corn=कॉर्न; oats=ओट्स; cornflakes=कॉर्नफ्लेक्स; honey=हनी
+packet=पॅकेट; box=बॉक्स; bag=बॅग; carrybag=कॅरीबॅग; plastic=प्लास्टिक; paper=पेपर; pen=पेन; pencil=पेन्सिल
+notebook=नोटबुक; book=बुक; copy=कॉपी; eraser=इरेजर; scale=स्केल; glue=ग्लू; tape=टेप; cable=केबल; wire=वायर
+switch=स्विच; plug=प्लग; fan=फॅन; light=लाइट; tube=ट्यूब; earphone=इअरफोन; headphone=हेडफोन; sim=सिम
+card=कार्ड; recharge=रिचार्ज; cover=कव्हर; glass=ग्लास; cup=कप; plate=प्लेट; spoon=स्पून; bucket=बकेट
+tissue=टिश्यू; napkin=नॅपकिन; diaper=डायपर; pampers=पॅम्पर्स; whisper=व्हिस्पर; razor=रेझर; blade=ब्लेड
+gillette=जिलेट; perfume=परफ्यूम; deo=डिओ; deodorant=डिओडरंट; hair=हेअर; face=फेस; wash=वॉश; facewash=फेसवॉश
+handwash=हँडवॉश; body=बॉडी; baby=बेबी; kids=किड्स; family=फॅमिली; offer=ऑफर; free=फ्री; combo=कॉम्बो
+discount=डिस्काउंट; total=टोटल; cash=कॅश; bill=बिल; change=चेंज; thanks=थँक्स; welcome=वेलकम; shop=शॉप
+store=स्टोअर; mall=मॉल; market=मार्केट; fresh=फ्रेश; best=बेस्ट; new=न्यू; big=बिग; small=स्मॉल; large=लार्ज
+medium=मीडियम; extra=एक्स्ट्रा; premium=प्रीमियम; gold=गोल्ड; silver=सिल्व्हर; classic=क्लासिक; original=ओरिजिनल
+cat=कॅट; mat=मॅट; bat=बॅट; hat=हॅट; doll=डॉल; ball=बॉल; toy=टॉय; game=गेम; gift=गिफ्ट; party=पार्टी
+birthday=बर्थडे; candle=कँडल; matchbox=मॅचबॉक्स; lighter=लायटर; mosquito=मॉस्किटो; coil=कॉइल
+goodnight=गुडनाइट; allout=ऑलआउट; munch=मंच; perk=पर्क; fivestar=फाइव्हस्टार; boost=बूस्ट; bournvita=बोर्नव्हिटा
+horlicks=हॉर्लिक्स; complan=कॉम्प्लान; maaza=माझा; frooti=फ्रूटी; slice=स्लाइस; bisleri=बिसलेरी; dairy=डेअरी
+show=शो; cow=काउ; now=नाउ; how=हाउ; window=विंडो; yellow=यलो; pillow=पिलो; oil=ऑइल; tiffin=टिफिन
+`;
+
+/** Spellings only English words use; Marathi typed in Roman letters doesn't (it writes च as ch, not c). */
+const ENGLISH_HINT = /c(?!h)|ck|q|ea|oa|oy|tion|ow$|[^aeiou]y$|[^aeiou]{2}er$|(?:bb|pp|tt|gg|ff)(?:le|er|y)$|[bpt]le$|(?:ile|ake|ike|ime|ite|ope|ute|ube)$/;
+
+/**
+ * How an English word is said, spelt in this file's Roman scheme (capitals = ॅ ऑ ट ड ...), 1–3 versions
+ * (a word-final "ow" can be ो, ौ or ाउ). kitkat -> kiTkET, apple -> Epal, phone -> fon, butter -> baTar.
+ */
+function englishSpellings(word: string): string[] {
+  let w = word.toLowerCase()
+    .replace(/tion|sion/g, 'sh@n').replace(/ture$/, 'ch@r')
+    .replace(/ck/g, 'k+').replace(/ph/g, 'f') // ck closes the vowel like a double letter: jacket जॅकेट.replace(/qu/g, 'kv').replace(/q/g, 'k').replace(/x/g, 'ks')
+    .replace(/wh/g, 'v').replace(/c(?=[eiy])/g, 's').replace(/c(?!h)/g, 'k').replace(/g(?=e$)/, 'j')
+    .replace(/([bdfgklmnprstvz])\1/g, '$1+') // a doubled letter closes the vowel before it: butter = but+er
+    .replace(/([^aeiouy@+])le$|([^aeiouy@])\+le$/, (_m, a, b) => `${a ?? `${b}+`}@l`) // apple -> ap+@l
+    .replace(/er$/, '@r');
+  const ow = /ow$/.test(w);
+  if (ow) w = w.slice(0, -2) + '#';
+  const parts = w.match(/[aeiouy@#]+|[^aeiouy@#]+/g) ?? [];
+  let out = '';
+  for (let k = 0; k < parts.length; k++) {
+    let p = parts[k];
+    if (!/^[aeiouy@#]/.test(p)) { out += englishConsonants(p); continue; }
+    if (k === 0 && p.length > 1 && p[0] === 'y') { out += 'y'; p = p.slice(1); } // yoga
+    const next = parts[k + 1];
+    const last = k === parts.length - 1;
+    // "magic e": one consonant (or st), then a final e: cake केक, rice राइस, phone फोन, paste पेस्ट
+    const magic = next !== undefined && parts[k + 2] === 'e' && k + 2 === parts.length - 1
+      && /^(?:[^aeiouy+]|st)$/.test(next);
+    const closed = !magic && next !== undefined && (next.includes('+') || next.replace('+', '').length > 1
+      || k + 1 === parts.length - 1);
+    out += englishVowel(p, { last, closed, magic, beforeR: next?.startsWith('r') ?? false });
+    if (magic) { out += englishConsonants(next); k += 2; }
+  }
+  return ow ? ['o', 'au', 'aau'].map((v) => out.replace('#', v)) : [out];
+}
+
+function englishConsonants(p: string): string {
+  return p.replace(/\+/g, '').replace(/th|sh|ch|kh|gh|dh|bh|t|d|w/g, (c) => ({ t: 'T', d: 'D', w: 'v' } as Record<string, string>)[c] ?? c);
+}
+
+function englishVowel(p: string, at: { last: boolean; closed: boolean; magic: boolean; beforeR: boolean }): string {
+  const pairs: Record<string, string> = { ee: 'I', ea: 'I', ie: 'I', oo: 'U', oa: 'o', oe: 'o', ai: 'e', ay: 'e', ei: 'e',
+    ey: at.last ? 'I' : 'e', oi: 'Oi', oy: 'Oy', ou: 'au', au: 'O', '@': 'a', '#': '#' };
+  if (pairs[p]) return pairs[p];
+  const v = p[0];
+  if (at.magic) return ({ a: 'e', e: 'I', i: 'aai', o: 'o', u: 'yU', y: 'aai' } as Record<string, string>)[v] ?? v;
+  if (v === 'a') return at.beforeR ? 'aa' : at.closed ? 'E' : at.last ? 'aa' : 'a'; // car कार, cat कॅट, pizza पिझ्झा
+  if (v === 'e') return at.last ? '' : 'e'; // a final e is silent: large लार्ज
+  if (v === 'i') return at.last ? 'I' : 'i';
+  if (v === 'o') return at.closed && !at.beforeR ? 'O' : 'o'; // shop शॉप, omlet ऑम्लेट
+  if (v === 'u') return at.closed ? 'a' : at.last ? 'U' : 'u'; // butter बटर, bulb बल्ब
+  if (v === 'y') return at.last ? 'I' : 'i'; // candy कँडी, gym जिम
+  return p;
+}
+
+/** Each English version's best spelling, then their next best (dhow: धो धौ धाउ, then ढो ढौ ढाउ). */
+function englishCandidates(word: string): string[] {
+  const lists = englishSpellings(word).map((s) => ruleCandidates(s, true));
+  return unique([...lists.map((l) => l[0] ?? ''), ...lists.map((l) => l[1] ?? '')]);
+}
 
 function looseKey(roman: string): string {
   return roman.toLowerCase()
@@ -189,7 +288,7 @@ function looseKey(roman: string): string {
 
 const DICTIONARY = new Map<string, string[]>();
 const KNOWN = new Set<string>();
-for (const line of WORDS.split(/[;\n]/)) {
+for (const line of `${WORDS}\n${ENGLISH_WORDS}`.split(/[;\n]/)) {
   const [romans, word] = line.split('=').map((s) => s?.trim());
   if (!romans || !word) continue;
   KNOWN.add(word);
@@ -214,11 +313,18 @@ export function suggest(word: string, learned: Record<string, string> = {}): str
   const rules = ruleCandidates(word);
   if (rules.length === 0) return [];
   const known = rules.filter((r) => KNOWN.has(r));
+  const english = englishCandidates(word);
+  const listed = DICTIONARY.get(looseKey(word)) ?? [];
+  // Looks English (colgate, jacket): its English reading leads. A listed Marathi word keeps its Marathi
+  // alternatives and gets the English reading last. Otherwise the English reading is the second choice (sat: सत, सॅट).
+  const ordered = ENGLISH_HINT.test(word.toLowerCase())
+    ? [...english, ...rules]
+    : listed.length ? [...rules, ...english] : [rules[0], ...english, ...rules.slice(1)];
   return unique([
     learned[word.toLowerCase()],
-    ...(DICTIONARY.get(looseKey(word)) ?? []),
+    ...listed,
     ...known,
-    ...rules,
+    ...ordered,
   ]).slice(0, MAX_SUGGESTIONS);
 }
 

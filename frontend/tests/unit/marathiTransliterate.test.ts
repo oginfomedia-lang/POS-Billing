@@ -49,7 +49,7 @@ test('aspirated consonants', () => {
 
 test('retroflex and other Marathi sounds: capitals pick them', () => {
   const words: Record<string, string> = {
-    baTaTa: 'बटाटा', DabA: 'डबा', Dabba: 'दब्ब' /* sentence case = lowercase */, gaNit: 'गणित', kaLas: 'कळस', Thak: 'थक', ThaThar: 'ठठर',
+    baTaTa: 'बटाटा', DabA: 'डबा', Dabba: 'डबा' /* sentence case = lowercase, then the word list */, gaNit: 'गणित', kaLas: 'कळस', Thak: 'थक', ThaThar: 'ठठर',
     kShatriy: 'क्षत्रिय', dnyaan: 'ज्ञान', shrI: 'श्री', traa: 'त्रा', viShay: 'विषय',
   };
   for (const [roman, marathi] of Object.entries(words)) assert.equal(preferred(roman), marathi, roman);
@@ -62,9 +62,9 @@ test('anusvara, chandrabindu and visarga', () => {
   assert.equal(preferred('ga.nga'), 'गंगा');
   assert.equal(preferred('gaMgA'), 'गंगा');
   assert.equal(preferred('duHkh'), 'दुःख');
-  assert.equal(preferred('cha.Nd'), 'चँद');
+  assert.equal(preferred('cha.Nd'), 'चँड');
   assert.equal(preferred('anna'), 'अन्न'); // n before n stays a consonant
-  assert.ok(suggest('kanda').includes('कन्दा')); // the conjunct spelling is offered too
+  assert.ok(suggest('kanda').includes('कन्डा')); // the conjunct spelling is offered too
 });
 
 test('spaces, punctuation and numbers are kept; mixed text', () => {
@@ -97,4 +97,40 @@ test('suggestions: best first, alternatives, no duplicates, limited', () => {
   // A spelling picked before on this PC comes first.
   assert.equal(suggest('sakhar', { sakhar: 'सखर' })[0], 'सखर');
   assert.equal(preferred('Sakhar', { sakhar: 'सखर' }), 'सखर');
+});
+
+test('d is ड by default with द offered; dh offers both ध and ढ', () => {
+  assert.deepEqual(suggest('d'), ['ड', 'द']);
+  assert.deepEqual(suggest('da').slice(0, 2), ['डा', 'दा']);
+  assert.deepEqual(suggest('dh'), ['ध', 'ढ']);
+  assert.deepEqual(suggest('dho'), ['धो', 'ढो']);
+  // Marathi words with द stay right through the word list.
+  for (const [roman, marathi] of Object.entries({ dudh: 'दूध', dahi: 'दही', dev: 'देव', don: 'दोन', dal: 'डाळ' }))
+    assert.equal(preferred(roman), marathi, roman);
+});
+
+test('a word-final ow offers ो, ौ and ाउ', () => {
+  assert.deepEqual(suggest('dhow'), ['धो', 'धौ', 'धाउ', 'ढो', 'ढौ', 'ढाउ']);
+  assert.equal(preferred('show'), 'शो');
+  assert.equal(preferred('cow'), 'काउ');
+});
+
+test('English shop words and brands', () => {
+  const words: Record<string, string> = {
+    kitkat: 'किटकॅट', apple: 'ॲपल', omlet: 'ऑम्लेट', omelette: 'ऑम्लेट', cell: 'सेल', phone: 'फोन', mobile: 'मोबाइल',
+    cellphone: 'सेलफोन', chocolate: 'चॉकलेट', colgate: 'कोलगेट', cat: 'कॅट', mat: 'मॅट', maggi: 'मॅगी',
+  };
+  for (const [roman, marathi] of Object.entries(words)) assert.equal(preferred(roman), marathi, roman);
+});
+
+test('English pronunciation for words not in the list', () => {
+  const words: Record<string, string> = {
+    jacket: 'जॅकेट', pocket: 'पॉकेट', locker: 'लॉकर', sticker: 'स्टिकर', marker: 'मार्कर', scanner: 'स्कॅनर',
+    printer: 'प्रिंटर', kettle: 'केटल', cutter: 'कटर',
+  };
+  for (const [roman, marathi] of Object.entries(words)) assert.equal(preferred(roman), marathi, roman);
+  // Not obviously English: the Marathi reading leads, the English one is offered next (sat: सत, सॅट).
+  assert.deepEqual(suggest('sat').slice(0, 2), ['सत', 'सॅट']);
+  // A listed Marathi word keeps its Marathi alternatives first.
+  assert.deepEqual(suggest('sakhar').slice(0, 2), ['साखर', 'सखर']);
 });
