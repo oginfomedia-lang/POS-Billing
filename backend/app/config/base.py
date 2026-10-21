@@ -2,7 +2,8 @@
 import os
 from datetime import timedelta
 
-DEV_SECRET = "dev-only-change-me"
+# At least 32 bytes: shorter HMAC keys are weak for HS256 (PyJWT warns about them).
+DEV_SECRET = "dev-only-change-me-not-for-production-use"
 
 
 class BaseConfig:
