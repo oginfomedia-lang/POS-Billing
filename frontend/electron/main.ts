@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { loadCounterConfig } from './config/counterConfig';
 import { registerConfigHandlers } from './ipc/configHandlers';
+import { registerOfflineHandlers } from './ipc/offlineHandlers';
 import { registerPrinterHandlers } from './ipc/printerHandlers';
 import { initAutoUpdater } from './updater';
 
@@ -82,6 +83,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     registerConfigHandlers();
     registerPrinterHandlers();
+    registerOfflineHandlers();
     try {
       initAutoUpdater(loadCounterConfig());
     } catch (err) {

@@ -290,6 +290,35 @@ def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
         batch_service.take_for_sale_item(store_id, item)
 
 
+def deduct_for_offline_sale(store_id: int, items: list[SaleItem], sale_id: int) -> list[dict]:
+    """deduct_for_sale() for a bill made while the server was unreachable. The goods have already left the shop,
+    so it never refuses: stock goes down to at most 0 and what the records didn't have is returned (and noted on
+    the ledger row) for the manager to check. Must run inside the caller's transaction."""
+    wanted: dict[int, Decimal] = {}
+    names: dict[int, str] = {}
+    for item in items:
+        wanted[item.product_id] = wanted.get(item.product_id, Decimal("0")) + Decimal(str(item.qty))
+        names[item.product_id] = item.product_name
+
+    repo = InventoryRepository()
+    shortages = []
+    for product_id in sorted(wanted):  # same lock order as sales: no deadlocks
+        qty = wanted[product_id]
+        row = repo.lock_or_create(store_id, product_id)
+        available = Decimal(str(row.qty_on_hand))
+        taken = min(qty, available)
+        row.qty_on_hand = available - taken
+        note = None
+        if taken < qty:
+            shortages.append({"product_id": product_id, "product_name": names[product_id],
+                              "sold": str(qty), "in_stock": str(available)})
+            note = f"Offline bill: sold {_qty_text(qty)}, records had {_qty_text(available)}"
+        repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -taken, reference_id=sale_id, notes=note)
+    for item in sorted(items, key=lambda i: (i.product_id, i.id)):
+        batch_service.take_for_sale_item(store_id, item)
+    return shortages
+
+
 def restock_for_return(store_id: int, lines, return_id: int, note: str) -> None:
     """Puts returned items back on the shelf (into the batches the bill took them from) and writes RETURN ledger
     rows (reference_id = the return).

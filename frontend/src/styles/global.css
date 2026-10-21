@@ -4101,3 +4101,71 @@ button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring);
 .admin-nav-sublink:focus-visible { outline: 2px solid #818cf8; outline-offset: 0; }
 /* Section scrolled to from the tree: a little room above it */
 .settings-anchor { scroll-margin-top: 16px; }
+
+/* Offline billing (pages/pos/OfflineBillingPage.tsx) */
+.offline-scan {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.offline-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+.offline-suggestions button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.offline-suggestions button:hover,
+.offline-suggestions button:focus-visible {
+  background: var(--surface-2, #f1f5f9);
+  outline: none;
+}
+
+.offline-qty {
+  width: 90px;
+  text-align: right;
+}
+
+.offline-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  align-self: start;
+}
+
+.offline-pay {
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.offline-catalog-age {
+  margin: 0 20px;
+}

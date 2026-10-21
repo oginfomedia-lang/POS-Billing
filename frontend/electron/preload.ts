@@ -26,6 +26,21 @@ const posBridge = {
   },
   /** Closes the app, installs the update silently and starts the new version. */
   installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.installUpdate),
+
+  // Offline billing files (src/offline). Catalogue and bills are plain JSON the renderer defines.
+  offline: {
+    saveCatalog: (storeId: number, catalog: unknown): Promise<void> =>
+      ipcRenderer.invoke(IPC.offlineSaveCatalog, storeId, catalog),
+    loadCatalog: (storeId: number): Promise<unknown | null> => ipcRenderer.invoke(IPC.offlineLoadCatalog, storeId),
+    nextBillNumber: (counterCode: string): Promise<string> => ipcRenderer.invoke(IPC.offlineNextBillNumber, counterCode),
+    queueBill: (bill: { offline_id: string }): Promise<void> => ipcRenderer.invoke(IPC.offlineQueueBill, bill),
+    listQueue: (): Promise<unknown[]> => ipcRenderer.invoke(IPC.offlineListQueue),
+    getBill: (offlineId: string): Promise<unknown | null> => ipcRenderer.invoke(IPC.offlineGetBill, offlineId),
+    markSynced: (offlineId: string, saleId: number): Promise<void> =>
+      ipcRenderer.invoke(IPC.offlineMarkSynced, offlineId, saleId),
+    markFailed: (offlineId: string, error: string): Promise<void> =>
+      ipcRenderer.invoke(IPC.offlineMarkFailed, offlineId, error),
+  },
 };
 
 export type PosBridge = typeof posBridge;

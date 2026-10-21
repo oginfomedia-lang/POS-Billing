@@ -24,6 +24,8 @@ import { LoginPage } from '../pages/auth/LoginPage';
 import { BillingPage } from '../pages/pos/BillingPage';
 import { CloseShiftPage } from '../pages/pos/CloseShiftPage';
 import { HeldBillsPage } from '../pages/pos/HeldBillsPage';
+import { OfflineBillingPage } from '../pages/pos/OfflineBillingPage';
+import { OfflineReceiptPage } from '../pages/pos/OfflineReceiptPage';
 import { OpenShiftPage } from '../pages/pos/OpenShiftPage';
 import { PosPage } from '../pages/pos/PosPage';
 import { ReprintPage } from '../pages/pos/ReprintPage';
@@ -54,6 +56,8 @@ export const router = createHashRouter([
           { path: '/pos/reprint/:saleId', element: <ReprintPage /> },
           { path: '/pos/returns', element: <ReturnsPage /> },
           { path: '/pos/return-receipt/:returnId', element: <ReturnReceiptPage /> },
+          { path: '/pos/offline', element: <OfflineBillingPage /> },
+          { path: '/pos/offline/receipt/:offlineId', element: <OfflineReceiptPage /> },
         ],
       },
 

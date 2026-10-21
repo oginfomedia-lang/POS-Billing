@@ -31,6 +31,8 @@ import { useBillStore } from '../../store/billStore';
 import type { ProductOut } from '../../types/product';
 import type { SaleItemOut, SaleOut, TenderMethod } from '../../types/sale';
 import { useShiftStore } from '../../store/shiftStore';
+import { useServerStatusStore } from '../../hooks/useServerStatus';
+import { hasOfflineSupport } from '../../offline/sync';
 import { useStores } from '../../store/storeContext';
 
 import { formatRupees } from '../../utils/money';
@@ -60,6 +62,7 @@ export function BillingPage() {
   const noPopup = dialog === null && discountItem === null && weightProduct === null;
 
   const hasItems = (sale?.items.length ?? 0) > 0;
+  const serverDown = useServerStatusStore((s) => s.status === 'offline');
 
   // Whenever there is no bill (first load, or after pay/hold/void), start one.
   useEffect(() => {
@@ -208,6 +211,13 @@ export function BillingPage() {
           </button>
         </div>
       </header>
+
+      {serverDown && hasOfflineSupport() && (
+        <div className="page-error">
+          <span>{t('offline.serverDown')}</span>
+          <button className="btn-sm error-retry" onClick={() => navigate('/pos/offline')}>{t('offline.goOffline')}</button>
+        </div>
+      )}
 
       {error && (
         <div className="page-error">
