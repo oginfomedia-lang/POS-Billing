@@ -1,7 +1,7 @@
 // Admin navigation shared by all admin pages (links depend on role).
 // Desktop: fixed sidebar. Below 1024px: sticky top bar + slide-in drawer.
 import type { ParseKeys } from 'i18next';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -90,6 +90,10 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
   },
 ];
 
+// Every admin page draws its own AdminNav, so the list would start at the top again on each click: keep where it
+// was scrolled to across pages.
+let navScrollTop = 0;
+
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -131,6 +135,14 @@ export function AdminNav() {
   const settingsSections = SETTINGS_SECTIONS.filter(
     (s) => (isAdmin || !s.adminOnly) && (!s.printerOnly || hasPrinterBridge()),
   );
+  const navRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    nav.scrollTop = navScrollTop;
+    // Opened at a page whose link is out of sight (e.g. from the dashboard's shortcuts): bring it into view.
+    nav.querySelector('.admin-nav-link.active')?.scrollIntoView({ block: 'nearest' });
+  }, []);
   const { loaded, refresh } = useStoreContext();
   const storeName = useStoreDisplayName();
   useEffect(() => { if (!loaded) refresh().catch(() => {}); }, [loaded]);
@@ -180,7 +192,7 @@ export function AdminNav() {
 
         <StoreSwitcher />
 
-        <nav className="admin-nav">
+        <nav className="admin-nav" ref={navRef} onScroll={(e) => { navScrollTop = e.currentTarget.scrollTop; }}>
           {SECTIONS.map((section) => {
             const links = section.links.filter((l) => isAdmin || !l.adminOnly);
             if (links.length === 0) return null;
