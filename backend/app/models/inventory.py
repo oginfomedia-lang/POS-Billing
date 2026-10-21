@@ -1,4 +1,5 @@
-"""Inventory (stock per store+product, CHECK qty >= 0) and InventoryTransaction (stock ledger)."""
+"""Inventory (stock per store+product, CHECK qty >= 0), InventoryTransaction (stock ledger), StockBatch (the lots
+that stock is made of) and SaleItemBatch (which lots a bill line took)."""
 from datetime import datetime, timezone
 
 from sqlalchemy import CheckConstraint, UniqueConstraint
@@ -60,3 +61,53 @@ class InventoryTransaction(db.Model):
 
     def __repr__(self) -> str:
         return f"<InventoryTxn {self.txn_type.value} product={self.product_id} qty={self.qty}>"
+
+
+class StockBatch(db.Model):
+    """One lot of a product in a store (a goods receipt line, a stock-in, opening stock...). The batches' qty_remaining
+    always add up to Inventory.qty_on_hand: every stock change goes through services/batch_service.py.
+    Sales take from the batch that expires first (FEFO)."""
+
+    __tablename__ = "stock_batches"
+    __table_args__ = (
+        CheckConstraint("qty_remaining >= 0", name="ck_stock_batches_remaining_non_negative"),
+        db.Index("ix_stock_batches_store_product_expiry", "store_id", "product_id", "expiry_date"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    batch_number = db.Column(db.String(100), nullable=True)  # as printed on the pack (supplier's lot number)
+    mfg_date = db.Column(db.Date, nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)  # NULL = doesn't expire / not recorded: sold last
+    qty_received = db.Column(db.Numeric(12, 3), nullable=False)
+    qty_remaining = db.Column(db.Numeric(12, 3), nullable=False)
+    unit_cost = db.Column(db.Numeric(12, 4), nullable=True)  # purchase cost before GST, when known
+    # grn / stock_in / opening / return / adjustment / migration
+    source = db.Column(db.String(20), nullable=False)
+    reference_id = db.Column(db.Integer, nullable=True)  # goods receipt / return id, by source
+    received_at = db.Column(
+        db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    product = db.relationship("Product")
+
+    def __repr__(self) -> str:
+        return f"<StockBatch {self.batch_number or self.id} product={self.product_id} left={self.qty_remaining}>"
+
+
+class SaleItemBatch(db.Model):
+    """Which batches a bill line was taken from, so a return goes back to the same batch (and a recall can find
+    who bought a batch)."""
+
+    __tablename__ = "sale_item_batches"
+
+    id = db.Column(db.Integer, primary_key=True)
+    sale_item_id = db.Column(
+        db.Integer, db.ForeignKey("sale_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    batch_id = db.Column(db.Integer, db.ForeignKey("stock_batches.id"), nullable=False, index=True)
+    qty = db.Column(db.Numeric(12, 3), nullable=False)
+    qty_returned = db.Column(db.Numeric(12, 3), nullable=False, default=0, server_default="0")
+
+    batch = db.relationship("StockBatch")

@@ -38,7 +38,7 @@ from app.schemas.product_import_schemas import (
     ImportRowOut,
 )
 from app.schemas.product_schemas import MAX_COST, MAX_MONEY, _optional_hsn, _optional_plu
-from app.services import audit_service
+from app.services import audit_service, batch_service
 from app.services.product_service import (
     _add_barcode_to_product,
     _infer_barcode_type,
@@ -492,6 +492,8 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 if qty:
                     stock = inv.lock_or_create(options.store_id, product.id)
                     stock.qty_on_hand = Decimal(stock.qty_on_hand) + qty
+                    batch_service.add(options.store_id, product.id, qty, source="opening",
+                                      expiry_date=v.get("expiry_date"), unit_cost=v.get("cost_price"))
                     inv.add_transaction(
                         options.store_id, product.id, InventoryTxnType.ADJUSTMENT, qty,
                         notes=OPENING_STOCK_NOTE, expiry_date=v.get("expiry_date"),

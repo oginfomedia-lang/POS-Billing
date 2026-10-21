@@ -31,7 +31,7 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderUpdate,
     SupplierGRNOut,
 )
-from app.services import audit_service, inventory_service
+from app.services import audit_service, batch_service, inventory_service
 from app.utils.transactions import transaction
 
 
@@ -650,6 +650,11 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
                 inventory_service.add_purchase_cost(inv_row, poi.product, good, unit_cost)
                 _remember_purchase_price(po.supplier_id, poi.product, unit_cost)
                 inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + good
+                batch_service.add(
+                    po.store_id, poi.product_id, good, source="grn", reference_id=receipt.id,
+                    batch_number=ri.batch_number, mfg_date=ri.mfg_date, expiry_date=ri.expiry_date,
+                    unit_cost=unit_cost.quantize(inventory_service.COST_PLACES),
+                )
                 note = f"Goods receipt {receipt.receipt_number}"
                 if good != qty:
                     note += f" ({qty - good} rejected/damaged not stocked)"

@@ -2,10 +2,18 @@
 from flask import Blueprint, jsonify, request
 
 from app.errors.exceptions import ValidationError
-from app.schemas.inventory_schemas import AdjustStockRequest, ExpiringBatchOut, InventoryTxnOut, StockInRequest, StorePriceRequest, ThresholdRequest
+from app.schemas.inventory_schemas import (
+    AdjustStockRequest,
+    BatchWriteOffRequest,
+    ExpiringBatchOut,
+    InventoryTxnOut,
+    StockInRequest,
+    StorePriceRequest,
+    ThresholdRequest,
+)
 from app.services import auth_service, inventory_service
 from app.utils.permissions import require_permission
-from app.utils.store_scope import require_store_access
+from app.utils.store_scope import is_head_office, require_store_access
 
 inventory_bp = Blueprint("inventory", __name__)
 
@@ -71,9 +79,31 @@ def set_store_price():
 @inventory_bp.get("/inventory/expiring")
 @require_permission("inventory.read")
 def expiring():
+    """Batches expiring within ?days= (default 30) or already expired."""
     days = request.args.get("days", 30, type=int)
     results = inventory_service.expiring_soon(_store_id_arg(), days)
     return jsonify([r.model_dump(mode="json") for r in results]), 200
+
+
+@inventory_bp.get("/inventory/batches")
+@require_permission("inventory.read")
+def batches():
+    """?store_id=&product_id=: the product's batches with stock, in the order sales take them (FEFO)."""
+    product_id = request.args.get("product_id", type=int)
+    if product_id is None:
+        raise ValidationError("product_id query parameter is required.")
+    results = inventory_service.list_batches(_store_id_arg(), product_id)
+    return jsonify([r.model_dump(mode="json") for r in results]), 200
+
+
+@inventory_bp.post("/inventory/batches/<int:batch_id>/write-off")
+@require_permission("inventory.manage")
+def write_off_batch(batch_id: int):
+    data = BatchWriteOffRequest.model_validate(request.get_json(force=True))
+    actor = auth_service.current_user()
+    allowed = None if is_head_office(actor) else {actor.store_id}
+    batch = inventory_service.write_off_batch(batch_id, data, actor, allowed)
+    return jsonify({"batch_id": batch.id, "qty_remaining": str(batch.qty_remaining)}), 200
 
 
 @inventory_bp.get("/inventory/ledger")

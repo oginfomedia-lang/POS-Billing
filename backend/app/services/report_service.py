@@ -326,7 +326,8 @@ def dashboard(store_id: int | None) -> DashboardOut:
         stores, _ = StoreRepository().list(per_page=1000, active_only=True)
         store_ids = [s.id for s in stores]
     low_stock = sum(1 for sid in store_ids for lv in inventory_service.stock_levels(sid) if lv.is_low)
-    near_expiry = sum(len(inventory_service.expiring_soon(sid, NEAR_EXPIRY_DAYS)) for sid in store_ids)
+    # Products (not batches) with a batch expiring soon or already expired.
+    near_expiry = sum(len({b.product_id for b in inventory_service.expiring_soon(sid, NEAR_EXPIRY_DAYS)}) for sid in store_ids)
     return DashboardOut(
         store_id=store_id,
         date=today,

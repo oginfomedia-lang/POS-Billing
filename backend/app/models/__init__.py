@@ -3,7 +3,7 @@ from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.category import Category  # noqa: F401
 from app.models.customer import Customer, RewardTransaction  # noqa: F401
 from app.models.discount import Discount  # noqa: F401
-from app.models.inventory import Inventory, InventoryTransaction  # noqa: F401
+from app.models.inventory import Inventory, InventoryTransaction, SaleItemBatch, StockBatch  # noqa: F401
 from app.models.notification import NotificationLog  # noqa: F401
 from app.models.product import Product, ProductBarcode  # noqa: F401
 from app.models.returns import SaleReturn, SaleReturnItem  # noqa: F401

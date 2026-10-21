@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from app.extensions import db
 from app.models.enums import ShiftStatus
-from app.models.inventory import Inventory
+from app.models.inventory import Inventory, StockBatch
 from app.models.product import Product, ProductBarcode
 from app.models.shift import CashierShift
 from app.models.store import Counter, Store
@@ -76,6 +76,9 @@ def make_product(
     db.session.add(product)
     db.session.flush()
     db.session.add(Inventory(store_id=store.id, product_id=product.id, qty_on_hand=stock))
+    if stock:  # the batches always add up to the stock
+        db.session.add(StockBatch(store_id=store.id, product_id=product.id, qty_received=stock,
+                                  qty_remaining=stock, source="opening"))
     db.session.commit()
     return product
 
