@@ -1,0 +1,70 @@
+# Runs on every pull request and on pushes to main: backend tests, migrations on an empty database,
+# frontend typecheck and unit tests.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/pos_test
+      # Migrations run against their own empty database.
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/pos_migrate
+      FLASK_CONFIG: development
+      LITERETAILER_NO_SCHEDULER: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Create databases
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE pos_test"
+          psql -h localhost -U postgres -c "CREATE DATABASE pos_migrate"
+      - name: Migrations apply to an empty database
+        run: flask --app run.py db upgrade
+      - name: Tests
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"  # typecheck and unit tests don't start Electron
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
