@@ -6,7 +6,8 @@ from app.schemas.common import PagedResponse, PaginationQuery
 from app.schemas.user_schemas import PinReset, UserCreate, UserUpdate
 from app.services import auth_service, user_service
 from app.utils.permissions import require_permission
-from app.utils.store_scope import scoped_store_id
+from app.errors.exceptions import NotFoundError
+from app.utils.store_scope import is_head_office, scoped_store_id
 
 user_bp = Blueprint("users", __name__)
 
@@ -37,6 +38,9 @@ def create_user():
 @require_permission("users.read")
 def get_user(user_id: int):
     user = user_service.get_user(user_id)
+    actor = auth_service.current_user()
+    if not is_head_office(actor) and user.store_id != actor.store_id:
+        raise NotFoundError(f"User {user_id} not found.")  # another store's staff are not visible
     return jsonify(UserOut.model_validate(user).model_dump(mode="json")), 200
 
 

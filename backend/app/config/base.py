@@ -2,7 +2,8 @@
 import os
 from datetime import timedelta
 
-DEV_SECRET = "dev-only-change-me"
+# At least 32 bytes: shorter HMAC keys are weak for HS256 (PyJWT warns about them).
+DEV_SECRET = "dev-only-change-me-not-for-production-use"
 
 
 class BaseConfig:
@@ -33,6 +34,9 @@ class BaseConfig:
     )
 
     CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*")
+    # Wrong PINs (login, manager approvals): after this many in a row, that user is locked for a while.
+    PIN_MAX_FAILURES = int(os.environ.get("PIN_MAX_FAILURES", "5"))
+    PIN_LOCK_MINUTES = int(os.environ.get("PIN_LOCK_MINUTES", "5"))
 
     # Refuse API calls (except /health and /license) until the shop licence is activated.
     # On in production (the installed server); development and tests skip it.
@@ -93,6 +97,14 @@ class BaseConfig:
     # --- Supplier document uploads ---
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None
     UPLOAD_MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES") or str(20 * 1024 * 1024))  # 20 MB
+
+    # --- App updates (services/update_mirror_service.py) ---
+    # HTTPS folder holding latest.yml + LiteRetail-Setup-<version>.exe. The Main PC copies new versions from it
+    # and serves them to every PC's app at /api/v1/updates. Blank = no automatic updates.
+    UPDATE_FEED_URL = os.environ.get("UPDATE_FEED_URL", "")
+    # Where the copies are kept. Default: <data dir>/updates (%ProgramData%\LiteRetailer\updates when installed).
+    UPDATE_DIR = os.environ.get("UPDATE_DIR") or None
+    UPDATE_CHECK_HOURS = int(os.environ.get("UPDATE_CHECK_HOURS") or "6")
 
     # --- PostgreSQL replication ---
     PG_REPLICA_HOST       = os.environ.get("PG_REPLICA_HOST", "")

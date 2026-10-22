@@ -14,6 +14,15 @@ class User(TimestampMixin, db.Model):
     role = db.Column(db.Enum(UserRole, name="user_role"), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=True)
+    # Goes up when an admin resets the PIN or changes role / store / active. Every token carries the value it
+    # was issued with ("sv"); a token with an older value is refused, so the person is logged out everywhere.
+    session_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Wrong PINs in a row (login or manager approval), and until when the account is locked after too many.
+    pin_failures = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    pin_locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    # The person must choose their own PIN before using the app: set for the installer's default admin, users an
+    # admin creates, and PINs an admin resets. Cleared by POST /auth/change-pin.
+    must_change_pin = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     store = db.relationship("Store", back_populates="users")
     audit_logs = db.relationship("AuditLog", back_populates="user")

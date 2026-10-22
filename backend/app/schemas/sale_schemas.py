@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -75,13 +75,29 @@ class SaleOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+MAX_LINE_QTY = Decimal("9999")
+
+
+def _qty_to_grams(v: Any) -> Any:
+    """Quantities are kept to 3 decimals (1 g of a loose item). Round first, so the stored qty is the one
+    that gets priced: 1.2345 kg -> 1.235 kg, and the line is 1.235 × price."""
+    try:
+        return Decimal(str(v)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError, TypeError):
+        return v  # not a number: the field reports it
+
+
 class AddItemRequest(BaseModel):
     product_id: int = Field(..., ge=1)
-    qty: Decimal = Field(Decimal("1"), ge=Decimal("0.001"), le=Decimal("9999"))
+    qty: Decimal = Field(Decimal("1"), ge=Decimal("0.001"), le=MAX_LINE_QTY)
+
+    _qty = field_validator("qty", mode="before")(classmethod(lambda cls, v: _qty_to_grams(v)))
 
 
 class UpdateItemRequest(BaseModel):
-    qty: Decimal = Field(..., ge=Decimal("0.001"), le=Decimal("9999"))
+    qty: Decimal = Field(..., ge=Decimal("0.001"), le=MAX_LINE_QTY)
+
+    _qty = field_validator("qty", mode="before")(classmethod(lambda cls, v: _qty_to_grams(v)))
 
 
 class ManualDiscountRequest(BaseModel):
@@ -153,6 +169,10 @@ class ReceiptOut(BaseModel):
     customer_mobile: str | None = None  # masked, e.g. 98XXXXX210
     completed_at: datetime
     items: list[SaleItemOut]
+    # Summary under the items: bill lines (repeat scans of a product are one line) and the sum of their
+    # quantities (a loose item counts its kg, e.g. 1.25). Worked out from the saved bill lines.
+    item_lines: int = 0
+    total_qty: Decimal = Decimal("0")
     subtotal: Decimal
     discount_amount: Decimal
     bill_offer_name: str | None = None

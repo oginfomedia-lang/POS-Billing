@@ -44,6 +44,7 @@ class StockInRequest(BaseModel):
     qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
     notes: str | None = Field(None, max_length=500)
     expiry_date: date | None = None
+    batch_number: str | None = Field(None, max_length=100)
 
 
 class AdjustStockRequest(BaseModel):
@@ -69,10 +70,32 @@ class InventoryTxnOut(BaseModel):
 
 
 class ExpiringBatchOut(BaseModel):
+    """One batch expiring soon (or already expired: days_to_expiry < 0)."""
     product_id: int
     product_name: str
     barcode: str | None
-    qty_on_hand: Decimal
+    qty_on_hand: Decimal  # the product's whole stock in this store
     uom: UOMType
-    nearest_expiry: date
+    nearest_expiry: date  # this batch's expiry date
     days_to_expiry: int
+    batch_id: int | None = None
+    batch_number: str | None = None
+    batch_qty: Decimal | None = None  # what is left of this batch
+
+
+class BatchOut(BaseModel):
+    id: int
+    batch_number: str | None
+    mfg_date: date | None
+    expiry_date: date | None
+    qty_received: Decimal
+    qty_remaining: Decimal
+    source: str  # grn / stock_in / opening / return / adjustment / migration
+    received_at: datetime
+    days_to_expiry: int | None
+
+
+class BatchWriteOffRequest(BaseModel):
+    """Expired or damaged goods of one batch leave stock. qty omitted = everything left in the batch."""
+    qty: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=3)
+    reason: str = Field(..., min_length=1, max_length=200)

@@ -6,7 +6,7 @@ Runs on the VPS as the pos-backup-watcher systemd service:
 Every 15 s it
   * registers new  pos_<shop-code>_<YYYYMMDD>_<HHMMSS>.pgdump  files (the time in the name is UTC; older
     pos_db_<date>_<time>.pgdump names from before the shop code are understood too), and
-  * marks rows "deleted" when their file has gone (LiteRetailer removes VPS copies older than 30 days).
+  * marks rows "deleted" when their file has gone (LiteRetail removes VPS copies older than 30 days).
 
 It logs in with DATABASE_URL from /root/POS-Billing/backend/.env (the same login as the website) and talks
 to PostgreSQL directly: it does not start the Flask app, so no extra backup scheduler runs inside it.

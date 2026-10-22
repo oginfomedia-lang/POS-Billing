@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import InvoiceVerificationStatus, SupplierInvoiceStatus
 
@@ -25,6 +25,12 @@ class SupplierInvoiceCreate(BaseModel):
     grn_ids: list[int] = []
     # Required when the invoice differs from the value of the goods received by more than ₹1.
     difference_reason: str | None = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def due_after_invoice(self):
+        if self.due_date and self.due_date < self.invoice_date:
+            raise ValueError("The due date can't be before the invoice date.")
+        return self
 
 
 class SupplierInvoiceUpdate(BaseModel):

@@ -29,8 +29,14 @@ class StoreRepository(BaseRepository):
 class CounterRepository(BaseRepository):
     model = Counter
 
-    def get_by_code(self, code: str) -> Counter | None:
-        return db.session.scalar(db.select(Counter).where(Counter.code == code))
+    def get_by_code(self, store_id: int, code: str) -> Counter | None:
+        """Codes are unique per store (Store A and Store B can both have C01)."""
+        return db.session.scalar(db.select(Counter).where(Counter.store_id == store_id, Counter.code == code))
+
+    def get_by_label_ci(self, store_id: int, label: str) -> Counter | None:
+        return db.session.scalar(
+            db.select(Counter).where(Counter.store_id == store_id, db.func.lower(Counter.label) == label.lower())
+        )
 
     def list_for_store(self, store_id: int, active_only: bool = False) -> list[Counter]:
         q = db.select(Counter).where(Counter.store_id == store_id)

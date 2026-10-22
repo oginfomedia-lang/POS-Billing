@@ -180,6 +180,8 @@ export interface DashboardOut {
   by_method: MethodRow[];
   open_shifts: number;
   low_stock: number;
+  /** Products with stock whose batch expires within 30 days (Stock / Inventory → Expiry alerts). */
+  near_expiry: number;
   recent_sales: RecentSale[];
 }
 
@@ -266,4 +268,65 @@ export interface DailyReportLog {
   body: string | null;
   sent_at: string | null;
   updated_at: string;
+}
+
+// ── Bills / returns lists (GET /reports/bills, /reports/returns) ──────────────────
+
+export interface BillRow {
+  id: number;
+  bill_number: string | null;
+  status: 'paid' | 'voided';
+  at: string;
+  cashier_name: string;
+  counter_code: string | null;
+  items_count: number;
+  customer_mobile: string | null; // masked
+  subtotal: string;
+  discount: string;
+  tax: string;
+  total: string;
+  methods: ('cash' | 'card' | 'upi' | 'split')[];
+  refunded: string;
+}
+
+export interface ListTotals {
+  count: number;
+  subtotal: string;
+  discount: string;
+  tax: string;
+  total: string;
+}
+
+export interface BillListOut {
+  date_from: string;
+  date_to: string;
+  items: BillRow[];
+  totals: ListTotals; // every bill matching the filters, not just this page
+  page: number;
+  per_page: number;
+  pages: number;
+}
+
+export interface ReturnListRow {
+  id: number;
+  return_number: string | null;
+  created_at: string;
+  bill_number: string | null;
+  sale_id: number;
+  cashier_name: string;
+  approved_by_name: string;
+  reason: string;
+  refund_method: 'cash' | 'card' | 'upi' | 'split';
+  refund_amount: string;
+  items_count: number;
+}
+
+export interface ReturnListOut {
+  date_from: string;
+  date_to: string;
+  items: ReturnListRow[];
+  totals: ListTotals; // count and total refunded
+  page: number;
+  per_page: number;
+  pages: number;
 }

@@ -14,3 +14,9 @@ export function isMobile(raw: string): boolean {
   const n = normalizeMobile(raw);
   return n !== null && n !== '';
 }
+
+/** Returns search box: text with no letters is meant as a mobile number (bill numbers always have
+ *  letters, e.g. ST01-C01-20261020-0001), so it must then be a valid one. */
+export function looksLikeMobile(raw: string): boolean {
+  return /^[\d\s+\-()]+$/.test(raw.trim());
+}

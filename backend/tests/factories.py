@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from app.extensions import db
 from app.models.enums import ShiftStatus
-from app.models.inventory import Inventory
+from app.models.inventory import Inventory, StockBatch
 from app.models.product import Product, ProductBarcode
 from app.models.shift import CashierShift
 from app.models.store import Counter, Store
@@ -19,8 +19,9 @@ def make_store(name: str = "Test Store", **kwargs) -> Store:
     return store
 
 
-def make_counter(store: Store, code: str = "C01", label: str = "Counter 1", **kwargs) -> Counter:
-    counter = Counter(code=code, label=label, store_id=store.id, **kwargs)
+def make_counter(store: Store, code: str = "C01", label: str | None = None, **kwargs) -> Counter:
+    # Names are unique per store: default to one per code ("Counter C01").
+    counter = Counter(code=code, label=label or f"Counter {code}", store_id=store.id, **kwargs)
     db.session.add(counter)
     db.session.commit()
     return counter
@@ -70,10 +71,14 @@ def make_product(
         mrp=Decimal(mrp) if mrp is not None else None,
         hsn_code=hsn_code,
     )
-    product.barcodes.append(ProductBarcode(barcode=barcode or uuid.uuid4().hex[:13]))
+    if barcode:
+        product.barcodes.append(ProductBarcode(barcode=barcode, is_primary=True))
     db.session.add(product)
     db.session.flush()
     db.session.add(Inventory(store_id=store.id, product_id=product.id, qty_on_hand=stock))
+    if stock:  # the batches always add up to the stock
+        db.session.add(StockBatch(store_id=store.id, product_id=product.id, qty_received=stock,
+                                  qty_remaining=stock, source="opening"))
     db.session.commit()
     return product
 

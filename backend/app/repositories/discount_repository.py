@@ -16,7 +16,7 @@ class DiscountRepository(BaseRepository):
             (Discount.store_id.is_(None)) | (Discount.store_id == store_id),
             (Discount.starts_at.is_(None)) | (Discount.starts_at <= now),
             (Discount.ends_at.is_(None)) | (Discount.ends_at > now),
-        )
+        ).order_by(Discount.id)  # ties between offers keep the first: same order as offline billing
         return list(db.session.scalars(q).all())
 
     def list_all(self, store_id: int | None = None) -> list[Discount]:

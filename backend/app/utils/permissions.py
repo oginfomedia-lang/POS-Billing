@@ -31,6 +31,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "categories.create",
         "categories.read",
         "categories.update",
+        "categories.delete",
         "shifts.read",
         "shifts.manage",
         "inventory.read",
@@ -38,7 +39,8 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "discounts.read",
         "discounts.manage",
         "reports.read",
-        "reports.profit",  # cost and margins: admin only
+        "reports.profit",  # profit report (margins of the whole shop): admin only
+        "products.cost",  # see / set a product's purchase cost
         "settings.read",
         "settings.manage",
         "integrations.manage",  # payment / WhatsApp credentials: admin only
@@ -69,6 +71,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
     },
     "manager": {
         "users.read",
+        "products.cost",  # enters products and purchases, so needs the cost; the profit report stays admin only
         "stores.read",
         "counters.read",
         "products.create",
@@ -77,6 +80,7 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
         "categories.create",
         "categories.read",
         "categories.update",
+        "categories.delete",
         "shifts.read",
         "shifts.manage",
         "inventory.read",

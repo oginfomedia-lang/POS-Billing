@@ -24,6 +24,8 @@ export interface UserOut {
   role: UserRole;
   store_id: number | null;
   is_active: boolean;
+  /** The PIN was set by an admin (or is the default): the person must choose their own before anything else. */
+  must_change_pin?: boolean;
   created_at: string;
 }
 
@@ -83,6 +85,15 @@ export interface CloudUploadAttemptOut {
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
+}
+
+/** safety_copy: copying the current data first; restoring: loading the backup; updating: bringing it to this version. */
+export type RestorePhase = 'safety_copy' | 'restoring' | 'updating';
+
+export interface RestoreStatusOut {
+  running: boolean;
+  active: { id: number; target_db: string; live: boolean; phase: RestorePhase; started_at: string } | null;
+  last: { id: number; status: RestoreStatus; target_db: string; live: boolean; completed_at: string } | null;
 }
 
 export interface RestoreRecordOut {
@@ -377,6 +388,14 @@ export interface GoodsReceiptOut {
   notes: string | null;
   receipt_items: GoodsReceiptItemOut[];
   created_at: string;
+}
+
+/** Suggestions for the audit log filters (GET /audit-logs/filters). */
+export interface AuditFilterValues {
+  actions: string[];
+  entity_types: string[];
+  roles: UserRole[];
+  users: { username: string; full_name: string; role: UserRole }[];
 }
 
 export interface AuditLogOut {

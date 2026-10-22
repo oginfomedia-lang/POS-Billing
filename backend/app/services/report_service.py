@@ -6,8 +6,12 @@ from decimal import Decimal
 
 from app.models.enums import ShiftStatus
 from app.repositories.report_repository import ReportRepository
+from app.repositories.return_repository import ReturnRepository
 from app.repositories.store_repository import StoreRepository
 from app.schemas.report_schemas import (
+    BillListOut,
+    BillListQuery,
+    BillRow,
     CollectionReportOut,
     CollectionRow,
     CollectionTotals,
@@ -15,6 +19,7 @@ from app.schemas.report_schemas import (
     DashboardOut,
     GstHsnRow,
     GstRow,
+    ListTotals,
     MethodRow,
     OfferRow,
     ProfitCategoryRow,
@@ -23,6 +28,8 @@ from app.schemas.report_schemas import (
     ProfitSummary,
     RecentSale,
     ReportQuery,
+    ReturnListOut,
+    ReturnListRow,
     SalesReportOut,
     SalesSummary,
     ShiftRow,
@@ -32,6 +39,7 @@ from app.schemas.report_schemas import (
 from app.services import inventory_service, pricing_service
 from app.utils.dates import IST, business_date
 from app.utils.money import round_money
+from app.utils.phone import mask_mobile
 
 
 def _range(q: ReportQuery) -> tuple[date, date, datetime, datetime]:
@@ -256,14 +264,70 @@ def collection_report(q: ReportQuery) -> CollectionReportOut:
     )
 
 
+# The dashboard's expiry alert counts what Stock / Inventory → Expiry alerts lists.
+NEAR_EXPIRY_DAYS = 30
+
+
+def _pages(total: int, per_page: int) -> int:
+    return max(1, -(-total // per_page))
+
+
+def bill_list(q: BillListQuery) -> BillListOut:
+    """The bills behind the sales tiles (same dates, store and PAID rule), with totals for the filter."""
+    d_from, d_to, start, end = _range(q)
+    rows, t = ReportRepository().list_bills(
+        q.store_id, start, end, q.status, q.method, q.discounted, (q.q or "").strip() or None, q.page, q.per_page,
+    )
+    refunded = ReturnRepository().refunded_by_sale([s.id for s, _, _ in rows])
+    items = [
+        BillRow(
+            id=s.id, bill_number=s.bill_number, status=s.status.value,
+            at=s.completed_at if q.status == "paid" else s.updated_at,
+            cashier_name=cashier, counter_code=counter, items_count=len(s.items),
+            customer_mobile=mask_mobile(s.customer_mobile),
+            subtotal=s.subtotal, discount=s.discount_amount, tax=s.tax_amount, total=s.total,
+            methods=list(dict.fromkeys(p.method for p in s.payments)),
+            refunded=refunded.get(s.id, (0, Decimal("0")))[1],
+        )
+        for s, cashier, counter in rows
+    ]
+    return BillListOut(
+        date_from=d_from, date_to=d_to, items=items,
+        totals=ListTotals(count=t.count, subtotal=t.subtotal, discount=t.discount, tax=t.tax, total=t.total),
+        page=q.page, per_page=q.per_page, pages=_pages(t.count, q.per_page),
+    )
+
+
+def return_list(q: BillListQuery) -> ReturnListOut:
+    """Refunds (credit notes) paid in the period, as counted by the sales report's Returns tile."""
+    d_from, d_to, start, end = _range(q)
+    rows, t = ReportRepository().list_returns(q.store_id, start, end, q.page, q.per_page)
+    items = [
+        ReturnListRow(
+            id=r.id, return_number=r.return_number, created_at=r.created_at,
+            bill_number=r.sale.bill_number if r.sale else None, sale_id=r.sale_id,
+            cashier_name=r.cashier.full_name if r.cashier else "", approved_by_name=r.approved_by.full_name if r.approved_by else "",
+            reason=r.reason, refund_method=r.refund_method, refund_amount=r.refund_amount, items_count=len(r.items),
+        )
+        for r in rows
+    ]
+    return ReturnListOut(
+        date_from=d_from, date_to=d_to, items=items, totals=ListTotals(count=t.count, total=t.total),
+        page=q.page, per_page=q.per_page, pages=_pages(t.count, q.per_page),
+    )
+
+
 def dashboard(store_id: int | None) -> DashboardOut:
     repo = ReportRepository()
     today, _, start, end = _range(ReportQuery())
     if store_id is not None:
-        low_stock = sum(1 for lv in inventory_service.stock_levels(store_id) if lv.is_low)
+        store_ids = [store_id]
     else:
         stores, _ = StoreRepository().list(per_page=1000, active_only=True)
-        low_stock = sum(1 for s in stores for lv in inventory_service.stock_levels(s.id) if lv.is_low)
+        store_ids = [s.id for s in stores]
+    low_stock = sum(1 for sid in store_ids for lv in inventory_service.stock_levels(sid) if lv.is_low)
+    # Products (not batches) with a batch expiring soon or already expired.
+    near_expiry = sum(len({b.product_id for b in inventory_service.expiring_soon(sid, NEAR_EXPIRY_DAYS)}) for sid in store_ids)
     return DashboardOut(
         store_id=store_id,
         date=today,
@@ -271,6 +335,7 @@ def dashboard(store_id: int | None) -> DashboardOut:
         by_method=_methods(repo, store_id, start, end),
         open_shifts=repo.open_shift_count(store_id),
         low_stock=low_stock,
+        near_expiry=near_expiry,
         recent_sales=[
             RecentSale(id=s.id, bill_number=s.bill_number, cashier_name=name, total=s.total, completed_at=s.completed_at)
             for s, name in repo.recent_sales(store_id)

@@ -47,6 +47,13 @@ class ConflictError(AppError):
     code = "CONFLICT"
 
 
+class TooManyAttemptsError(AppError):
+    """Too many wrong PINs for one user: login and approvals with that user wait a few minutes."""
+
+    status_code = 429
+    code = "TOO_MANY_ATTEMPTS"
+
+
 class InsufficientStockError(AppError):
     """details = [{"product_id": ..., "product_name": ..., "requested": ..., "available": ...}]"""
 

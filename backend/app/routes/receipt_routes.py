@@ -11,7 +11,7 @@ receipt_bp = Blueprint("receipts", __name__)
 @receipt_bp.get("/sales/<int:sale_id>/receipt")
 @require_permission("sales.read")
 def get_receipt(sale_id: int):
-    receipt = receipt_service.build_receipt(sale_id)
+    receipt = receipt_service.build_receipt(sale_id, auth_service.current_user())
     return jsonify(receipt.model_dump(mode="json")), 200
 
 

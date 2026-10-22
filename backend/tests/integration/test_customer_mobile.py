@@ -106,3 +106,10 @@ def test_find_bills_is_own_store_only(client, cashier_headers, shift, store):
 
     assert client.get("/api/v1/returns/bills?mobile=9876543210", headers=cashier_headers).get_json() == []
     assert len(client.get("/api/v1/returns/bills?mobile=9876543210", headers=other_headers).get_json()) == 1
+
+
+@pytest.mark.parametrize("mobile", ["98765", "98765abcde", "5876543210", "98765432101", "+92 9876543210", "abc"])
+def test_returns_mobile_search_rejects_bad_numbers(client, cashier_headers, mobile):
+    resp = client.get("/api/v1/returns/bills", query_string={"mobile": mobile}, headers=cashier_headers)
+    assert resp.status_code == 400
+    assert "10-digit mobile" in resp.get_json()["error"]["message"]

@@ -135,6 +135,20 @@ export async function createCategory(data: { name: string; parent_id?: number | 
   return resp.data;
 }
 
+/** Only the fields given change; parent_id: null moves it to the top level. */
+export async function updateCategory(
+  id: number,
+  data: { name?: string; parent_id?: number | null; is_active?: boolean },
+): Promise<CategoryOut> {
+  const resp = await httpClient.put<CategoryOut>(`/categories/${id}`, data);
+  return resp.data;
+}
+
+/** Refused (409) while products, sub-categories or offers still use the category. */
+export async function deleteCategory(id: number): Promise<void> {
+  await httpClient.delete(`/categories/${id}`);
+}
+
 // ── Bulk import (CSV / Excel) ──
 
 /** A big file can take a while to check and save. */

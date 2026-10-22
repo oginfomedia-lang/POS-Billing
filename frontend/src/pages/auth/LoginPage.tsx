@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { LanguageSwitcher } from '../../components/common/LanguageSwitcher';
 import { IconEye, IconEyeOff, IconLogOut, IconShoppingCart } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
+import { useAuthStore } from '../../store/authStore';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { lastStoreName } from '../../store/storeContext';
 import { VENDOR_NAME } from '../../utils/brand';
@@ -12,6 +13,7 @@ import { VENDOR_NAME } from '../../utils/brand';
 export function LoginPage() {
   const { t } = useTranslation();
   const { login, isAuthenticated, user } = useAuth();
+  const endedReason = useAuthStore((s) => s.endedReason);
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('');
@@ -23,8 +25,9 @@ export function LoginPage() {
   // Redirect when already authenticated (or just after a successful login).
   useEffect(() => {
     if (isAuthenticated && user) {
-      const dest =
-        user.role === 'admin' || user.role === 'manager' ? '/admin' : '/pos';
+      const dest = user.must_change_pin
+        ? '/change-pin'
+        : user.role === 'admin' || user.role === 'manager' ? '/admin' : '/pos';
       navigate(dest, { replace: true });
     }
   }, [isAuthenticated, user, navigate]);
@@ -51,11 +54,12 @@ export function LoginPage() {
           <div className="login-brand-logo">
             <IconShoppingCart size={28} color="#ffffff" />
           </div>
-          <h1 className="login-title">{lastStoreName() || 'LiteRetailer'}</h1>
+          <h1 className="login-title">{lastStoreName() || 'LiteRetail'}</h1>
           <p className="login-subtitle">{t('login.subtitle')}</p>
         </div>
 
         {error && <div className="login-error">{error}</div>}
+        {!error && endedReason && <div className="login-error" role="status">{endedReason}</div>}
 
         <form onSubmit={handleSubmit} className="login-form">
           <label className="field-label">

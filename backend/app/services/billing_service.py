@@ -6,6 +6,8 @@ before committing, so the sale returned to the client always has correct totals.
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from app.errors.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError
 from app.extensions import db
 from app.models.enums import SaleStatus, UserRole
@@ -15,6 +17,7 @@ from app.repositories.product_repository import ProductRepository
 from app.repositories.sale_repository import SaleRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.sale_schemas import (
+    MAX_LINE_QTY,
     AddItemRequest,
     CompleteSaleRequest,
     HoldSaleRequest,
@@ -36,7 +39,7 @@ from app.services.shift_service import require_active_shift
 from app.utils.dates import now_ist
 from app.utils.money import money_mul, round_money
 from app.utils.phone import normalize_mobile
-from app.utils.security import verify_pin
+from app.utils.security import check_user_pin
 from app.utils.transactions import transaction
 
 
@@ -67,6 +70,11 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
 
         item = SaleRepository().find_item(sale.id, product.id)
         if item is not None:
+            if item.qty + data.qty > MAX_LINE_QTY:
+                raise AppError(
+                    f"{product.name}: one line can have at most {MAX_LINE_QTY} "
+                    f"(already {item.qty.normalize():f} on the bill)."
+                )
             item.qty += data.qty
         else:
             item = SaleItem(
@@ -109,7 +117,8 @@ def remove_item(sale_id: int, item_id: int, actor: User) -> Sale:
 
 def set_manual_discount(sale_id: int, item_id: int, data: ManualDiscountRequest, actor: User) -> Sale:
     """Counter discount on one line, approved with a manager/admin PIN. amount 0 removes it."""
-    approver = _verify_approver(data.approver_username, data.approver_pin)
+    bill = SaleRepository().get_by_id(sale_id)
+    approver = _verify_approver(data.approver_username, data.approver_pin, store_id=bill.store_id if bill else None)
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
@@ -142,13 +151,18 @@ def set_manual_discount(sale_id: int, item_id: int, data: ManualDiscountRequest,
     return sale
 
 
-def _verify_approver(username: str, pin: str, what: str = "a discount") -> User:
-    """Manual discounts and returns need a manager or admin to approve with their own PIN."""
+def _verify_approver(username: str, pin: str, what: str = "a discount", store_id: int | None = None) -> User:
+    """Manual discounts and returns need a manager or admin to approve with their own PIN.
+
+    With store_id: the approver must work at that store. A head-office user (no store) may approve anywhere.
+    """
     user = UserRepository().get_by_username(username.strip())
-    if user is None or not user.is_active or not verify_pin(pin, user.pin_hash):
+    if user is None or not user.is_active or not check_user_pin(user, pin):
         raise PermissionDeniedError("Approval failed: wrong manager username or PIN.")
     if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
         raise PermissionDeniedError(f"Only a manager or admin can approve {what}.")
+    if store_id is not None and user.store_id is not None and user.store_id != store_id:
+        raise PermissionDeniedError(f"Only a manager of this store (or head office) can approve {what}.")
     return user
 
 
@@ -321,6 +335,10 @@ def _get_item_or_404(sale: Sale, item_id: int) -> SaleItem:
     raise NotFoundError(f"Item {item_id} not found on sale {sale.id}.")
 
 
+# Money columns are NUMERIC(12, 2).
+MAX_BILL_AMOUNT = Decimal("9999999999.99")
+
+
 def _recalculate(sale: Sale) -> None:
     """Re-prices every line with the offers active now.
 
@@ -333,7 +351,12 @@ def _recalculate(sale: Sale) -> None:
     for item in items:
         item.line_total = money_mul(item.unit_price, item.qty)
         # A manual discount can't take the line below zero (e.g. qty was reduced after it was given).
-        item.manual_discount = min(round_money(item.manual_discount or 0), item.line_total)
+        if item.unit_price < 0:
+            raise AppError(
+                f"{item.product_name} has a negative price (₹{item.unit_price}). "
+                "Correct the price in Admin → Products, then bill it."
+            )
+        item.manual_discount = max(min(round_money(item.manual_discount or 0), item.line_total), Decimal("0"))
         room.append(item.line_total - item.manual_discount)
 
     with_gst = sum(
@@ -341,6 +364,12 @@ def _recalculate(sale: Sale) -> None:
          for item, r in zip(items, room)),
         pricing_service.ZERO,
     )
+    # Checked before the next query, which would try to save the oversized amounts (database error → 500).
+    if max(sum((i.line_total for i in items), pricing_service.ZERO), with_gst) > MAX_BILL_AMOUNT:
+        raise AppError(
+            f"The bill amount is too large (the most one bill can hold is ₹{MAX_BILL_AMOUNT:,}). "
+            "Reduce the quantity or split it into more bills."
+        )
     discounts = discount_service.active_for_store(sale.store_id)
     chosen = discount_service.choose_best_offer(discounts, items, room, with_gst)
     offer = chosen.offer

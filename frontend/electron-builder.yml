@@ -1,10 +1,10 @@
 # Windows installer build settings. Full build (backend + app + installer): scripts\build\build_installer.ps1
-# Output: release\LiteRetailer-Setup-<version>.exe
+# Output: release\LiteRetail-Setup-<version>.exe
 appId: com.litecode.literetailer
-productName: LiteRetailer
-executableName: LiteRetailer
+productName: LiteRetail
+executableName: LiteRetail
 copyright: Copyright © 2026 LiteCode Software Pvt Ltd
-artifactName: LiteRetailer-Setup-${version}.${ext}
+artifactName: LiteRetail-Setup-${version}.${ext}
 directories:
   output: release
   buildResources: build
@@ -20,6 +20,12 @@ extraResources:
     to: backend/winsw/LiteRetailerServer.exe
   - from: build/winsw/LiteRetailerServer.xml
     to: backend/winsw/LiteRetailerServer.xml
+# Auto-update (documentation/auto-update.md): makes release\latest.yml (upload it with the installer and its
+# .blockmap) and resources\app-update.yml. The URL is a placeholder: each PC's app reads updates from
+# <apiUrl in counter.json>/updates on the Main PC (electron/updater.ts), which copies them from UPDATE_FEED_URL.
+publish:
+  - provider: generic
+    url: http://localhost:5000/api/v1/updates
 win:
   target: nsis
   icon: build/icon.ico
@@ -31,8 +37,8 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: LiteRetailer
-  uninstallDisplayName: LiteRetailer
+  shortcutName: LiteRetail
+  uninstallDisplayName: LiteRetail
   deleteAppDataOnUninstall: false
   # Setup type / PostgreSQL / counter pages and the install steps. The PostgreSQL installer in
   # build\vendor\postgresql is packed by installer.nsh itself (extracted only when it is needed).

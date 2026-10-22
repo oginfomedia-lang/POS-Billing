@@ -3,6 +3,7 @@
 import { createHashRouter, Navigate } from 'react-router-dom';
 import { PosLayout } from '../components/layout/PosLayout';
 import { AuditLogsPage } from '../pages/admin/AuditLogsPage';
+import { BillsPage } from '../pages/admin/BillsPage';
 import { BackupPage } from '../pages/admin/BackupPage';
 import { SuppliersPage } from '../pages/admin/SuppliersPage';
 import { SupplierDetailPage } from '../pages/admin/SupplierDetailPage';
@@ -18,15 +19,19 @@ import { ProductsPage } from '../pages/admin/ProductsPage';
 import { ReportsPage } from '../pages/admin/ReportsPage';
 import { SettingsPage } from '../pages/admin/SettingsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
+import { ChangePinPage } from '../pages/auth/ChangePinPage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { BillingPage } from '../pages/pos/BillingPage';
 import { CloseShiftPage } from '../pages/pos/CloseShiftPage';
 import { HeldBillsPage } from '../pages/pos/HeldBillsPage';
+import { OfflineBillingPage } from '../pages/pos/OfflineBillingPage';
+import { OfflineReceiptPage } from '../pages/pos/OfflineReceiptPage';
 import { OpenShiftPage } from '../pages/pos/OpenShiftPage';
 import { PosPage } from '../pages/pos/PosPage';
 import { ReprintPage } from '../pages/pos/ReprintPage';
 import { ReturnReceiptPage } from '../pages/pos/ReturnReceiptPage';
 import { ReturnsPage } from '../pages/pos/ReturnsPage';
+import { ShiftBillsPage } from '../pages/pos/ShiftBillsPage';
 import { ProtectedRoute } from './ProtectedRoute';
 import { LicenseGuard } from '../components/LicenseGuard';
 
@@ -35,6 +40,8 @@ export const router = createHashRouter([
     element: <LicenseGuard><PosLayout /></LicenseGuard>,
     children: [
       { path: '/', element: <LoginPage /> },
+      // Logged in, but outside ProtectedRoute: that guard sends people here while their PIN must change.
+      { path: '/change-pin', element: <ChangePinPage /> },
 
       // Any authenticated user
       {
@@ -44,10 +51,13 @@ export const router = createHashRouter([
           { path: '/pos/billing', element: <BillingPage /> },
           { path: '/pos/shift/open', element: <OpenShiftPage /> },
           { path: '/pos/shift/close', element: <CloseShiftPage /> },
+          { path: '/pos/shift/bills', element: <ShiftBillsPage /> },
           { path: '/pos/held', element: <HeldBillsPage /> },
           { path: '/pos/reprint/:saleId', element: <ReprintPage /> },
           { path: '/pos/returns', element: <ReturnsPage /> },
           { path: '/pos/return-receipt/:returnId', element: <ReturnReceiptPage /> },
+          { path: '/pos/offline', element: <OfflineBillingPage /> },
+          { path: '/pos/offline/receipt/:offlineId', element: <OfflineReceiptPage /> },
         ],
       },
 
@@ -66,6 +76,7 @@ export const router = createHashRouter([
           { path: '/admin/labels', element: <LabelPrintPage /> },
           { path: '/admin/discounts', element: <DiscountsPage /> },
           { path: '/admin/reports', element: <ReportsPage /> },
+          { path: '/admin/bills', element: <BillsPage /> },
           { path: '/admin/customers', element: <CustomersPage /> },
           { path: '/admin/settings', element: <SettingsPage /> },
           { path: '/admin/backups', element: <BackupPage /> },

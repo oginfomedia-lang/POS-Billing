@@ -49,6 +49,13 @@ def update_category(category_id: int):
     return jsonify(CategoryOut.model_validate(cat).model_dump(mode="json")), 200
 
 
+@product_bp.delete("/categories/<int:category_id>")
+@require_permission("categories.delete")
+def delete_category(category_id: int):
+    product_service.delete_category(category_id)
+    return "", 204
+
+
 # ── Products ──────────────────────────────────────────────────────────────────
 
 @product_bp.get("/products")
@@ -69,8 +76,8 @@ def list_products():
 
 
 def _sees_cost() -> bool:
-    """Purchase cost and margins are for admins only (the same users as the profit report)."""
-    return has_permission(auth_service.current_user().role, "reports.profit")
+    """Purchase cost is for admins and managers (cashiers never see it)."""
+    return has_permission(auth_service.current_user().role, "products.cost")
 
 
 def _without_cost(data):
@@ -82,7 +89,7 @@ def _without_cost(data):
 
 
 def _with_store_prices(products: list, store_id: int | None) -> list[dict]:
-    """ProductOut dicts, with store_price filled in when a store is selected (and costs for admins)."""
+    """ProductOut dicts, with store_price filled in when a store is selected (and costs for admin / manager)."""
     ids = [p.id for p in products]
     overrides = inventory_service.store_prices(store_id, ids) if store_id else {}
     show_cost = _sees_cost()

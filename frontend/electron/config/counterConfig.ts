@@ -29,6 +29,7 @@ const DEFAULT_CONFIG: CounterConfig = {
 
 export function getConfigPath(): string {
   if (app.isPackaged) {
+    // Same folder the installer writes to (backend app/utils/paths.py data_dir: "LiteRetailer").
     return join(process.env.ProgramData ?? 'C:\\ProgramData', 'LiteRetailer', 'counter.json');
   }
   return join(app.getPath('userData'), 'counter.json');

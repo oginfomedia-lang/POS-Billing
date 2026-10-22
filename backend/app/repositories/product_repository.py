@@ -2,6 +2,7 @@
 from app.extensions import db
 from app.models.product import Product, ProductBarcode
 from app.repositories.base_repository import BaseRepository
+from app.utils.search_key import MIN_QUERY_KEY, search_key
 
 
 class ProductRepository(BaseRepository):
@@ -64,10 +65,16 @@ class ProductRepository(BaseRepository):
         if is_active is not None:
             q = q.where(Product.is_active.is_(is_active))
         if search:
-            # Name / SKU contains the text, or an exact barcode match.
-            like = f"%{search}%"
+            # Name / SKU contains the text, or an exact barcode match, or the name sounds like it:
+            # "madhur" finds "मधुर साखर", "tandul" finds "Tandool" (app/utils/search_key.py).
+            # % and _ typed in the box are ordinary characters, not wildcards (autoescape).
             by_barcode = db.select(ProductBarcode.product_id).where(ProductBarcode.barcode == search)
-            q = q.where(Product.name.ilike(like) | Product.sku.ilike(like) | Product.id.in_(by_barcode))
+            match = (Product.name.icontains(search, autoescape=True) | Product.sku.icontains(search, autoescape=True)
+                     | Product.id.in_(by_barcode))
+            key = search_key(search)
+            if len(key) >= MIN_QUERY_KEY:
+                match = match | Product.search_key.contains(key, autoescape=True)
+            q = q.where(match)
         if active_only:
             q = q.where(Product.is_active.is_(True))
         if category_id is not None:

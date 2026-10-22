@@ -18,6 +18,7 @@ import { useStoreContext, useStores } from '../../store/storeContext';
 import { formatRupees } from '../../utils/money';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { ProductImportDialog } from '../../components/admin/ProductImportDialog';
 import type { SupplierOut } from '../../types/api';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
@@ -152,8 +153,9 @@ export function ProductsPage() {
   const priceWithGst = Number.isFinite(priceNum) ? priceNum * (1 + (parseFloat(formTax) || 0) / 100) : null;
   const mrpNum = parseFloat(formMrp);
   const mrpTooLow = priceWithGst !== null && Number.isFinite(mrpNum) && mrpNum + 0.005 < priceWithGst;
-  // Purchase cost is admin only. The branch's average cost (from goods receipts) wins over the default cost.
-  const seesCost = user?.role === 'admin';
+  // Purchase cost: admin and manager (the server hides it from cashiers). The branch's average cost
+  // (from goods receipts) wins over the default cost.
+  const seesCost = user?.role === 'admin' || user?.role === 'manager';
   const branchAvgCost = target?.store_avg_cost ?? null;
   const costNum = parseFloat(branchAvgCost ?? formCost);
   const belowCost = Number.isFinite(priceNum) && Number.isFinite(costNum) && priceNum + 0.005 < costNum;
@@ -221,34 +223,28 @@ export function ProductsPage() {
     const code = barcodeInput.trim();
     if (!code) return;
 
-    if (barcodesList.some((b) => b.barcode === code)) {
-      setFormError(t('products.duplicateBarcode', { code }));
+    if (barcodesList.length > 0) {
+      setFormError(t('products.oneBarcodeHint'));
       return;
     }
 
-    const bType = inferBarcodeType(code);
-    setBarcodesList([...barcodesList, { barcode: code, barcode_type: bType }]);
+    setBarcodesList([{ barcode: code, barcode_type: inferBarcodeType(code) }]);
     setBarcodeInput('');
     setFormError('');
   }
 
   async function handleGenerateInHouse() {
+    if (barcodesList.length > 0) return; // one barcode per product
     setGenerating(true);
     setFormError('');
     try {
       if (target?.id) {
         const generated = await generateInhouseBarcode(target.id);
-        if (!barcodesList.some((b) => b.barcode === generated.barcode)) {
-          setBarcodesList([
-            ...barcodesList,
-            { barcode: generated.barcode, barcode_type: generated.barcode_type || 'IN_HOUSE' },
-          ]);
-        }
+        setBarcodesList([{ barcode: generated.barcode, barcode_type: generated.barcode_type || 'IN_HOUSE' }]);
       } else {
         // Product not saved yet: the server hands out an unused code; it's attached when you click Create.
-        if (barcodesList.some((b) => b.barcode_type === 'IN_HOUSE')) return;
         const code = await generateNewInhouseBarcode();
-        setBarcodesList([...barcodesList, { barcode: code, barcode_type: 'IN_HOUSE' }]);
+        setBarcodesList([{ barcode: code, barcode_type: 'IN_HOUSE' }]);
       }
     } catch (err) {
       setFormError(getErrorMessage(err));
@@ -500,11 +496,12 @@ export function ProductsPage() {
                 </label>
                 <label className="field-label">
                   {t('products.productName')}
-                  <input
+                  <MarathiInput
                     className="field-input"
                     value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
+                    onChange={setFormName}
                     required
+                    maxLength={200}
                     placeholder={t('products.namePlaceholder')}
                   />
                 </label>
@@ -555,7 +552,8 @@ export function ProductsPage() {
                     onChange={(e) => setFormCategory(e.target.value)}
                   >
                     <option value="">{t('common.none')}</option>
-                    {categories.map((c) => (
+                    {/* Deactivated categories are not offered, except the one this product already has. */}
+                    {categories.filter((c) => c.is_active || String(c.id) === formCategory).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>
@@ -630,6 +628,9 @@ export function ProductsPage() {
                     onChange={(e) => setFormCost(e.target.value)}
                     placeholder={t('products.costPlaceholder')}
                   />
+                  {!formCost.trim() && branchAvgCost === null && (
+                    <span className="hint-text">{t('products.costAutoHint')}</span>
+                  )}
                   {branchAvgCost !== null && (
                     <span className="hint-text">{t('products.branchAvgCost', { cost: formatRupees(Number(branchAvgCost).toFixed(2)) })}</span>
                   )}
@@ -668,6 +669,7 @@ export function ProductsPage() {
 
               <div className="field-label">
                 <span>{t('products.barcodes')}</span>
+                {barcodesList.length === 0 && (
                 <div className="barcode-scanner-box">
                   <input
                     ref={barcodeInputRef}
@@ -695,6 +697,7 @@ export function ProductsPage() {
                     {generating ? t('products.generating') : t('products.generate')}
                   </button>
                 </div>
+                )}
 
                 <div className="barcode-chips-list">
                   {barcodesList.map((b) => (
@@ -713,11 +716,9 @@ export function ProductsPage() {
                       </button>
                     </span>
                   ))}
-                  {barcodesList.length === 0 && (
-                    <span className="hint-text">
-                      {t('products.noBarcodes')}
-                    </span>
-                  )}
+                  <span className="hint-text">
+                    {barcodesList.length === 0 ? t('products.noBarcodes') : t('products.oneBarcodeHint')}
+                  </span>
                 </div>
               </div>
 

@@ -93,8 +93,8 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
     pdf.rule()
 
     pdf.row("Item", "Amt", bold=True)
-    for i in r.items:
-        pdf.row(i.product_name, f"{i.line_total}")
+    for n, i in enumerate(r.items, start=1):
+        pdf.row(f"{n}. {i.product_name}", f"{i.line_total}")
         if i.is_variable_weight:
             details = [f"{float(i.qty):.3f} {i.uom} × {i.unit_price}/{i.uom}"]
         else:
@@ -109,6 +109,9 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
         if i.manual_discount > 0:
             reason = f" ({i.manual_discount_reason})" if i.manual_discount_reason else ""
             pdf.row(f"  Discount{reason}", f"-{i.manual_discount}", size=7)
+    pdf.rule()
+    items_text, qty_text = item_summary(r)
+    pdf.row(items_text, qty_text, bold=True)
     pdf.rule()
 
     item_savings = r.discount_amount - r.bill_offer_discount - r.reward_discount
@@ -140,6 +143,11 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
     if r.receipt_footer:
         pdf.ln(2)
         pdf.center(r.receipt_footer)
+
+
+def item_summary(r: ReceiptOut) -> tuple[str, str]:
+    """The line under the items, same as the printed bill: number of bill lines | total quantity."""
+    return f"Total Items: {r.item_lines}", f"Total Qty: {r.total_qty}"
 
 
 def render(receipt: ReceiptOut) -> bytes:

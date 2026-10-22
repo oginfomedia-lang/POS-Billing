@@ -1,0 +1,907 @@
+[
+  {
+    "name": "no offers, mixed GST",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "45.50",
+        "tax_rate": "5.00",
+        "qty": "3"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "99.99",
+        "tax_rate": "18.00",
+        "qty": "1"
+      },
+      {
+        "product_id": 3,
+        "category_id": null,
+        "unit_price": "12.00",
+        "tax_rate": "0.00",
+        "qty": "2"
+      }
+    ],
+    "offers": [],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "136.50",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "6.83"
+        },
+        {
+          "line_total": "99.99",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "18.00"
+        },
+        {
+          "line_total": "24.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "0.00"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "260.49",
+      "discount_amount": "0.00",
+      "tax_amount": "24.83",
+      "total": "285.32"
+    }
+  },
+  {
+    "name": "product % with cap",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "250.00",
+        "tax_rate": "12.00",
+        "qty": "4"
+      }
+    ],
+    "offers": [
+      {
+        "id": 1,
+        "name": "15% off (max ₹100)",
+        "discount_type": "percentage",
+        "value": "15.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": "100.00",
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "1000.00",
+          "offer_id": 1,
+          "offer_name": "15% off (max ₹100)",
+          "offer_discount": "100.00",
+          "discount_amount": "100.00",
+          "tax_amount": "108.00"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "1000.00",
+      "discount_amount": "100.00",
+      "tax_amount": "108.00",
+      "total": "1008.00"
+    }
+  },
+  {
+    "name": "product fixed per unit",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "30.00",
+        "tax_rate": "5.00",
+        "qty": "5"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "10.00",
+        "tax_rate": "5.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 2,
+        "name": "₹3 off each",
+        "discount_type": "fixed",
+        "value": "3.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "150.00",
+          "offer_id": 2,
+          "offer_name": "₹3 off each",
+          "offer_discount": "15.00",
+          "discount_amount": "15.00",
+          "tax_amount": "6.75"
+        },
+        {
+          "line_total": "10.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "0.50"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "160.00",
+      "discount_amount": "15.00",
+      "tax_amount": "7.25",
+      "total": "152.25"
+    }
+  },
+  {
+    "name": "category offer reaches sub-category",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": 103,
+        "unit_price": "20.00",
+        "tax_rate": "12.00",
+        "qty": "3"
+      },
+      {
+        "product_id": 2,
+        "category_id": 104,
+        "unit_price": "40.00",
+        "tax_rate": "12.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 3,
+        "name": "Snacks 10%",
+        "discount_type": "percentage",
+        "value": "10.00",
+        "scope": "category",
+        "product_id": null,
+        "category_id": 102,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "60.00",
+          "offer_id": 3,
+          "offer_name": "Snacks 10%",
+          "offer_discount": "6.00",
+          "discount_amount": "6.00",
+          "tax_amount": "6.48"
+        },
+        {
+          "line_total": "40.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "4.80"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "100.00",
+      "discount_amount": "6.00",
+      "tax_amount": "11.28",
+      "total": "105.28"
+    }
+  },
+  {
+    "name": "buy 2 get 1, full group",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "60.00",
+        "tax_rate": "5.00",
+        "qty": "3"
+      }
+    ],
+    "offers": [
+      {
+        "id": 4,
+        "name": "Buy 2 Get 1",
+        "discount_type": "buy_x_get_y",
+        "value": "0.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": 2,
+        "get_qty": 1,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "180.00",
+          "offer_id": 4,
+          "offer_name": "Buy 2 Get 1",
+          "offer_discount": "60.00",
+          "discount_amount": "60.00",
+          "tax_amount": "6.00"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "180.00",
+      "discount_amount": "60.00",
+      "tax_amount": "6.00",
+      "total": "126.00"
+    }
+  },
+  {
+    "name": "buy 1 get 1, odd qty",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "33.33",
+        "tax_rate": "18.00",
+        "qty": "3"
+      }
+    ],
+    "offers": [
+      {
+        "id": 5,
+        "name": "B1G1",
+        "discount_type": "buy_x_get_y",
+        "value": "0.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": 1,
+        "get_qty": 1,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "99.99",
+          "offer_id": 5,
+          "offer_name": "B1G1",
+          "offer_discount": "50.00",
+          "discount_amount": "50.00",
+          "tax_amount": "9.00"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "99.99",
+      "discount_amount": "50.00",
+      "tax_amount": "9.00",
+      "total": "58.99"
+    }
+  },
+  {
+    "name": "3 for 99 incl GST, 7 units",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "35.00",
+        "tax_rate": "5.00",
+        "qty": "7"
+      }
+    ],
+    "offers": [
+      {
+        "id": 6,
+        "name": "3 for ₹99",
+        "discount_type": "qty_price",
+        "value": "99.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": 3,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "245.00",
+          "offer_id": 6,
+          "offer_name": "3 for ₹99",
+          "offer_discount": "21.43",
+          "discount_amount": "21.43",
+          "tax_amount": "11.18"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "245.00",
+      "discount_amount": "21.43",
+      "tax_amount": "11.18",
+      "total": "234.75"
+    }
+  },
+  {
+    "name": "bill % beats item offer",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "100.00",
+        "tax_rate": "5.00",
+        "qty": "2"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "150.00",
+        "tax_rate": "18.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 7,
+        "name": "₹5 off item",
+        "discount_type": "fixed",
+        "value": "5.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      },
+      {
+        "id": 8,
+        "name": "10% on ₹300+",
+        "discount_type": "percentage",
+        "value": "10.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": "300.00",
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "200.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "20.00",
+          "tax_amount": "9.00"
+        },
+        {
+          "line_total": "150.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "15.00",
+          "tax_amount": "24.30"
+        }
+      ],
+      "bill_offer_id": 8,
+      "bill_offer_name": "10% on ₹300+",
+      "bill_offer_discount": "35.00",
+      "subtotal": "350.00",
+      "discount_amount": "35.00",
+      "tax_amount": "33.30",
+      "total": "348.30"
+    }
+  },
+  {
+    "name": "bill fixed split with remainder",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "10.00",
+        "tax_rate": "5.00",
+        "qty": "1"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "10.00",
+        "tax_rate": "5.00",
+        "qty": "1"
+      },
+      {
+        "product_id": 3,
+        "category_id": null,
+        "unit_price": "10.01",
+        "tax_rate": "5.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 9,
+        "name": "₹10 off bill",
+        "discount_type": "fixed",
+        "value": "10.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "10.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "3.33",
+          "tax_amount": "0.33"
+        },
+        {
+          "line_total": "10.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "3.33",
+          "tax_amount": "0.33"
+        },
+        {
+          "line_total": "10.01",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "3.34",
+          "tax_amount": "0.33"
+        }
+      ],
+      "bill_offer_id": 9,
+      "bill_offer_name": "₹10 off bill",
+      "bill_offer_discount": "10.00",
+      "subtotal": "30.01",
+      "discount_amount": "10.00",
+      "tax_amount": "0.99",
+      "total": "21.00"
+    }
+  },
+  {
+    "name": "bill minimum not met (checked with GST)",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "95.00",
+        "tax_rate": "5.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 10,
+        "name": "₹20 off ₹100+",
+        "discount_type": "fixed",
+        "value": "20.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": "100.00",
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "95.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "4.75"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "95.00",
+      "discount_amount": "0.00",
+      "tax_amount": "4.75",
+      "total": "99.75"
+    }
+  },
+  {
+    "name": "bill minimum met only with GST",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "96.00",
+        "tax_rate": "5.00",
+        "qty": "1"
+      }
+    ],
+    "offers": [
+      {
+        "id": 11,
+        "name": "₹20 off ₹100+",
+        "discount_type": "fixed",
+        "value": "20.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": "100.00",
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "96.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "20.00",
+          "tax_amount": "3.80"
+        }
+      ],
+      "bill_offer_id": 11,
+      "bill_offer_name": "₹20 off ₹100+",
+      "bill_offer_discount": "20.00",
+      "subtotal": "96.00",
+      "discount_amount": "20.00",
+      "tax_amount": "3.80",
+      "total": "79.80"
+    }
+  },
+  {
+    "name": "loose item by weight",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "42.00",
+        "tax_rate": "0.00",
+        "qty": "1.235"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "180.00",
+        "tax_rate": "5.00",
+        "qty": "0.375"
+      }
+    ],
+    "offers": [
+      {
+        "id": 12,
+        "name": "8% loose",
+        "discount_type": "percentage",
+        "value": "8.00",
+        "scope": "product",
+        "product_id": 2,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "51.87",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.00",
+          "tax_amount": "0.00"
+        },
+        {
+          "line_total": "67.50",
+          "offer_id": 12,
+          "offer_name": "8% loose",
+          "offer_discount": "5.40",
+          "discount_amount": "5.40",
+          "tax_amount": "3.11"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "119.37",
+      "discount_amount": "5.40",
+      "tax_amount": "3.11",
+      "total": "117.08"
+    }
+  },
+  {
+    "name": "tie keeps the first offer",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "50.00",
+        "tax_rate": "5.00",
+        "qty": "2"
+      }
+    ],
+    "offers": [
+      {
+        "id": 13,
+        "name": "First ₹10",
+        "discount_type": "fixed",
+        "value": "5.00",
+        "scope": "product",
+        "product_id": 1,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      },
+      {
+        "id": 14,
+        "name": "Second ₹10",
+        "discount_type": "fixed",
+        "value": "10.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": null,
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "100.00",
+          "offer_id": 13,
+          "offer_name": "First ₹10",
+          "offer_discount": "10.00",
+          "discount_amount": "10.00",
+          "tax_amount": "4.50"
+        }
+      ],
+      "bill_offer_id": null,
+      "bill_offer_name": null,
+      "bill_offer_discount": "0.00",
+      "subtotal": "100.00",
+      "discount_amount": "10.00",
+      "tax_amount": "4.50",
+      "total": "94.50"
+    }
+  },
+  {
+    "name": "bill % with cap",
+    "lines": [
+      {
+        "product_id": 1,
+        "category_id": null,
+        "unit_price": "1999.00",
+        "tax_rate": "18.00",
+        "qty": "1"
+      },
+      {
+        "product_id": 2,
+        "category_id": null,
+        "unit_price": "1.00",
+        "tax_rate": "0.00",
+        "qty": "3"
+      }
+    ],
+    "offers": [
+      {
+        "id": 15,
+        "name": "5% max ₹50",
+        "discount_type": "percentage",
+        "value": "5.00",
+        "scope": "bill",
+        "product_id": null,
+        "category_id": null,
+        "min_bill_amount": null,
+        "max_discount_amount": "50.00",
+        "buy_qty": null,
+        "get_qty": null,
+        "starts_at": null,
+        "ends_at": null
+      }
+    ],
+    "categories": {
+      "101": null,
+      "102": 101,
+      "103": 102,
+      "104": null
+    },
+    "expected": {
+      "lines": [
+        {
+          "line_total": "1999.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "49.93",
+          "tax_amount": "350.83"
+        },
+        {
+          "line_total": "3.00",
+          "offer_id": null,
+          "offer_name": null,
+          "offer_discount": "0.00",
+          "discount_amount": "0.07",
+          "tax_amount": "0.00"
+        }
+      ],
+      "bill_offer_id": 15,
+      "bill_offer_name": "5% max ₹50",
+      "bill_offer_discount": "50.00",
+      "subtotal": "2002.00",
+      "discount_amount": "50.00",
+      "tax_amount": "350.83",
+      "total": "2302.83"
+    }
+  }
+]

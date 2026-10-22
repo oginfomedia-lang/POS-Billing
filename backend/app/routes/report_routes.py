@@ -1,7 +1,7 @@
 """Report endpoints."""
 from flask import Blueprint, jsonify, request
 
-from app.schemas.report_schemas import ReportQuery
+from app.schemas.report_schemas import BillListQuery, ReportQuery
 from app.services import auth_service, report_service
 from app.utils.permissions import require_permission
 from app.utils.store_scope import scoped_store_id
@@ -46,3 +46,21 @@ def collection_report():
     q = ReportQuery.model_validate(request.args.to_dict())
     q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
     return jsonify(report_service.collection_report(q).model_dump(mode="json")), 200
+
+
+@report_bp.get("/reports/bills")
+@require_permission("reports.read")
+def bill_list():
+    """Bills for the Bills page (the sales tiles lead here)."""
+    q = BillListQuery.model_validate(request.args.to_dict())
+    q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
+    return jsonify(report_service.bill_list(q).model_dump(mode="json")), 200
+
+
+@report_bp.get("/reports/returns")
+@require_permission("reports.read")
+def return_list():
+    """Refunds paid in the period (the Returns tile leads here)."""
+    q = BillListQuery.model_validate(request.args.to_dict())
+    q.store_id = scoped_store_id(auth_service.current_user(), q.store_id)
+    return jsonify(report_service.return_list(q).model_dump(mode="json")), 200

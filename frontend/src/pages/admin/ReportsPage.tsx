@@ -2,6 +2,7 @@
 import type { ParseKeys } from 'i18next';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { useAuth } from '../../hooks/useAuth';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -28,11 +29,25 @@ function pct(value: string | null): string {
 export function ReportsPage() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState<Tab>('sales');
+  const navigate = useNavigate();
+  // ?tab=gst / ?tab=shifts (dashboard tiles) and ?from=&to= open the report at that place.
+  const [params] = useSearchParams();
+  const asked = params.get('tab') as Tab | null;
+  const [tab, setTab] = useState<Tab>(asked && ['sales', 'gst', 'shifts', 'collection', 'profit'].includes(asked) ? asked : 'sales');
   const storeId = useStoreContext((s) => s.selectedId);
   const storeName = useStoreDisplayName();
-  const [dateFrom, setDateFrom] = useState(isoDateIst());
-  const [dateTo, setDateTo] = useState(isoDateIst());
+  const [dateFrom, setDateFrom] = useState(params.get('from') || isoDateIst());
+  const [dateTo, setDateTo] = useState(params.get('to') || params.get('from') || isoDateIst());
+
+  /** The bills / returns behind a tile, for the same dates (branch from the sidebar). */
+  function openBills(extra = '') {
+    navigate(`/admin/bills?from=${dateFrom}&to=${dateTo}${extra}`);
+  }
+
+  /** Profit tiles: down to the tables that make up the figure. */
+  function showProfitDetail() {
+    document.getElementById('profit-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
   const [sales, setSales] = useState<SalesReportOut | null>(null);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
@@ -148,20 +163,20 @@ export function ReportsPage() {
       {sales && s && tab === 'sales' && (
         <>
           <div className="stat-grid">
-            <div className="stat-tile">
+            <button className="stat-tile stat-link" onClick={() => openBills()}>
               <span className="stat-label">{t('reports.netSales')}</span>
               <span className="stat-value">{formatRupees(s.net_total)}</span>
               {s.returns > 0 && <span className="stat-sub">{t('reports.salesMinusReturns', { sales: formatRupees(s.total), returns: formatRupees(s.refunded) })}</span>}
-            </div>
-            <div className="stat-tile">
+            </button>
+            <button className="stat-tile stat-link" onClick={() => openBills('&tab=returns')}>
               <span className="stat-label">{t('reports.returns')}</span>
               <span className="stat-value">{formatRupees(s.refunded)}</span>
               <span className="stat-sub">{t('reports.returnsCount', { count: s.returns })}</span>
-            </div>
-            <div className="stat-tile"><span className="stat-label">{t('reports.bills')}</span><span className="stat-value">{s.bills}</span><span className="stat-sub">{t('reports.avgVoided', { avg: formatRupees(s.average_bill), voided: s.voided })}</span></div>
-            <div className="stat-tile"><span className="stat-label">{t('reports.gross')}</span><span className="stat-value">{formatRupees(s.subtotal)}</span></div>
-            <div className="stat-tile"><span className="stat-label">{t('reports.discounts')}</span><span className="stat-value">{formatRupees(s.discount)}</span></div>
-            <div className="stat-tile"><span className="stat-label">{t('reports.gst')}</span><span className="stat-value">{formatRupees(s.tax)}</span></div>
+            </button>
+            <button className="stat-tile stat-link" onClick={() => openBills()}><span className="stat-label">{t('reports.bills')}</span><span className="stat-value">{s.bills}</span><span className="stat-sub">{t('reports.avgVoided', { avg: formatRupees(s.average_bill), voided: s.voided })}</span></button>
+            <button className="stat-tile stat-link" onClick={() => openBills()}><span className="stat-label">{t('reports.gross')}</span><span className="stat-value">{formatRupees(s.subtotal)}</span></button>
+            <button className="stat-tile stat-link" onClick={() => openBills('&discount=1')}><span className="stat-label">{t('reports.discounts')}</span><span className="stat-value">{formatRupees(s.discount)}</span></button>
+            <button className="stat-tile stat-link" onClick={() => setTab('gst')}><span className="stat-label">{t('reports.gst')}</span><span className="stat-value">{formatRupees(s.tax)}</span></button>
           </div>
 
           <div className="dash-columns">
@@ -360,30 +375,30 @@ export function ReportsPage() {
             </div>
           )}
           <div className="stat-grid">
-            <div className="stat-tile">
+            <button className="stat-tile stat-link" onClick={() => openBills()}>
               <span className="stat-label">{t('reports.profitSales')}</span>
               <span className="stat-value">{formatRupees(profit.summary.costed_sales)}</span>
               {Number(profit.summary.returns) > 0 && (
                 <span className="stat-sub">{t('reports.afterReturns', { amount: formatRupees(profit.summary.returns) })}</span>
               )}
-            </div>
-            <div className="stat-tile">
+            </button>
+            <button className="stat-tile stat-link" onClick={showProfitDetail}>
               <span className="stat-label">{t('reports.cogs')}</span>
               <span className="stat-value">{formatRupees(profit.summary.cogs)}</span>
-            </div>
-            <div className="stat-tile">
+            </button>
+            <button className="stat-tile stat-link" onClick={showProfitDetail}>
               <span className="stat-label">{t('reports.grossProfit')}</span>
               <span className={`stat-value${Number(profit.summary.gross_profit) < 0 ? ' profit-loss' : ''}`}>
                 {formatRupees(profit.summary.gross_profit)}
               </span>
-            </div>
-            <div className="stat-tile">
+            </button>
+            <button className="stat-tile stat-link" onClick={showProfitDetail}>
               <span className="stat-label">{t('reports.margin')}</span>
               <span className="stat-value">{pct(profit.summary.margin_pct)}</span>
-            </div>
+            </button>
           </div>
 
-          <h3 className="section-title">{t('reports.byCategory')}</h3>
+          <h3 className="section-title" id="profit-detail">{t('reports.byCategory')}</h3>
           <div className="table-card">
             <table className="data-table">
               <thead>

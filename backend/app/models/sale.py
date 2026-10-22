@@ -32,6 +32,9 @@ class Sale(TimestampMixin, db.Model):
     reward_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")
     points_earned = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Billed on a counter while the server was unreachable (services/offline_service.py): the counter's own id
+    # for the bill, so uploading it twice records it once. NULL = an ordinary bill.
+    offline_id = db.Column(db.String(36), unique=True, nullable=True)
 
     items = db.relationship(
         "SaleItem", back_populates="sale", cascade="all, delete-orphan", order_by="SaleItem.id"

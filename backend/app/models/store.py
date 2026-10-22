@@ -21,10 +21,12 @@ class Store(TimestampMixin, db.Model):
 
 
 class Counter(TimestampMixin, db.Model):
+    """A till. Codes and labels are unique within a store, so every branch can have its own C01 / "Counter 1"."""
+
     __tablename__ = "counters"
 
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(10), unique=True, nullable=False)
+    code = db.Column(db.String(10), nullable=False)
     label = db.Column(db.String(100), nullable=False)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
@@ -32,6 +34,11 @@ class Counter(TimestampMixin, db.Model):
     edc_device_id = db.Column(db.String(100), nullable=True)
 
     store = db.relationship("Store", back_populates="counters")
+
+    __table_args__ = (
+        db.UniqueConstraint("store_id", "code", name="uq_counters_store_id_code"),
+        db.Index("uq_counters_store_id_label", "store_id", db.text("lower(label)"), unique=True),
+    )
 
     def __repr__(self) -> str:
         return f"<Counter {self.code}>"

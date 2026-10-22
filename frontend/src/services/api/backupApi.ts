@@ -5,6 +5,7 @@ import type {
   PagedResponse,
   ReplicationStatusOut,
   RestoreRecordOut,
+  RestoreStatusOut,
 } from '../../types/api';
 import { httpClient } from './httpClient';
 
@@ -61,12 +62,19 @@ export const backupApi = {
 
   // ── Restore ───────────────────────────────────────────────────────────────
 
+  /** Starts the restore on the server and answers at once (status "running"): follow it with restoreStatus. */
   triggerRestore(id: number, targetDb: string) {
     return httpClient.post<RestoreRecordOut>(`/backups/${id}/restore`, { target_db: targetDb });
   },
 
+  /** Works while the shop's database is being replaced (every other request then answers RESTORE_IN_PROGRESS). */
+  restoreStatus() {
+    return httpClient.get<RestoreStatusOut>('/backups/restore-status');
+  },
+
+  /** current_db: the database this server uses (what a normal restore targets). */
   listRestores(page = 1, perPage = 20) {
-    return httpClient.get<PagedResponse<RestoreRecordOut>>('/backups/restores', {
+    return httpClient.get<PagedResponse<RestoreRecordOut> & { current_db: string }>('/backups/restores', {
       params: { page, per_page: perPage },
     });
   },

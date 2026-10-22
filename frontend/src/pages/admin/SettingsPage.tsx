@@ -1,7 +1,9 @@
 // Receipt text, store-wide inventory defaults, return window, WhatsApp daily report, and this counter's printer.
 import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { DailyReportCard } from '../../components/admin/DailyReportCard';
 import { IntegrationsCard } from '../../components/admin/IntegrationsCard';
 import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
@@ -42,6 +44,15 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // ?section=printer (sidebar tree): scroll to that part once the page has loaded. location.key changes on
+  // every click, so picking the same section again scrolls again.
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const section = params.get('section');
+  useEffect(() => {
+    if (loading || !section) return;
+    document.getElementById(`settings-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loading, section, location.key]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,18 +93,18 @@ export function SettingsPage() {
       {loading ? (
         <div className="loading-text">{t('settings.loading')}</div>
       ) : (
-        <form className="modal-form settings-form" onSubmit={submit}>
+        <form className="modal-form settings-form settings-anchor" id="settings-general" onSubmit={submit}>
           <p className="hint-text">
             {t('settings.hint')}
           </p>
           <label className="field-label">
             {t('settings.header')}
-            <input
+            <MarathiInput
               className="field-input"
               maxLength={200}
               value={settings.receipt_header}
               disabled={!isAdmin || saving}
-              onChange={(e) => update('receipt_header', e.target.value)}
+              onChange={(v) => update('receipt_header', v)}
               placeholder={t('settings.headerPlaceholder')}
             />
           </label>
@@ -109,12 +120,12 @@ export function SettingsPage() {
           </label>
           <label className="field-label">
             {t('settings.footerMr')}
-            <input
+            <MarathiInput
               className="field-input"
               maxLength={200}
               value={settings.receipt_footer_mr}
               disabled={!isAdmin || saving}
-              onChange={(e) => update('receipt_footer_mr', e.target.value)}
+              onChange={(v) => update('receipt_footer_mr', v)}
             />
             <span className="hint-text">{t('settings.footerMrHint')}</span>
           </label>
@@ -160,7 +171,7 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.returnWindowHint')}</span>
           </label>
-          <h3 className="section-title">{t('settings.rewards.title')}</h3>
+          <h3 className="section-title settings-anchor" id="settings-rewards">{t('settings.rewards.title')}</h3>
           <label className="field-label checkbox-label">
             <input
               type="checkbox"
@@ -210,7 +221,7 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.rewards.hint')}</span>
           </label>
-          <h3 className="section-title">{t('settings.ebill.title')}</h3>
+          <h3 className="section-title settings-anchor" id="settings-ebill">{t('settings.ebill.title')}</h3>
           <label className="field-label checkbox-label">
             <input
               type="checkbox"
@@ -221,7 +232,7 @@ export function SettingsPage() {
             {t('settings.ebill.enabled')}
           </label>
           <p className="hint-text">{t('settings.ebill.hint')}</p>
-          <h3 className="section-title">{t('settings.cardUpi.title')}</h3>
+          <h3 className="section-title settings-anchor" id="settings-cardupi">{t('settings.cardUpi.title')}</h3>
           {(['manual', 'razorpay'] as const).map((mode) => (
             <label key={mode} className="field-label checkbox-label">
               <input
@@ -234,7 +245,7 @@ export function SettingsPage() {
               <span><strong>{t(`settings.cardUpi.${mode}`)}</strong> — {t(`settings.cardUpi.${mode}Hint`)}</span>
             </label>
           ))}
-          <h3 className="section-title">{t('settings.scale.title')}</h3>
+          <h3 className="section-title settings-anchor" id="settings-scale">{t('settings.scale.title')}</h3>
           <p className="hint-text">{t('settings.scale.hint')}</p>
           <div className="form-row-3">
             <label className="field-label">
@@ -295,6 +306,7 @@ export function SettingsPage() {
         </form>
       )}
       {!loading && (
+        <div className="settings-anchor" id="settings-daily-report">
         <DailyReportCard
           value={settings}
           onChange={update}
@@ -303,9 +315,10 @@ export function SettingsPage() {
           canEdit={isAdmin}
           disabled={saving}
         />
+        </div>
       )}
-      {!loading && isAdmin && <IntegrationsCard />}
-      {hasPrinterBridge() && <PrinterSettingsCard />}
+      {!loading && isAdmin && <div className="settings-anchor" id="settings-integrations"><IntegrationsCard /></div>}
+      {hasPrinterBridge() && <div className="settings-anchor" id="settings-printer"><PrinterSettingsCard /></div>}
     </div>
   );
 }

@@ -244,7 +244,12 @@ def remove_supplier_product(supplier_id: int, sp_id: int, actor: User | None) ->
 
 
 def get_products_for_po(supplier_id: int) -> list[dict]:
-    """Return active mapped products with purchase prices for the PO form."""
+    """Active mapped products for the PO form, with the rate to start each line at.
+
+    purchase_price: the supplier's rate (the last goods receipt sets it), else the product's default cost,
+    else None: the user must type it. The selling price is never used as a purchase rate; it is sent
+    separately so the form can warn when the rate is not below it.
+    """
     rows = db.session.execute(
         select(SupplierProduct, Product)
         .join(Product, SupplierProduct.product_id == Product.id)
@@ -258,7 +263,9 @@ def get_products_for_po(supplier_id: int) -> list[dict]:
             "id": p.id,
             "name": p.name,
             "sku": p.sku,
-            "purchase_price": float(sp.purchase_price) if sp.purchase_price else float(p.price),
+            "purchase_price": _po_rate(sp, p),
+            "last_purchase_price": float(sp.last_purchase_price) if sp.last_purchase_price is not None else None,
+            "selling_price": float(p.price),
             "tax_rate": float(p.tax_rate),
             "supplier_product_code": sp.supplier_product_code,
             "min_order_qty": float(sp.min_order_qty) if sp.min_order_qty else 1,
@@ -426,3 +433,11 @@ def update_supplier(supplier_id: int, data: SupplierUpdate, actor: User | None) 
             new_values={"company_name": supplier.company_name, "is_active": supplier.is_active},
         )
     return supplier
+
+
+def _po_rate(sp: SupplierProduct, p: Product) -> float | None:
+    if sp.purchase_price is not None:
+        return float(sp.purchase_price)
+    if p.cost_price is not None:
+        return round(float(p.cost_price), 2)
+    return None

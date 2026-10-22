@@ -4,20 +4,43 @@
 import { useEffect, useState } from 'react';
 import { LicensePage } from '../pages/auth/LicensePage';
 import { getLicense, type LicenseStatus } from '../services/api/licenseApi';
+import { useAuthStore } from '../store/authStore';
 import { useCounterStore } from '../store/counterStore';
+import { useOfflineStore } from '../store/offlineStore';
 
 const WARNING_DAYS = 30;
+// Offline billing may skip this check (server unreachable) only if the licence was seen valid this recently.
+const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+const LICENCE_OK_KEY = 'lr-licence-ok-at';
+
+function rememberLicenceOk(): void {
+  try { localStorage.setItem(LICENCE_OK_KEY, String(Date.now())); } catch { /* private window: no offline grace */ }
+}
+
+/** Server unreachable: can this PC bill offline? The cashier is still logged in with an open shift, the
+ * offline files exist (Electron), and the licence was valid within OFFLINE_GRACE_MS. */
+function canBillOffline(): boolean {
+  let okAt = 0;
+  try { okAt = Number(localStorage.getItem(LICENCE_OK_KEY) || 0); } catch { return false; }
+  const user = useAuthStore.getState().user;
+  const shift = useOfflineStore.getState().lastShift;
+  return Boolean(window.posBridge?.offline) && Date.now() - okAt < OFFLINE_GRACE_MS
+    && user !== null && shift !== null && shift.user_id === user.id;
+}
 
 export function LicenseGuard({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<LicenseStatus | null>(null);
   const [unreachable, setUnreachable] = useState(false);
   const [warningDismissed, setWarningDismissed] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(false);
   const apiUrl = useCounterStore((s) => s.config?.apiUrl ?? '');
 
   async function checkLicense() {
     setUnreachable(false);
     try {
-      setStatus(await getLicense());
+      const found = await getLicense();
+      if (found.valid || found.required === false) rememberLicenceOk();
+      setStatus(found);
     } catch {
       setStatus(null);
       setUnreachable(true);
@@ -28,6 +51,8 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
     checkLicense();
   }, []);
 
+  if (unreachable && offlineMode) return <>{children}</>;
+
   if (unreachable) {
     return (
       <div style={{
@@ -35,12 +60,21 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         background: '#0f172a', color: '#e2e8f0', fontFamily: 'system-ui, sans-serif',
         flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center',
       }}>
-        <div style={{ fontSize: '1.2em', fontWeight: 700 }}>Cannot reach the LiteRetailer server</div>
+        <div style={{ fontSize: '1.2em', fontWeight: 700 }}>Cannot reach the LiteRetail server</div>
         <div style={{ color: '#94a3b8', fontSize: '0.9em', maxWidth: 460 }}>
           Check that the Main PC is switched on and connected to the store network.
           Server address: <code>{apiUrl}</code>
         </div>
         <button type="button" className="btn-primary" onClick={checkLicense}>Try again</button>
+        {canBillOffline() && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => { window.location.hash = '#/pos/offline'; setOfflineMode(true); }}
+          >
+            Bill offline (cash)
+          </button>
+        )}
       </div>
     );
   }

@@ -10,6 +10,7 @@ from app.routes.discount_routes import discount_bp
 from app.routes.health_routes import health_bp
 from app.routes.inventory_routes import inventory_bp
 from app.routes.license_routes import license_bp
+from app.routes.offline_routes import offline_bp
 from app.routes.product_routes import product_bp
 from app.routes.receipt_routes import receipt_bp
 from app.routes.report_routes import report_bp
@@ -21,6 +22,7 @@ from app.routes.supplier_routes import supplier_bp
 from app.routes.purchase_routes import purchase_bp
 from app.routes.supplier_invoice_routes import supplier_invoice_bp
 from app.routes.supplier_payment_routes import supplier_payment_bp
+from app.routes.update_routes import update_bp
 from app.routes.upload_routes import upload_bp
 from app.routes.user_routes import user_bp
 
@@ -49,3 +51,5 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(supplier_payment_bp, url_prefix=prefix)
     app.register_blueprint(upload_bp, url_prefix=prefix)
     app.register_blueprint(customer_bp, url_prefix=prefix)
+    app.register_blueprint(update_bp, url_prefix=prefix)
+    app.register_blueprint(offline_bp, url_prefix=prefix)

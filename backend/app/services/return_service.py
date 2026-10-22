@@ -106,8 +106,10 @@ def bills_for_mobile(mobile: str, actor: User) -> list[BillForMobileOut]:
 
 
 def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
-    approver = billing_service._verify_approver(data.approver_username, data.approver_pin, "a return")
     shift = require_active_shift(actor.id)
+    approver = billing_service._verify_approver(
+        data.approver_username, data.approver_pin, "a return", store_id=shift.store_id
+    )
     window = settings_service.get_settings().return_window_days
 
     with transaction():
@@ -191,10 +193,13 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
     return ret
 
 
-def get_return(return_id: int) -> SaleReturn:
+def get_return(return_id: int, actor: User | None = None) -> SaleReturn:
     ret = ReturnRepository().get_by_id(return_id)
     if ret is None:
         raise NotFoundError(f"Return {return_id} not found.")
+    if actor is not None:
+        from app.utils.store_scope import require_same_store_or_404
+        require_same_store_or_404(actor, ret.store_id, f"Return {return_id}")
     return ret
 
 

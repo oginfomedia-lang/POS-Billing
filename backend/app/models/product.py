@@ -21,6 +21,9 @@ class Product(TimestampMixin, db.Model):
     sku = db.Column(db.String(50), unique=True, nullable=False, default=_gen_sku)
 
     name = db.Column(db.String(200), nullable=False)
+    # Sound-alike form of the name (app/utils/search_key.py), kept up to date below, so typing "madhur"
+    # finds "मधुर साखर". Never shown.
+    search_key = db.Column(db.String(400), nullable=True)
     description = db.Column(db.Text, nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)  # selling price, before GST
@@ -51,12 +54,23 @@ class Product(TimestampMixin, db.Model):
         return f"<Product {self.name}>"
 
 
+@db.event.listens_for(Product, "before_insert")
+@db.event.listens_for(Product, "before_update")
+def _set_search_key(mapper, connection, product: "Product") -> None:
+    """Every way a product is saved (form, import, scripts) keeps its search key in step with its name."""
+    from app.utils.search_key import search_key
+
+    product.search_key = search_key(product.name)
+
+
 class ProductBarcode(db.Model):
     __tablename__ = "product_barcodes"
 
     id = db.Column(db.Integer, primary_key=True)
+    __table_args__ = (db.UniqueConstraint("product_id", name="uq_product_barcodes_product_id"),)  # one per product
+
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
-    barcode = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    barcode =db.Column(db.String(100), unique=True, nullable=False, index=True)
     barcode_type = db.Column(db.Enum(BarcodeType), nullable=False, default=BarcodeType.MANUFACTURER)
     is_primary = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_now)

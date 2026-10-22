@@ -23,3 +23,9 @@ class UserUpdate(BaseModel):
 
 class PinReset(BaseModel):
     new_pin: str = Field(..., min_length=4, max_length=12, pattern=r"^[A-Za-z0-9]{4,12}$")
+
+
+class PinChange(BaseModel):
+    """A person changing their own PIN."""
+    current_pin: str = Field(..., min_length=1, max_length=12)
+    new_pin: str = Field(..., min_length=4, max_length=12, pattern=r"^[A-Za-z0-9]{4,12}$")

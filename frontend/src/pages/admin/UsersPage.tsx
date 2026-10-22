@@ -1,9 +1,10 @@
 // User management: list, create, edit, reset PIN.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
 import type { PagedResponse, StoreOut, UserOut, UserRole } from '../../types/api';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { useStoreContext } from '../../store/storeContext';
 
@@ -34,7 +35,11 @@ export function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // Only the latest request may fill the table (switching branch quickly must not show the old branch's staff).
+  const requestNo = useRef(0);
+
   async function fetchUsers(p = page) {
+    const mine = ++requestNo.current;
     setLoading(true);
     setError('');
     try {
@@ -42,6 +47,7 @@ export function UsersPage() {
         httpClient.get<PagedResponse<UserOut>>('/users', { params: { page: p, per_page: 25, status: view, store_id: branchId ?? undefined } }),
         httpClient.get<PagedResponse<StoreOut>>('/stores', { params: { per_page: 100 } }),
       ]);
+      if (mine !== requestNo.current) return;
       setUsers(usersResp.data.items);
       setTotal(usersResp.data.total);
       setStores(storesResp.data.items);
@@ -53,6 +59,15 @@ export function UsersPage() {
   }
 
   useEffect(() => { fetchUsers(); }, [page, view, branchId]);
+  // A different branch starts again at page 1 with an empty table (no stale rows while loading).
+  useEffect(() => { setPage(1); setUsers([]); }, [branchId]);
+
+  const storeName = (id: number | null) =>
+    id === null ? t('users.headOffice') : stores.find((s) => s.id === id)?.name ?? `#${id}`;
+  // Managers and cashiers belong to one store; only admins may be head office (no store).
+  const needsStore = formRole !== 'admin';
+  // New staff only go to active stores; when editing, the person's current store stays in the list.
+  const storeChoices = stores.filter((s) => s.is_active || String(s.id) === formStoreId);
 
   function openCreate() {
     setModal('create');
@@ -150,18 +165,19 @@ export function UsersPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>{t('users.colUsername')}</th><th>{t('users.colFullName')}</th><th>{t('users.colRole')}</th><th>{t('common.actions')}</th>
+              <th>{t('users.colUsername')}</th><th>{t('users.colFullName')}</th><th>{t('users.colRole')}</th><th>{t('users.colStore')}</th><th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {!loading && users.length === 0 && (
-              <tr><td colSpan={4} className="empty-row">{view === 'active' ? t('users.emptyActive') : t('users.emptyInactive')}</td></tr>
+              <tr><td colSpan={5} className="empty-row">{view === 'active' ? t('users.emptyActive') : t('users.emptyInactive')}</td></tr>
             )}
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td>
                 <td>{u.full_name}</td>
                 <td><span className={`role-badge role-${u.role}`}>{t(`roles.${u.role}`)}</span></td>
+                <td>{storeName(u.store_id)}</td>
                 <td className="table-actions">
                   <button className="btn-sm" onClick={() => openEdit(u)}>{t('common.edit')}</button>
                   <button className="btn-sm" onClick={() => openPin(u)}>{t('users.resetPin')}</button>
@@ -188,9 +204,10 @@ export function UsersPage() {
                 <form onSubmit={handleCreate} className="modal-form">
                   <label className="field-label">{t('users.username')}
                     <input className="field-input" value={formUsername} onChange={e => setFormUsername(e.target.value)} required pattern="[a-z0-9_]+" minLength={3} maxLength={50} />
+                    <span className="hint-text">{t('users.usernameHint')}</span>
                   </label>
                   <label className="field-label">{t('users.fullName')}
-                    <input className="field-input" value={formFullName} onChange={e => setFormFullName(e.target.value)} required />
+                    <MarathiInput className="field-input" value={formFullName} onChange={setFormFullName} required maxLength={150} />
                   </label>
                   <label className="field-label">{t('users.pin')}
                     <input className="field-input" type="password" value={formPin} onChange={e => setFormPin(e.target.value)} required minLength={4} maxLength={12} />
@@ -201,10 +218,11 @@ export function UsersPage() {
                     </select>
                   </label>
                   <label className="field-label">{t('common.store')}
-                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
-                      <option value="">{t('common.none')}</option>
-                      {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)} required={needsStore}>
+                      <option value="" disabled={needsStore}>{needsStore ? t('users.chooseStore') : t('users.headOffice')}</option>
+                      {storeChoices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+                    {needsStore && !formStoreId && <span className="hint-text">{t('users.storeRequired')}</span>}
                   </label>
                   <div className="modal-buttons">
                     <button type="button" className="btn-secondary" onClick={() => setModal(null)}>{t('common.cancel')}</button>
@@ -220,7 +238,7 @@ export function UsersPage() {
                 {formError && <div className="form-error">{formError}</div>}
                 <form onSubmit={handleEdit} className="modal-form">
                   <label className="field-label">{t('users.fullName')}
-                    <input className="field-input" value={formFullName} onChange={e => setFormFullName(e.target.value)} required />
+                    <MarathiInput className="field-input" value={formFullName} onChange={setFormFullName} required maxLength={150} />
                   </label>
                   <label className="field-label">{t('users.role')}
                     <select className="field-input" value={formRole} onChange={e => setFormRole(e.target.value as UserRole)}>
@@ -228,10 +246,11 @@ export function UsersPage() {
                     </select>
                   </label>
                   <label className="field-label">{t('common.store')}
-                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)}>
-                      <option value="">{t('common.none')}</option>
-                      {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    <select className="field-input" value={formStoreId} onChange={e => setFormStoreId(e.target.value)} required={needsStore}>
+                      <option value="" disabled={needsStore}>{needsStore ? t('users.chooseStore') : t('users.headOffice')}</option>
+                      {storeChoices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+                    {needsStore && !formStoreId && <span className="hint-text">{t('users.storeRequired')}</span>}
                   </label>
                   <label className="field-label checkbox-label">
                     <input type="checkbox" checked={formActive} onChange={e => setFormActive(e.target.checked)} />

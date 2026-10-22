@@ -1,5 +1,5 @@
 // Inventory API calls.
-import type { ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
+import type { BatchOut, ExpiringBatchOut, InventoryTxnOut, StockLevelOut } from '../../types/inventory';
 import { httpClient } from './httpClient';
 
 interface QtyResponse {
@@ -19,6 +19,7 @@ export async function stockIn(
   qty: string,
   notes?: string,
   expiryDate?: string,
+  batchNumber?: string,
 ): Promise<QtyResponse> {
   const resp = await httpClient.post<QtyResponse>('/inventory/stock-in', {
     store_id: storeId,
@@ -26,8 +27,22 @@ export async function stockIn(
     qty,
     notes: notes || null,
     expiry_date: expiryDate || null,
+    batch_number: batchNumber || null,
   });
   return resp.data;
+}
+
+/** The product's batches with stock, in the order sales take them (earliest expiry first). */
+export async function getBatches(storeId: number, productId: number): Promise<BatchOut[]> {
+  const resp = await httpClient.get<BatchOut[]>('/inventory/batches', {
+    params: { store_id: storeId, product_id: productId },
+  });
+  return resp.data;
+}
+
+/** Takes expired / damaged goods of one batch out of stock. qty null = all that is left. */
+export async function writeOffBatch(batchId: number, qty: string | null, reason: string): Promise<void> {
+  await httpClient.post(`/inventory/batches/${batchId}/write-off`, { qty, reason });
 }
 
 /** Stock-take correction: sets the counted qty. A reason is required. */

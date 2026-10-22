@@ -5,7 +5,7 @@ Two steps, both from the same uploaded file:
 2. apply(): only when no row has an error, saves everything in one transaction (all or nothing).
 
 A row whose SKU or barcode is already in the system updates that product (price, MRP, GST...); blank cells
-keep what is saved, and barcodes are only ever added. Opening stock is for new products only, so
+keep what is saved, and a barcode is only added to a product that has none (one per product). Opening stock is for new products only, so
 importing a price list again never doubles the stock. It is written to the stock ledger like any stock-in.
 """
 from __future__ import annotations
@@ -37,8 +37,8 @@ from app.schemas.product_import_schemas import (
     ImportResult,
     ImportRowOut,
 )
-from app.schemas.product_schemas import _optional_hsn, _optional_plu
-from app.services import audit_service
+from app.schemas.product_schemas import MAX_COST, MAX_MONEY, _optional_hsn, _optional_plu
+from app.services import audit_service, batch_service
 from app.services.product_service import (
     _add_barcode_to_product,
     _infer_barcode_type,
@@ -204,8 +204,9 @@ def _parse(number: int, cells: dict) -> _Row:
         except InvalidOperation:
             row.errors.append(f"{col}: '{raw[col]}' is not a number.")
             continue
-        if value < 0 or (col == "tax_rate" and value > 100):
-            row.errors.append(f"{col}: {value} is out of range.")
+        limit = Decimal("100") if col == "tax_rate" else MAX_COST if col == "cost_price" else MAX_MONEY
+        if value < 0 or value > limit:
+            row.errors.append(f"{col}: {value} is out of range (0 to {limit}).")
             continue
         row.values[col] = value.quantize(Decimal("0.01"))
 
@@ -242,6 +243,8 @@ def _parse(number: int, cells: dict) -> _Row:
         for b in row.barcodes:
             if len(b) > 100:
                 row.errors.append(f"barcode '{b[:20]}…' is too long.")
+        if len(row.barcodes) > 1:
+            row.errors.append("barcodes: a product can have only one barcode.")
 
     if raw.get("is_variable_weight"):
         flag = raw["is_variable_weight"].lower()
@@ -347,6 +350,11 @@ def analyse(rows: list[tuple[int, dict]], options: ImportOptions, actor: User) -
             seen_product.setdefault(row.match.id, row.number)
             if not row.name:
                 row.name = row.match.name
+            saved = [b.barcode for b in row.match.barcodes]
+            if row.barcodes and saved and row.barcodes[0] not in saved:
+                row.errors.append(
+                    f"'{row.match.name}' already has barcode {saved[0]}; a product can have only one barcode."
+                )
 
         _check_row(row, look, options, actor, store_error, new_categories)
 
@@ -438,7 +446,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
     """Saves an analysed file that has no errors, all in one transaction."""
     if any(r.errors for r in rows):
         raise BadRequestError("Fix the rows with errors first.")
-    if not has_permission(actor.role, "reports.profit"):  # purchase cost is admin only
+    if not has_permission(actor.role, "products.cost"):  # purchase cost: admin / manager only
         for row in rows:
             row.values.pop("cost_price", None)
     look = _Lookups.load()
@@ -475,15 +483,17 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 if "sku" not in v:
                     product.sku = f"SKU-{product.id:05d}"
                 link_supplier(product)
-                for i, code in enumerate(row.barcodes):
-                    _add_barcode_to_product(product, code, _infer_barcode_type(code), is_primary=i == 0)
+                for code in row.barcodes:  # at most one (checked in analyse)
+                    _add_barcode_to_product(product, code, _infer_barcode_type(code))
                 if not row.barcodes and not loose and options.generate_barcodes:
-                    pb = _add_barcode_to_product(product, next_inhouse_barcode(), BarcodeType.IN_HOUSE, is_primary=True)
+                    pb = _add_barcode_to_product(product, next_inhouse_barcode(), BarcodeType.IN_HOUSE)
                     generated.append(GeneratedBarcode(product_id=product.id, name=product.name, barcode=pb.barcode))
                 qty = v.get("opening_stock")
                 if qty:
                     stock = inv.lock_or_create(options.store_id, product.id)
                     stock.qty_on_hand = Decimal(stock.qty_on_hand) + qty
+                    batch_service.add(options.store_id, product.id, qty, source="opening",
+                                      expiry_date=v.get("expiry_date"), unit_cost=v.get("cost_price"))
                     inv.add_transaction(
                         options.store_id, product.id, InventoryTxnType.ADJUSTMENT, qty,
                         notes=OPENING_STOCK_NOTE, expiry_date=v.get("expiry_date"),
@@ -503,10 +513,8 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 if supplier_id is not None:
                     product.supplier_id = supplier_id
                     link_supplier(product)
-                existing = {b.barcode for b in product.barcodes}
-                for code in row.barcodes:
-                    if code not in existing:
-                        _add_barcode_to_product(product, code, _infer_barcode_type(code), is_primary=not product.barcodes)
+                if row.barcodes and not product.barcodes:  # a different saved barcode is a row error in analyse
+                    _add_barcode_to_product(product, row.barcodes[0], _infer_barcode_type(row.barcodes[0]))
                 updated += 1
 
         audit_service.log(
@@ -546,8 +554,8 @@ INSTRUCTIONS = [
     ("Required for a new product: name and price (before GST).", "नवीन product साठी लागतंच: name आणि price (GST आधीची किंमत)."),
     ("If the SKU or a barcode already exists, that product is updated: price, MRP, GST, HSN… Blank cells keep the saved value.",
      "SKU किंवा barcode आधीच system मध्ये असेल तर तोच product update होतो (price, MRP, GST, HSN…). रिकामा cell = जुनीच value."),
-    ("barcodes: one or more, separated by | (e.g. 8901234567890|8901234567891). Keep this column as Text so Excel doesn't change the number.",
-     "barcodes: एक किंवा जास्त, | ने वेगळे. हा column Text format मध्येच ठेवा, नाहीतर Excel नंबर बदलतो (8.9E+12)."),
+    ("barcodes: one barcode per product (e.g. 8901234567890). Keep this column as Text so Excel doesn't change the number.",
+     "barcodes: एका product ला एकच barcode. हा column Text format मध्येच ठेवा, नाहीतर Excel नंबर बदलतो (8.9E+12)."),
     ("No barcode? Tick 'auto-generate' on the import screen and print stickers from Label Print afterwards.",
      "Barcode नाही? Import screen वर 'auto-generate' ठेवा आणि नंतर Label Print मधून stickers काढा."),
     ("uom: pcs, kg, g, ltr, ml or pack.", "uom: pcs, kg, g, ltr, ml किंवा pack."),

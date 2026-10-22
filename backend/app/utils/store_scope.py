@@ -5,7 +5,7 @@ offers, staff) carries a store_id. Admins (head office) can work in any store, o
 all stores. Managers and cashiers are locked to the store on their account — enforced
 here on the server, not just hidden in the UI.
 """
-from app.errors.exceptions import PermissionDeniedError
+from app.errors.exceptions import NotFoundError, PermissionDeniedError
 from app.models.enums import UserRole
 from app.models.user import User
 
@@ -23,6 +23,12 @@ def scoped_store_id(actor: User, requested: int | None) -> int | None:
     if requested is not None and requested != actor.store_id:
         raise PermissionDeniedError("You can only access your own store.")
     return actor.store_id
+
+
+def require_same_store_or_404(actor: User, store_id: int | None, what: str) -> None:
+    """For reading one record (a bill, a credit note): another store's record looks like it doesn't exist."""
+    if not is_head_office(actor) and (actor.store_id is None or store_id != actor.store_id):
+        raise NotFoundError(f"{what} not found.")
 
 
 def require_store_access(actor: User, store_id: int | None) -> None:

@@ -46,7 +46,9 @@ export interface PoProductRow {
   id: number;
   name: string;
   sku: string | null;
-  purchase_price: number;
+  purchase_price: number | null; // supplier's last rate, else the product's cost; null = not known yet
+  last_purchase_price: number | null;
+  selling_price: number; // for the "rate not below selling price" warning only
   tax_rate: number;
   supplier_product_code: string | null;
   min_order_qty: number;

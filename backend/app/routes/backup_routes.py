@@ -182,7 +182,14 @@ def restore_backup(backup_id: int):
     body = request.get_json(silent=True) or {}
     target_db = body.get("target_db", "")
     record = restore_service.restore_backup(backup_id, target_db=target_db, user=user)
-    return jsonify(_serialize_restore(record)), 201
+    return jsonify(_serialize_restore(record)), 202  # runs in the background: follow it with /backups/restore-status
+
+
+@backup_bp.get("/backups/restore-status")
+def restore_status():
+    """No login check: that reads the users table, which a restore of the live database is replacing. Says only
+    whether a restore is running and how the last one ended."""
+    return jsonify(restore_service.status()), 200
 
 
 @backup_bp.get("/backups/restores")
@@ -194,6 +201,7 @@ def list_restores():
     pages = math.ceil(total / per_page) if per_page else 1
     return jsonify({
         "items": [_serialize_restore(r) for r in records],
+        "current_db": restore_service.current_db_name(),  # the database a normal restore targets
         "total": total,
         "page": page,
         "per_page": per_page,

@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { ShiftCashSummary } from '../../components/pos/ShiftCashSummary';
 import { useAuth } from '../../hooks/useAuth';
 import { useShiftStore } from '../../store/shiftStore';
 import { getErrorMessage } from '../../services/api/httpClient';
+import { getShiftBills } from '../../services/api/shiftApi';
+import type { ShiftSummary } from '../../types/shift';
+import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 
 export function CloseShiftPage() {
   const { t } = useTranslation();
@@ -14,6 +18,21 @@ export function CloseShiftPage() {
   const [actualCash, setActualCash] = useState('0');
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  // The server's own figures for this shift (the same ones close_shift saves as expected cash).
+  const [summary, setSummary] = useState<ShiftSummary | null>(null);
+  const [summaryError, setSummaryError] = useState('');
+
+  useEffect(() => {
+    if (!shift || shift.status !== 'open') return;
+    getShiftBills(shift.id)
+      .then((d) => setSummary(d.summary))
+      .catch((err) => setSummaryError(getErrorMessage(err)));
+  }, [shift?.id]);
+
+  // Counted − expected, in paise so ₹0.10 + ₹0.20 style sums stay exact. Negative = cash short.
+  const diffPaise = summary && actualCash.trim() !== '' && !Number.isNaN(Number(actualCash))
+    ? toPaise(actualCash) - toPaise(summary.expected_cash)
+    : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,12 +70,15 @@ export function CloseShiftPage() {
         <h2>{t('shift.closeTitle', { name: user?.full_name ?? user?.username })}</h2>
         <div className="admin-actions">
           <button className="btn-secondary" onClick={() => navigate('/pos/billing')}>{t('shift.backToPos')}</button>
+          <button className="btn-secondary" onClick={() => navigate('/pos/shift/bills')}>{t('shift.viewBills')}</button>
           <button className="btn-secondary" onClick={logout}>{t('common.logout')}</button>
         </div>
       </div>
 
       <div className="shift-panel">
-        {shift && (
+        {summary && <ShiftCashSummary summary={summary} />}
+        {summaryError && <div className="page-error">{t('shift.loadFailed', { error: summaryError })}</div>}
+        {shift && !summary && (
           <div className="shift-summary">
             <div className="shift-summary-row">
               <span>{t('shift.openingFloat')}</span>
@@ -84,9 +106,27 @@ export function CloseShiftPage() {
               value={actualCash}
               onChange={(e) => setActualCash(e.target.value)}
             />
+            <span className="hint-text">{t('shift.countHint')}</span>
           </label>
+          {diffPaise !== null && (
+            <div className={`shift-diff ${diffPaise < 0 ? 'shift-diff-short' : diffPaise > 0 ? 'shift-diff-over' : 'shift-diff-ok'}`}>
+              <span>{t('shift.difference')}</span>
+              <strong>
+                {diffPaise === 0
+                  ? t('shift.matches')
+                  : t(diffPaise < 0 ? 'shift.short' : 'shift.over', { amount: formatRupees(paiseToString(Math.abs(diffPaise))) })}
+              </strong>
+            </div>
+          )}
+          {/* Held bills belong to this shift: they must be paid or voided before it can close (the server checks too). */}
+          {summary && summary.held_bills > 0 && (
+            <div className="page-error">
+              <span>{t('shift.heldBlocksClose', { count: summary.held_bills })}</span>
+              <button type="button" className="btn-sm" onClick={() => navigate('/pos/held')}>{t('shift.openHeld')}</button>
+            </div>
+          )}
           <div className="modal-buttons">
-            <button type="submit" className="btn-primary" disabled={busy}>
+            <button type="submit" className="btn-primary" disabled={busy || (summary?.held_bills ?? 0) > 0}>
               {busy ? t('shift.closing') : t('shift.close')}
             </button>
           </div>

@@ -32,8 +32,9 @@ def list_categories(active_only: bool = False) -> list[Category]:
 
 def create_category(data: CategoryCreate) -> Category:
     repo = CategoryRepository()
-    if repo.get_by_name(data.name):
-        raise ConflictError(f"Category '{data.name}' already exists.")
+    _check_category_name_free(data.name)
+    if data.parent_id is not None:
+        _get_category_or_404(data.parent_id)
     cat = Category(name=data.name, parent_id=data.parent_id)
     with transaction():
         repo.add(cat)
@@ -43,15 +44,57 @@ def create_category(data: CategoryCreate) -> Category:
 
 def update_category(category_id: int, data: CategoryUpdate) -> Category:
     cat = _get_category_or_404(category_id)
-    if data.name is not None:
+    sent = data.model_fields_set
+    if data.name is not None and data.name != cat.name:
+        _check_category_name_free(data.name, except_id=cat.id)
         cat.name = data.name
-    if data.parent_id is not None:
+    if "parent_id" in sent:
+        _check_parent(cat, data.parent_id)
         cat.parent_id = data.parent_id
     if data.is_active is not None:
         cat.is_active = data.is_active
     with transaction():
         pass
     return cat
+
+
+def delete_category(category_id: int) -> None:
+    """Only an unused category can be deleted; one in use can be deactivated instead (history stays intact)."""
+    cat = _get_category_or_404(category_id)
+    from app.models.discount import Discount
+
+    in_use = [
+        (db.session.scalar(db.select(db.func.count()).select_from(Product).where(Product.category_id == cat.id)), "product"),
+        (db.session.scalar(db.select(db.func.count()).select_from(Category).where(Category.parent_id == cat.id)), "sub-category"),
+        (db.session.scalar(db.select(db.func.count()).select_from(Discount).where(Discount.category_id == cat.id)), "offer"),
+    ]
+    used = [f"{n} {what}{'s' if n != 1 else ''}" for n, what in in_use if n]
+    if used:
+        raise ConflictError(
+            f"Category '{cat.name}' is used by {', '.join(used)}, so it can't be deleted. "
+            "Move them to another category first, or deactivate this category instead."
+        )
+    with transaction():
+        db.session.delete(cat)
+
+
+def _check_category_name_free(name: str, except_id: int | None = None) -> None:
+    existing = CategoryRepository().get_by_name_ci(name)
+    if existing is not None and existing.id != except_id:
+        raise ConflictError(f"Category '{existing.name}' already exists.")
+
+
+def _check_parent(cat: Category, parent_id: int | None) -> None:
+    """A category can't sit under itself or under one of its own sub-categories."""
+    if parent_id is None:
+        return
+    _get_category_or_404(parent_id)
+    parents = CategoryRepository().parent_map()
+    node: int | None = parent_id
+    while node is not None:
+        if node == cat.id:
+            raise BadRequestError("A category can't be placed under itself or one of its own sub-categories.")
+        node = parents.get(node)
 
 
 # ── Products ──────────────────────────────────────────────────────────────────
@@ -109,31 +152,9 @@ def create_product(data: ProductCreate) -> Product:
             product.sku = f"SKU-{product.id:05d}"
         link_supplier(product)
 
-        # Add barcodes
-        for item in data.barcodes:
-            if isinstance(item, str):
-                b_str = item.strip()
-                b_type = _infer_barcode_type(b_str)
-                is_pri = False
-            elif isinstance(item, BarcodeCreatePayload):
-                b_str = item.barcode.strip()
-                b_type = item.barcode_type
-                is_pri = item.is_primary
-            elif isinstance(item, dict):
-                b_str = str(item.get("barcode", "")).strip()
-                b_type = item.get("barcode_type", _infer_barcode_type(b_str))
-                is_pri = bool(item.get("is_primary", False))
-            else:
-                continue
-
-            if not b_str:
-                continue
-
-            _add_barcode_to_product(product, b_str, b_type, is_pri)
-
-        # Mark first barcode as primary if none specified as primary
-        if product.barcodes and not any(b.is_primary for b in product.barcodes):
-            product.barcodes[0].is_primary = True
+        wanted = _wanted_barcode(data.barcodes)
+        if wanted:
+            _add_barcode_to_product(product, *wanted)
 
     return product
 
@@ -188,41 +209,18 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
     with transaction():
         link_supplier(product)
         if data.barcodes is not None:
-            # Sync barcodes
-            existing_map = {b.barcode: b for b in product.barcodes}
-            new_barcodes_set = set()
-
-            for item in data.barcodes:
-                if isinstance(item, str):
-                    b_str = item.strip()
-                    b_type = _infer_barcode_type(b_str)
-                    is_pri = False
-                elif isinstance(item, BarcodeCreatePayload):
-                    b_str = item.barcode.strip()
-                    b_type = item.barcode_type
-                    is_pri = item.is_primary
-                elif isinstance(item, dict):
-                    b_str = str(item.get("barcode", "")).strip()
-                    b_type = item.get("barcode_type", _infer_barcode_type(b_str))
-                    is_pri = bool(item.get("is_primary", False))
+            # The product ends up with exactly the barcode sent (or none). The old one goes first, so a
+            # barcode can be replaced in one save.
+            wanted = _wanted_barcode(data.barcodes)
+            for pb in list(product.barcodes):
+                if wanted and pb.barcode == wanted[0]:
+                    pb.barcode_type = wanted[1]
                 else:
-                    continue
-
-                if not b_str:
-                    continue
-
-                new_barcodes_set.add(b_str)
-                if b_str not in existing_map:
-                    _add_barcode_to_product(product, b_str, b_type, is_pri)
-                else:
-                    existing_map[b_str].barcode_type = b_type
-                    if is_pri:
-                        existing_map[b_str].is_primary = True
-
-            # Remove omitted barcodes
-            for b_str, pb in list(existing_map.items()):
-                if b_str not in new_barcodes_set:
+                    product.barcodes.remove(pb)
                     db.session.delete(pb)
+            db.session.flush()
+            if wanted and not product.barcodes:
+                _add_barcode_to_product(product, *wanted)
 
     return product
 
@@ -237,6 +235,7 @@ def add_product_barcode(
     barcode_type: BarcodeType | str = BarcodeType.MANUFACTURER,
     is_primary: bool = False,
 ) -> ProductBarcode:
+    """Gives a product its barcode. A product has at most one: remove the old one first."""
     product = _get_product_or_404(product_id)
     barcode_str = barcode.strip()
     if not barcode_str:
@@ -249,7 +248,7 @@ def add_product_barcode(
             barcode_type = BarcodeType.MANUFACTURER
 
     with transaction():
-        pb = _add_barcode_to_product(product, barcode_str, barcode_type, is_primary)
+        pb = _add_barcode_to_product(product, barcode_str, barcode_type)
         db.session.flush()
 
     return pb
@@ -292,14 +291,15 @@ def next_inhouse_barcode() -> str:
 
 
 def generate_and_save_inhouse_barcode(product_id: int) -> ProductBarcode:
-    """Gives the product an in-house barcode. A product keeps one: asking again returns the same code."""
+    """Gives the product an in-house barcode. Asking again returns the same code. A product that already has
+    another barcode is refused (one barcode per product)."""
     product = _get_product_or_404(product_id)
     for pb in product.barcodes:
         if pb.barcode_type is BarcodeType.IN_HOUSE:
             return pb
 
     with transaction():
-        pb = _add_barcode_to_product(product, next_inhouse_barcode(), BarcodeType.IN_HOUSE, is_primary=not product.barcodes)
+        pb = _add_barcode_to_product(product, next_inhouse_barcode(), BarcodeType.IN_HOUSE)
         db.session.flush()
     return pb
 
@@ -402,9 +402,13 @@ def get_by_barcode(barcode: str) -> Product:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _add_barcode_to_product(
-    product: Product, barcode_str: str, barcode_type: BarcodeType, is_primary: bool
-) -> ProductBarcode:
+def _add_barcode_to_product(product: Product, barcode_str: str, barcode_type: BarcodeType) -> ProductBarcode:
+    """One barcode per product (also a unique index on product_barcodes.product_id)."""
+    if product.barcodes:
+        raise ConflictError(
+            f"'{product.name}' already has barcode {product.barcodes[0].barcode}. "
+            "A product can have only one barcode: remove it first."
+        )
     existing = db.session.scalar(
         db.select(ProductBarcode).where(ProductBarcode.barcode == barcode_str)
     )
@@ -415,12 +419,25 @@ def _add_barcode_to_product(
         product_id=product.id,
         barcode=barcode_str,
         barcode_type=barcode_type,
-        is_primary=is_primary,
+        is_primary=True,
     )
     db.session.add(pb)
     product.barcodes.append(pb)
     return pb
 
+
+
+def _wanted_barcode(items: list) -> tuple[str, BarcodeType] | None:
+    """The (barcode, type) a create / update asks for, or None. The schemas allow at most one."""
+    for item in items:
+        if isinstance(item, BarcodeCreatePayload):
+            b_str, b_type = item.barcode.strip(), item.barcode_type
+        else:
+            b_str = str(item).strip()
+            b_type = _infer_barcode_type(b_str)
+        if b_str:
+            return b_str, b_type
+    return None
 
 
 def _infer_barcode_type(barcode_str: str) -> BarcodeType:

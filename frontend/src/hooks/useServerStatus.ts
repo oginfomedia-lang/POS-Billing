@@ -1,24 +1,30 @@
 // Polls GET /health so the cashier can see if the server or database is down.
-import { useEffect, useState } from 'react';
+// The status bar runs the poll; any screen can read the result with useServerStatusStore (e.g. to offer
+// offline billing, or to upload offline bills once the server is back).
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import { getHealth } from '../services/api/healthApi';
 
 export type ServerStatus = 'checking' | 'online' | 'database-down' | 'offline';
 
 const POLL_INTERVAL_MS = 10_000;
 
+export const useServerStatusStore = create<{ status: ServerStatus }>(() => ({ status: 'checking' }));
+
 export function useServerStatus(enabled: boolean): ServerStatus {
-  const [status, setStatus] = useState<ServerStatus>('checking');
+  const status = useServerStatusStore((s) => s.status);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    const set = (next: ServerStatus) => { if (!cancelled) useServerStatusStore.setState({ status: next }); };
 
     const check = async () => {
       try {
         const health = await getHealth();
-        if (!cancelled) setStatus(health.database === 'up' ? 'online' : 'database-down');
+        set(health.database === 'up' ? 'online' : 'database-down');
       } catch {
-        if (!cancelled) setStatus('offline');
+        set('offline');
       }
     };
 

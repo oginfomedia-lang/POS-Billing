@@ -20,6 +20,7 @@ class UserOut(BaseModel):
     role: UserRole
     store_id: int | None
     is_active: bool
+    must_change_pin: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

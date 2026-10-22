@@ -12,6 +12,7 @@ from app.extensions import db
 from app.models.enums import InventoryTxnType, PurchaseStatus, SupplierInvoiceStatus
 from app.models.purchase import GoodsReceipt, GoodsReceiptItem, PurchaseOrder, PurchaseOrderItem
 from app.models.supplier import Supplier
+from app.models.supplier_product import SupplierProduct
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation
 from app.models.user import User
@@ -30,7 +31,7 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderUpdate,
     SupplierGRNOut,
 )
-from app.services import audit_service, inventory_service
+from app.services import audit_service, batch_service, inventory_service
 from app.utils.transactions import transaction
 
 
@@ -44,6 +45,36 @@ def _unique_po_number() -> str:
         if db.session.scalar(db.select(PurchaseOrder).where(PurchaseOrder.po_number == code)) is None:
             return code
     raise ConflictError("Could not generate a unique PO number.")
+
+
+def _remember_purchase_price(supplier_id: int, product, unit_cost: Decimal) -> None:
+    """After goods arrive, the next purchase order from this supplier starts at the rate just paid.
+
+    The supplier's product link keeps the rate (the old one moves to last_purchase_price), and is created
+    if the product wasn't in the supplier's list yet. A product with no default cost gets this one.
+    """
+    rate = unit_cost.quantize(Decimal("0.01"))
+    link = db.session.scalar(
+        db.select(SupplierProduct).where(
+            SupplierProduct.supplier_id == supplier_id, SupplierProduct.product_id == product.id
+        )
+    )
+    if link is None:
+        has_preferred = db.session.scalar(
+            db.select(SupplierProduct.id).where(
+                SupplierProduct.product_id == product.id, SupplierProduct.is_preferred.is_(True)
+            )
+        )
+        link = SupplierProduct(supplier_id=supplier_id, product_id=product.id, is_preferred=has_preferred is None)
+        db.session.add(link)
+    elif not link.is_active:
+        link.is_active = True
+    if link.purchase_price != rate:
+        if link.purchase_price is not None:
+            link.last_purchase_price = link.purchase_price
+        link.purchase_price = rate
+    if product.cost_price is None:
+        product.cost_price = unit_cost.quantize(Decimal("0.0001"))
 
 
 def _unique_receipt_number() -> str:
@@ -617,7 +648,13 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
                 # Cost before GST (claimed back as input credit), after the line's discount.
                 unit_cost = Decimal(str(poi.unit_price)) * (1 - Decimal(str(poi.discount_percent)) / 100)
                 inventory_service.add_purchase_cost(inv_row, poi.product, good, unit_cost)
+                _remember_purchase_price(po.supplier_id, poi.product, unit_cost)
                 inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + good
+                batch_service.add(
+                    po.store_id, poi.product_id, good, source="grn", reference_id=receipt.id,
+                    batch_number=ri.batch_number, mfg_date=ri.mfg_date, expiry_date=ri.expiry_date,
+                    unit_cost=unit_cost.quantize(inventory_service.COST_PLACES),
+                )
                 note = f"Goods receipt {receipt.receipt_number}"
                 if good != qty:
                     note += f" ({qty - good} rejected/damaged not stocked)"

@@ -33,5 +33,5 @@ def create_return():
 @return_bp.get("/returns/<int:return_id>")
 @require_permission("sales.read")
 def get_return(return_id: int):
-    ret = return_service.get_return(return_id)
+    ret = return_service.get_return(return_id, auth_service.current_user())
     return jsonify(return_service.to_out(ret).model_dump(mode="json")), 200
