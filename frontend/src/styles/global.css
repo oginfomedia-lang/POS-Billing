@@ -945,6 +945,12 @@ select.field-input {
   cursor: not-allowed;
 }
 
+/* Shown but filled in by the app (e.g. the automatic SKU). */
+.field-input[readonly] {
+  background-color: var(--surface-3);
+  font-family: var(--font-mono);
+}
+
 .checkbox-label {
   flex-direction: row !important;
   align-items: center;

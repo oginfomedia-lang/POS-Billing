@@ -19,5 +19,7 @@ openpyxl>=3.1,<4
 APScheduler>=3.10,<4
 # VPS/SFTP backup upload (SSH file transfer to your own server)
 paramiko>=3.4,<4
+# Marathi names spelt in English letters for automatic SKUs (KIR-SAK-0001).
+indic-transliteration>=2.3,<3
 # Encrypts payment / WhatsApp secrets saved in the app (Settings → Integrations).
 cryptography>=42,<47

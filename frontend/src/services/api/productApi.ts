@@ -8,6 +8,7 @@ import type {
   ImportResult,
   ProductBarcodeOut,
   ProductOut,
+  SkuPreview,
   UOMType,
 } from '../../types/product';
 import type { PagedResponse } from '../../types/api';
@@ -61,6 +62,14 @@ export async function createProduct(data: {
   barcodes?: (string | { barcode: string; barcode_type?: BarcodeType })[];
 }): Promise<ProductOut> {
   const resp = await httpClient.post<ProductOut>('/products', data);
+  return resp.data;
+}
+
+/** What the automatic SKU will look like (KIR-SAK-0001). Uses up no number: the real SKU is made on save. */
+export async function previewSku(categoryId: number | null, name: string): Promise<SkuPreview> {
+  const resp = await httpClient.get<SkuPreview>('/products/sku-preview', {
+    params: { category_id: categoryId ?? undefined, name },
+  });
   return resp.data;
 }
 

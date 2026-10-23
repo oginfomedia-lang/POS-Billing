@@ -1,5 +1,6 @@
 """Bulk product import from CSV / Excel: preview, all-or-nothing import, updates, stock, barcodes, suppliers."""
 import io
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -80,7 +81,7 @@ def test_csv_creates_products_with_stock_barcodes_and_categories(client, admin_h
     link = db.session.scalar(db.select(SupplierProduct).where(SupplierProduct.product_id == parle.id))
     assert link.supplier_id == supplier.id and link.is_preferred  # shows on the supplier's page
     assert [b.barcode for b in parle.barcodes] == ["8901719101038"] and parle.barcodes[0].is_primary
-    assert parle.category.name == "Biscuits" and parle.sku.startswith("SKU-")
+    assert parle.category.name == "Biscuits" and re.fullmatch(r"BIS-PAR-\d{4,}", parle.sku)  # automatic SKU
 
     salt = _product("Tata Salt 1kg")
     assert [g["product_id"] for g in body["generated_barcodes"]] == [salt.id]
@@ -187,6 +188,13 @@ def test_store_only_products(client, admin_headers, store):
     resp = _import(client, admin_headers, _csv("Local sweets,200,5,,,,,,,,,,"), store_id=store.id, sold_in="store")
     assert resp.status_code == 201
     assert _product("Local sweets").store_id == store.id
+
+
+def test_imported_products_get_automatic_skus_unless_the_sheet_has_one(client, admin_headers):
+    resp = _import(client, admin_headers, _csv("साखर,42,0,,kg,किराणा,,,,,,,", "Tata Salt,26,5,,,Grocery,TS-1KG,,,,,,"))
+    assert resp.status_code == 201, resp.get_json()
+    assert re.fullmatch(r"KIR-SAK-\d{4,}", _product("साखर").sku)
+    assert _product("Tata Salt").sku == "TS-1KG"
 
 
 def test_file_problems(client, admin_headers):
