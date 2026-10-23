@@ -75,7 +75,7 @@ test('priced cart and its receipt', () => {
   };
   const receipt = toReceipt(saved);
   assert.equal(receipt.bill_number, 'C02-OFF-261021-0001');
-  assert.equal(receipt.total_qty, '4.25');
+  assert.equal(receipt.total_qty, '4'); // 3 biscuits + 1.25 kg loose sugar (counts as 1)
   assert.equal(receipt.items[0].saving, '3.22'); // MRP 30.00 − paid 26.78
   assert.equal(receipt.total_saving, '3.22');
   assert.equal(receipt.payments[0].change_due, '20.72');

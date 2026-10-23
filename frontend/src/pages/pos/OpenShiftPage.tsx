@@ -4,12 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCounterStore } from '../../store/counterStore';
 import { useShiftStore } from '../../store/shiftStore';
+import { useStoreContext } from '../../store/storeContext';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { listCounters } from '../../services/api/storeApi';
 
 export function OpenShiftPage() {
   const { t } = useTranslation();
   const { user, logout } = useAuth();
+  // The store picked in the sidebar's store switcher (admins only; null = "All branches").
+  const selectedStoreId = useStoreContext((s) => s.selectedId);
   const counterCode = useCounterStore((s) => s.config?.counterCode ?? '');
   const { open, busy } = useShiftStore();
   const navigate = useNavigate();
@@ -20,7 +23,7 @@ export function OpenShiftPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    const storeId = user?.store_id;
+    const storeId = (user?.role === 'admin' ? selectedStoreId : null) ?? user?.store_id;
     if (!storeId) {
       setError(t('shift.noStore'));
       return;

@@ -16,11 +16,11 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
     <article className="receipt">
       <header className="receipt-center">
         <strong className="receipt-store">{receipt.store_name}</strong>
-        {receipt.store_address && <div>{receipt.store_address}</div>}
+        {receipt.receipt_header && <div className="receipt-header-line">{receipt.receipt_header}</div>}
         {receipt.store_phone && <div>{t('receipt.phone', { phone: receipt.store_phone })}</div>}
         {receipt.store_gstin && <div>{t('receipt.gstin', { gstin: receipt.store_gstin })}</div>}
         {receipt.fssai_number && <div>{t('receipt.fssai', { number: receipt.fssai_number })}</div>}
-        {receipt.receipt_header && <div>{receipt.receipt_header}</div>}
+        {receipt.store_address && <div>{receipt.store_address}</div>}
       </header>
 
       <hr />
