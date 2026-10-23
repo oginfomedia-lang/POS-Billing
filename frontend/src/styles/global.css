@@ -3045,6 +3045,7 @@ button.stat-tile:hover {
 .receipt-store,
 .receipt-doc-title { font-family: 'Times New Roman', Georgia, 'Noto Sans Devanagari Variable', 'Nirmala UI', serif; }
 .receipt-store { font-size: 17px; letter-spacing: 0.03em; }
+.receipt-header-line { font-weight: 700; letter-spacing: 0.04em; }
 .receipt-row { display: flex; justify-content: space-between; gap: 8px; }
 /* Bill total: bold, in a box like the "You saved" box below it. */
 .receipt-total {
