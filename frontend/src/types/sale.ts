@@ -80,7 +80,7 @@ export interface SaleOut {
 export interface ReceiptOut {
   sale_id: number;
   item_lines: number; // bill lines (repeat scans of a product are one line)
-  total_qty: string; // sum of the lines' quantities, e.g. "10" or "23.5" (a loose item counts its kg)
+  total_qty: string; // number of pieces, e.g. "10" (a loose item sold by weight counts as 1)
   bill_number: string;
   store_name: string;
   store_address: string | null;

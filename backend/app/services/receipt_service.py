@@ -14,9 +14,12 @@ from app.utils.store_scope import require_same_store_or_404
 
 
 def total_qty(items) -> Decimal:
-    """Sum of the bill lines' quantities, exact (Decimal): 2 + 3 + 1.25 = 6.25. Shown without trailing
-    zeros: "10", "23.5", "1.235"."""
-    total = sum((Decimal(str(i.qty)) for i in items), Decimal("0")).quantize(Decimal("0.001"))
+    """Number of pieces on the bill: a packed item counts its quantity, a loose item sold by weight counts as 1
+    (1.5 kg sugar + 1 KitKat = 2, not 2.5). Exact (Decimal), shown without trailing zeros."""
+    total = sum(
+        (Decimal("1") if getattr(i, "is_variable_weight", False) else Decimal(str(i.qty)) for i in items),
+        Decimal("0"),
+    ).quantize(Decimal("0.001"))
     return total.quantize(Decimal("1")) if total == total.to_integral_value() else total.normalize()
 
 

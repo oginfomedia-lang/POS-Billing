@@ -40,7 +40,7 @@ def test_summary_counts_merged_lines_and_sums_quantities(client, cashier_headers
 
     receipt = client.get(f"/api/v1/sales/{sid}/receipt", headers=cashier_headers).get_json()
     assert len(receipt["items"]) == 3
-    assert (receipt["item_lines"], receipt["total_qty"]) == (3, "6.25")  # 2 + 3 + 1.25 kg
+    assert (receipt["item_lines"], receipt["total_qty"]) == (3, "6")  # 2 + 3 + 1 (1.25 kg loose rice counts as 1)
     # The summary changes nothing else on the bill.
     assert receipt["total"] == paid["total"] == "231.50"  # 60 + 84 + 87.50
 
@@ -51,6 +51,10 @@ def test_total_qty_is_exact_and_tidy():
     assert str(receipt_service.total_qty(lines("1.000", "3.500", "19.000"))) == "23.5"
     assert str(receipt_service.total_qty(lines("0.1", "0.2", "0.235"))) == "0.535"  # no float drift
     assert str(receipt_service.total_qty([])) == "0"
+    # 1.5 kg loose sugar + 1 KitKat = 2 items.
+    sugar = SimpleNamespace(qty=Decimal("1.500"), is_variable_weight=True)
+    kitkat = SimpleNamespace(qty=Decimal("1"), is_variable_weight=False)
+    assert str(receipt_service.total_qty([sugar, kitkat])) == "2"
 
 
 def test_ebill_pdf_has_the_same_summary(client, cashier_headers, shift, store):

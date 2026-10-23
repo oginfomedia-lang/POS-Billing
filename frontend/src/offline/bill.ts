@@ -42,9 +42,10 @@ function qtyNumber(qty: string): number {
   return Dec.of(qty).toNumber();
 }
 
-/** Sum of the quantities, shown without trailing zeros: "10", "23.5" (as the server's receipt_service.total_qty). */
+/** Number of pieces: a packed item counts its quantity, a loose item sold by weight counts as 1 (as the server's
+ * receipt_service.total_qty). Shown without trailing zeros: "10", "2". */
 function totalQty(items: OfflineBillItem[]): string {
-  const total = Dec.sum(items.map((i) => Dec.of(i.qty))).quantize(3);
+  const total = Dec.sum(items.map((i) => (i.is_variable_weight ? Dec.of('1') : Dec.of(i.qty)))).quantize(3);
   return String(total.toNumber());
 }
 
