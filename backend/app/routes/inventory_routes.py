@@ -5,7 +5,6 @@ from app.errors.exceptions import ValidationError
 from app.schemas.inventory_schemas import (
     AdjustStockRequest,
     BatchWriteOffRequest,
-    ExpiringBatchOut,
     InventoryTxnOut,
     StockInRequest,
     StorePriceRequest,

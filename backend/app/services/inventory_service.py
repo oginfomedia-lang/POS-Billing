@@ -9,6 +9,7 @@ from app.errors.exceptions import AppError, InsufficientStockError, NotFoundErro
 from app.extensions import db
 from app.models.enums import InventoryTxnType
 from app.models.inventory import Inventory, InventoryTransaction, StockBatch
+from app.models.product import Product
 from app.models.sale import SaleItem
 from app.models.user import User
 from app.repositories.inventory_repository import InventoryRepository

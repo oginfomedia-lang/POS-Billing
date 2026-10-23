@@ -7,7 +7,7 @@ from sqlalchemy.dialects.postgresql import insert
 from app.extensions import db
 from app.models.inventory import Inventory, InventoryTransaction
 from app.models.enums import InventoryTxnType
-from app.models.product import Product, ProductBarcode
+from app.models.product import Product
 from app.repositories.base_repository import BaseRepository
 
 

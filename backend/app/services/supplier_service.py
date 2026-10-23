@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy import func, or_, select
 
-from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError
+from app.errors.exceptions import ConflictError, NotFoundError
 from app.extensions import db
 from app.models.product import Product
 from app.models.supplier import Supplier
@@ -341,7 +341,7 @@ def get_supplier_summary(supplier_id: int) -> SupplierSummary:
 
 def get_supplier_ledger(supplier_id: int, date_from: str | None = None, date_to: str | None = None) -> list[SupplierLedgerEntry]:
     """Build a running ledger from invoices and payments."""
-    from app.models.enums import SupplierInvoiceStatus, SupplierPaymentType
+    from app.models.enums import SupplierInvoiceStatus
     entries: list[dict] = []
 
     inv_q = select(SupplierInvoice).where(

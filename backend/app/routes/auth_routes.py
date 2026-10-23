@@ -1,6 +1,6 @@
 """Login, refresh, and current-user endpoints."""
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import jwt_required
 
 from app.schemas.auth_schemas import LoginRequest, RefreshResponse, TokenResponse, UserOut
 from app.schemas.user_schemas import PinChange

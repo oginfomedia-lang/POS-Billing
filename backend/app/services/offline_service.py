@@ -9,7 +9,6 @@ don't add up, but it doesn't choose offers again (they may have changed since).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 
 from app.errors.exceptions import AppError, NotFoundError, PermissionDeniedError
 from app.extensions import db

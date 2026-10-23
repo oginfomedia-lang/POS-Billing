@@ -9,7 +9,6 @@ import uuid
 from dataclasses import dataclass
 
 import requests
-from flask import current_app
 
 from app.errors.exceptions import AppError
 from app.services import integration_settings_service
