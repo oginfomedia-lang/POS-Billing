@@ -55,3 +55,12 @@ export function getErrorMessage(err: unknown): string {
   }
   return err instanceof Error ? err.message : i18n.t('errors.unexpected');
 }
+
+/** getErrorMessage for downloads (responseType 'blob'): the server's JSON error arrives as a Blob. */
+export async function getBlobErrorMessage(err: unknown): Promise<string> {
+  if (axios.isAxiosError(err) && err.response?.data instanceof Blob) {
+    try { err.response.data = JSON.parse(await err.response.data.text()); }
+    catch { /* not JSON: the status code is shown */ }
+  }
+  return getErrorMessage(err);
+}

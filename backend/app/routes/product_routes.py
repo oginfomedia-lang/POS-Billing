@@ -16,7 +16,7 @@ from app.schemas.product_schemas import (
     ProductUpdate,
 )
 from app.schemas.product_import_schemas import ImportOptions
-from app.services import auth_service, inventory_service, product_import_service, product_service
+from app.services import auth_service, inventory_service, product_import_service, product_service, sku_service
 from app.utils.permissions import has_permission, require_permission
 from app.utils.store_scope import require_store_access, scoped_store_id
 
@@ -208,6 +208,15 @@ def add_product_barcode(id: int):
 def remove_product_barcode(id: int, barcode: str):
     product_service.remove_product_barcode(id, barcode)
     return jsonify({"message": f"Barcode '{barcode}' removed."}), 200
+
+
+@product_bp.get("/products/sku-preview")
+@require_permission("products.create")
+def sku_preview():
+    """What the automatic SKU will look like, for the Add Product form. Uses up no number: the real SKU is
+    made when the product is saved."""
+    category_id = request.args.get("category_id", type=int)
+    return jsonify(sku_service.preview(category_id, request.args.get("name", ""))), 200
 
 
 @product_bp.post("/products/barcodes/generate")

@@ -1,5 +1,4 @@
 """Audit log viewer endpoints (admin only)."""
-from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 

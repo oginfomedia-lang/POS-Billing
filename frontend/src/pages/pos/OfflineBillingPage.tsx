@@ -4,7 +4,7 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { IconCash, IconLogOut, IconShoppingCart, IconTrash } from '../../components/common/Icons';
+import { IconCash, IconLogOut, IconShoppingCart, IconTrash, IconX } from '../../components/common/Icons';
 import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useServerStatusStore } from '../../hooks/useServerStatus';
@@ -283,8 +283,11 @@ export function OfflineBillingPage() {
       )}
 
       {weighing && (
-        <div className="modal-overlay" onClick={() => setWeighing(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setWeighing(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{t('offline.weightFor', { name: weighing.name })}</h3>
             <form onSubmit={handleWeight} className="modal-form">
               <input className="field-input" type="number" min="0.001" step="0.001" value={kg}
@@ -299,8 +302,11 @@ export function OfflineBillingPage() {
       )}
 
       {paying && priced && (
-        <div className="modal-overlay" onClick={() => setPaying(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setPaying(false)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{t('offline.total')}: {formatRupees(total)}</h3>
             <form onSubmit={handleSave} className="modal-form">
               <label className="field-label">

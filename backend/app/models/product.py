@@ -8,6 +8,9 @@ from app.models.enums import BarcodeType, UOMType
 # Numbers for in-house barcodes (290 + 9 digits + check digit). A sequence never hands out
 # the same number twice, even under concurrent requests or for products not saved yet.
 INHOUSE_BARCODE_SEQ = db.Sequence("inhouse_barcode_seq", metadata=db.metadata)
+# The number at the end of an automatic SKU (KIR-SAK-0001), one sequence for every store. Numbers of deleted
+# products or failed saves are never handed out again.
+PRODUCT_SKU_SEQ = db.Sequence("product_sku_seq", metadata=db.metadata)
 
 
 def _gen_sku() -> str:

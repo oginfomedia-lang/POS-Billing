@@ -4,6 +4,7 @@ import { createCategory, deleteCategory, listCategories, updateCategory } from '
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { CategoryOut } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { MarathiInput } from '../../components/common/MarathiInput';
 
 /** The category and every sub-category under it (a category can't be moved under any of these). */
@@ -151,8 +152,11 @@ export function CategoriesPage() {
       </div>
 
       {editing && (
-        <div className="modal-overlay" onClick={() => setEditing(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setEditing(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{editing === 'new' ? t('categories.addTitle') : t('categories.editTitle', { name: editing.name })}</h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={handleSave} className="modal-form">
@@ -184,8 +188,11 @@ export function CategoriesPage() {
       )}
 
       {deleting && (
-        <div className="modal-overlay" onClick={() => setDeleting(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setDeleting(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{t('categories.deleteTitle', { name: deleting.name })}</h3>
             <p>{t('categories.deleteConfirm')}</p>
             {deleteError && <div className="form-error">{deleteError}</div>}

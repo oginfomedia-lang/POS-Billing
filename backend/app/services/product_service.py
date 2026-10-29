@@ -1,6 +1,8 @@
 """Product, category and barcode management service layer."""
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
+
 from app.errors.exceptions import BadRequestError, ConflictError, NotFoundError
 from app.extensions import db
 from app.models.category import Category
@@ -17,7 +19,7 @@ from app.schemas.product_schemas import (
     ProductCreate,
     ProductUpdate,
 )
-from app.services import inventory_service, settings_service
+from app.services import inventory_service, settings_service, sku_service
 from app.utils.barcode_utils import generate_inhouse_barcode, parse_scale_barcode
 from app.utils.money import round_money
 from app.utils.transactions import transaction
@@ -116,8 +118,9 @@ def list_products(
 
 
 def create_product(data: ProductCreate) -> Product:
+    """No SKU given: one is made from the category and the name (KIR-SAK-0001, app/services/sku_service.py)."""
     repo = ProductRepository()
-    
+
     # Check SKU uniqueness if provided
     sku = data.sku.strip() if data.sku else None
     if sku:
@@ -126,7 +129,7 @@ def create_product(data: ProductCreate) -> Product:
             raise ConflictError(f"SKU '{sku}' already exists.")
 
     product = Product(
-        sku=sku or "TEMP",
+        sku=sku or sku_service.generate(data.category_id, data.name),
         name=data.name,
         description=data.description,
         category_id=data.category_id,
@@ -145,16 +148,21 @@ def create_product(data: ProductCreate) -> Product:
     _check_plu(product)
     _check_supplier(product.supplier_id)
 
-    with transaction():
-        repo.add(product)
-        db.session.flush()
-        if not sku:
-            product.sku = f"SKU-{product.id:05d}"
-        link_supplier(product)
+    try:
+        with transaction():
+            repo.add(product)
+            db.session.flush()
+            link_supplier(product)
 
-        wanted = _wanted_barcode(data.barcodes)
-        if wanted:
-            _add_barcode_to_product(product, *wanted)
+            wanted = _wanted_barcode(data.barcodes)
+            if wanted:
+                _add_barcode_to_product(product, *wanted)
+    except IntegrityError as exc:
+        # The same SKU saved by someone else a moment ago (only possible for one typed by hand): nothing was
+        # saved, say so instead of failing with a server error.
+        if "uq_products_sku" in str(exc.orig):
+            raise ConflictError(f"SKU '{product.sku}' already exists.") from exc
+        raise
 
     return product
 

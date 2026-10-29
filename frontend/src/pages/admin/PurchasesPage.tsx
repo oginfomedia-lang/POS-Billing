@@ -538,11 +538,10 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-box"
         style={{ maxWidth: 900, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="modal-header">
@@ -840,11 +839,10 @@ function DetailModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-box"
         style={{ maxWidth: 820, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="modal-header">
@@ -1197,11 +1195,10 @@ function ReceiveModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-box"
         style={{ maxWidth: 680, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
           <div>
@@ -1366,8 +1363,8 @@ function ConfirmModal({
   onClose: () => void;
 }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 420 }}>
         <div className="modal-header">
           <h3 className="modal-title" style={{ margin: 0 }}>{title}</h3>
           <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
@@ -1425,11 +1422,10 @@ function PaymentHistoryModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay">
       <div
         className="modal-box"
         style={{ maxWidth: 780, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="modal-header">

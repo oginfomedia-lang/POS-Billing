@@ -37,6 +37,21 @@ def test_pos_search_finds_marathi_names_typed_in_english(client, cashier_headers
     assert _names(client, cashier_headers, "zzzz") == []
 
 
+def test_stock_page_search_matches_the_products_search(client, admin_headers, store):
+    make_product(store, name="मधुर साखर", sku="P-1")
+    make_product(store, name="Tata Salt 1kg", sku="P-2")
+
+    def stock_names(q=None):
+        params = {"store_id": store.id, **({"q": q} if q is not None else {})}
+        rows = client.get("/api/v1/inventory", query_string=params, headers=admin_headers).get_json()
+        return sorted(r["product_name"] for r in rows)
+
+    assert stock_names("sakhar") == ["मधुर साखर"]
+    assert stock_names("मधुर") == ["मधुर साखर"]
+    assert stock_names("tata") == ["Tata Salt 1kg"]
+    assert stock_names("  ") == stock_names() == ["Tata Salt 1kg", "मधुर साखर"]
+
+
 def test_key_follows_renames_and_imports_of_any_kind(client, admin_headers, store):
     pid = client.post("/api/v1/products", json={"name": "पोहे", "price": "40"}, headers=admin_headers).get_json()["id"]
     assert _names(client, admin_headers, "pohe") == ["पोहे"]

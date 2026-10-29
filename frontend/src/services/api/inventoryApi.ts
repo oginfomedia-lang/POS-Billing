@@ -7,8 +7,9 @@ interface QtyResponse {
   qty_on_hand: string;
 }
 
-export async function getStockLevels(storeId: number): Promise<StockLevelOut[]> {
-  const resp = await httpClient.get<StockLevelOut[]>('/inventory', { params: { store_id: storeId } });
+/** q: name, SKU, barcode, or how the name sounds ("sakhar" finds "साखर"). */
+export async function getStockLevels(storeId: number, q?: string): Promise<StockLevelOut[]> {
+  const resp = await httpClient.get<StockLevelOut[]>('/inventory', { params: { store_id: storeId, q: q || undefined } });
   return resp.data;
 }
 

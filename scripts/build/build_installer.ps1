@@ -95,8 +95,21 @@ try {
     }
     npm run typecheck
     if ($LASTEXITCODE) { throw 'typecheck failed' }
-    npm run dist -- @signArgs
-    if ($LASTEXITCODE) { throw 'electron-builder failed' }
+    # Old output first: a folder left by an earlier (or interrupted) build can't be replaced while anything holds a
+    # file in it. electron-builder then fails with "EPERM ... rename win-unpacked.tmp -> win-unpacked", usually
+    # because the antivirus is still scanning the freshly unpacked Electron files, so it gets one more try.
+    foreach ($attempt in 1, 2) {
+        foreach ($dir in 'release\win-unpacked', 'release\win-unpacked.tmp') {
+            if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+        }
+        npm run dist -- @signArgs
+        if (-not $LASTEXITCODE) { break }
+        if ($attempt -eq 2) {
+            throw 'electron-builder failed. If it says EPERM: close LiteRetail and any Explorer window in frontend\release, then run this again.'
+        }
+        Write-Warning 'electron-builder failed - trying once more in 15 seconds (a file may have been locked by the antivirus)'
+        Start-Sleep -Seconds 15
+    }
 } finally { Pop-Location }
 
 $version = (Get-Content (Join-Path $frontend 'package.json') -Raw | ConvertFrom-Json).version

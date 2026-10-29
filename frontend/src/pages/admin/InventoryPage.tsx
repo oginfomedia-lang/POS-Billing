@@ -3,6 +3,8 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
+import { MarathiInput } from '../../components/common/MarathiInput';
 import { getErrorMessage } from '../../services/api/httpClient';
 import {
   adjustStock,
@@ -55,6 +57,7 @@ export function InventoryPage() {
   const storeId = useStoreContext((s) => s.selectedId);
   const [rows, setRows] = useState<StockLevelOut[]>([]);
   const [filter, setFilter] = useState('');
+  const [query, setQuery] = useState(''); // searched a moment after the last key
   const [lowOnly, setLowOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -83,7 +86,7 @@ export function InventoryPage() {
     setLoading(true);
     setError('');
     try {
-      setRows(await getStockLevels(id));
+      setRows(await getStockLevels(id, query));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -103,7 +106,12 @@ export function InventoryPage() {
     }
   }
 
-  useEffect(() => { fetchLevels(); }, [storeId]);
+  useEffect(() => { fetchLevels(); }, [storeId, query]);
+  // Search on the server (English, Marathi, or Marathi typed in English letters), 350 ms after the last key.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(filter.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [filter]);
   useEffect(() => { if (tab === 'expiry') fetchExpiring(); }, [tab, storeId]);
 
   async function open(kind: Kind, row: StockLevelOut) {
@@ -206,12 +214,8 @@ export function InventoryPage() {
     return t('inventory.daysLeft', { count: days });
   }
 
-  const needle = filter.trim().toLowerCase();
-  const visible = rows.filter(
-    (r) =>
-      (!lowOnly || r.is_low) &&
-      (!needle || r.product_name.toLowerCase().includes(needle) || (r.barcode ?? '').includes(needle)),
-  );
+  // The server already filtered by the search text; only the low-stock tick is applied here.
+  const visible = rows.filter((r) => !lowOnly || r.is_low);
   const lowCount = rows.filter((r) => r.is_low).length;
 
   return (
@@ -236,11 +240,12 @@ export function InventoryPage() {
       <div className="filter-bar">
         {tab === 'stock' && (
           <>
-            <input
+            <MarathiInput
               className="field-input filter-input"
               placeholder={t('inventory.searchPlaceholder')}
               value={filter}
-              onChange={(e) => setFilter(e.target.value)}
+              onChange={setFilter}
+              maxLength={100}
             />
             <label className="field-label checkbox-label">
               <input type="checkbox" checked={lowOnly} onChange={(e) => setLowOnly(e.target.checked)} />
@@ -379,8 +384,11 @@ export function InventoryPage() {
 
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className={`modal-box${modal.kind === 'history' || modal.kind === 'batches' ? ' modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className={`modal-box${modal.kind === 'history' || modal.kind === 'batches' ? ' modal-wide' : ''}`}>
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>
               {t(({ in: 'inventory.titleIn', adjust: 'inventory.titleAdjust', threshold: 'inventory.titleThreshold', price: 'inventory.titlePrice', history: 'inventory.titleHistory', batches: 'inventory.titleBatches' } as const)[modal.kind], { name: modal.row.product_name })}
             </h3>
@@ -554,8 +562,11 @@ export function InventoryPage() {
       )}
 
       {writeOff && (
-        <div className="modal-overlay" onClick={() => setWriteOff(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setWriteOff(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{t('inventory.titleWriteOff', { batch: writeOff.label, name: writeOff.name })}</h3>
             {woError && <div className="form-error">{woError}</div>}
             <form onSubmit={handleWriteOff} className="modal-form">

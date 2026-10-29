@@ -38,11 +38,12 @@ export function CartTable({ items, disabled, onQtyChange, onRemove, onManualDisc
             </td>
           </tr>
         )}
-        {items.map((item, i) => (
+        {/* Newest line on top (the server sends them oldest first). The # stays the line's number on the bill. */}
+        {[...items].reverse().map((item, i) => (
           <CartRow
             key={item.id}
             item={item}
-            index={i}
+            index={items.length - 1 - i}
             disabled={disabled}
             onQtyChange={onQtyChange}
             onRemove={onRemove}

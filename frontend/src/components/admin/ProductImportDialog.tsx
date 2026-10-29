@@ -83,8 +83,8 @@ export function ProductImportDialog({ stores, defaultStoreId, onImported, onClos
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="modal-box modal-wide import-dialog" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-wide import-dialog">
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{t('import.subtitle')}</span>

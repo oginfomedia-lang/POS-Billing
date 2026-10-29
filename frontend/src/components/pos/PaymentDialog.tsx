@@ -109,8 +109,8 @@ export function PaymentDialog({
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box payment-dialog-box" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box payment-dialog-box">
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{t('pay.subtitle')}</span>

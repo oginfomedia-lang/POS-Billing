@@ -115,6 +115,18 @@ textarea {
   color: inherit;
 }
 
+/* Number boxes change only by typing: no up/down arrows (the mouse wheel and arrow keys are blocked in main.tsx). */
+input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 button {
   -webkit-tap-highlight-color: transparent;
 }
@@ -945,6 +957,12 @@ select.field-input {
   cursor: not-allowed;
 }
 
+/* Shown but filled in by the app (e.g. the automatic SKU). */
+.field-input[readonly] {
+  background-color: var(--surface-3);
+  font-family: var(--font-mono);
+}
+
 .checkbox-label {
   flex-direction: row !important;
   align-items: center;
@@ -1621,6 +1639,19 @@ select.field-input {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-xl);
   animation: modal-pop 220ms var(--ease);
+  position: relative; /* for .modal-close-corner */
+}
+
+/* Dialogs close only with their buttons (not by clicking outside). Dialogs without a .modal-header get this ✕. */
+.modal-close-corner {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+}
+
+.modal-close-corner ~ h3 {
+  padding-right: 48px;
 }
 
 .modal-wide {
@@ -2028,12 +2059,6 @@ select.field-input {
 .qty-input:focus {
   outline: none;
   background: var(--brand-50);
-}
-
-.qty-input::-webkit-inner-spin-button,
-.qty-input::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
 }
 
 .line-total-cell {

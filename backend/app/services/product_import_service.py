@@ -38,7 +38,7 @@ from app.schemas.product_import_schemas import (
     ImportRowOut,
 )
 from app.schemas.product_schemas import MAX_COST, MAX_MONEY, _optional_hsn, _optional_plu
-from app.services import audit_service, batch_service
+from app.services import audit_service, batch_service, sku_service
 from app.services.product_service import (
     _add_barcode_to_product,
     _infer_barcode_type,
@@ -464,7 +464,7 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
             if row.match is None:
                 loose = v.get("is_variable_weight", False)
                 product = Product(
-                    sku=v.get("sku") or "TEMP",
+                    sku=v.get("sku") or sku_service.generate(category_id, v["name"]),
                     name=v["name"],
                     price=v["price"],
                     tax_rate=v.get("tax_rate", Decimal("0")),
@@ -480,8 +480,6 @@ def apply(rows: list[_Row], options: ImportOptions, actor: User, filename: str) 
                 )
                 db.session.add(product)
                 db.session.flush()
-                if "sku" not in v:
-                    product.sku = f"SKU-{product.id:05d}"
                 link_supplier(product)
                 for code in row.barcodes:  # at most one (checked in analyse)
                     _add_barcode_to_product(product, code, _infer_barcode_type(code))

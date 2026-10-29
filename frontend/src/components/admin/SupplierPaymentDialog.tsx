@@ -146,8 +146,8 @@ export function SupplierPaymentDialog({ supplier, preselectInvoiceId, applyAdvan
   const title = applyAdvance ? 'Apply advance to invoices' : mode === 'advance' ? 'Record advance' : 'Record payment';
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box modal-wide">
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{supplier.company_name}</span>

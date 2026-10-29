@@ -11,6 +11,8 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
   // Item offers + manual discounts (everything except the bill offer).
   const itemSavingsPaise =
     toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) - toPaise(receipt.reward_discount);
+  // Prices are before GST; the printed subtotal includes GST so that subtotal − savings = total.
+  const subtotalWithGstPaise = toPaise(receipt.subtotal) + toPaise(receipt.tax_amount);
 
   return (
     <article className="receipt">
@@ -83,7 +85,7 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
       </div>
       <hr />
 
-      <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(receipt.subtotal)}</span></div>
+      <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(paiseToString(subtotalWithGstPaise))}</span></div>
       {itemSavingsPaise > 0 && (
         <div className="receipt-row"><span>{t('receipt.itemSavings')}</span><span>− {formatRupees(paiseToString(itemSavingsPaise))}</span></div>
       )}

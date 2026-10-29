@@ -16,6 +16,13 @@ export interface BarcodeOut {
   created_at?: string;
 }
 
+/** GET /products/sku-preview: prefix "KIR-SAK", sku "KIR-SAK-0007" (the number may change on save), final false. */
+export interface SkuPreview {
+  prefix: string;
+  sku: string;
+  final: boolean;
+}
+
 export interface ProductOut {
   id: number;
   sku: string;

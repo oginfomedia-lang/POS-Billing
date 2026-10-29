@@ -20,7 +20,6 @@ from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.product_repository import ProductRepository
 from app.schemas.purchase_schemas import (
     GoodsReceiptCreate,
-    GoodsReceiptItemOut,
     GoodsReceiptOut,
     POPaymentEntry,
     POPaymentHistoryOut,

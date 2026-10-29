@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { listCategories, listProducts } from '../../services/api/productApi';
@@ -347,8 +348,11 @@ export function DiscountsPage() {
       <p className="hint-text">{t('discounts.hint')}</p>
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(false)}>
-          <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box modal-wide">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(false)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{editingId === null ? t('discounts.addTitle') : t('discounts.editTitle')}</h3>
             {error && <div className="form-error">{error}</div>}
             <form onSubmit={submit} className="modal-form">

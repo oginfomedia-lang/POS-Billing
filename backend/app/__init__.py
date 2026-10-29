@@ -79,7 +79,7 @@ def _pause_during_restore(app: Flask) -> None:
         if request.method == "OPTIONS" or request.path in open_paths or not restore_service.live_restore_running():
             return None
         return error_response(503, "RESTORE_IN_PROGRESS",
-                              "A backup is being restored on the Main PC. Try again in a minute.")
+                              "A backup is being restored on the server. Try again in a minute.")
 
 
 def _require_shop_license(app: Flask) -> None:

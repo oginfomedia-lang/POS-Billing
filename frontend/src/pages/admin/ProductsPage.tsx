@@ -8,6 +8,7 @@ import {
   generateNewInhouseBarcode,
   listCategories,
   listProducts,
+  previewSku,
   updateProduct,
 } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -16,8 +17,10 @@ import { supplierApi } from '../../services/api/supplierApi';
 import { useAuth } from '../../hooks/useAuth';
 import { useStoreContext, useStores } from '../../store/storeContext';
 import { formatRupees } from '../../utils/money';
+import { skuField } from '../../utils/sku';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { MarathiInput } from '../../components/common/MarathiInput';
 import { ProductImportDialog } from '../../components/admin/ProductImportDialog';
 import type { SupplierOut } from '../../types/api';
@@ -46,10 +49,18 @@ export function ProductsPage() {
   const [view, setView] = useState<StatusView>('active');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Search box: name / SKU / barcode, English or Marathi ("sakhar" also finds "साखर").
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState(''); // what was actually searched (a moment after the last key)
 
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [target, setTarget] = useState<ProductOut | null>(null);
   const [formSku, setFormSku] = useState('');
+  // New products get an automatic SKU from the server on save; skuPreview is what it will look like.
+  // An admin may tick "own SKU" and type one instead (also to change an existing product's SKU).
+  const [skuPreview, setSkuPreview] = useState('');
+  const [ownSku, setOwnSku] = useState(false);
+  const [savedSku, setSavedSku] = useState<{ name: string; sku: string } | null>(null);
   const [formName, setFormName] = useState('');
   const [formPrice, setFormPrice] = useState('');
   const [formTax, setFormTax] = useState('0');
@@ -111,7 +122,7 @@ export function ProductsPage() {
     setError('');
     try {
       const [prod, cats] = await Promise.all([
-        listProducts({ page: p, per_page: 25, status: view, store_id: branchId ?? undefined }),
+        listProducts({ page: p, per_page: 25, status: view, store_id: branchId ?? undefined, q: query || undefined }),
         listCategories(),
       ]);
       setProducts(prod.items);
@@ -126,7 +137,13 @@ export function ProductsPage() {
 
   useEffect(() => {
     fetchAll();
-  }, [page, view, branchId]);
+  }, [page, view, branchId, query]);
+
+  // Search 350 ms after the last key, from page 1.
+  useEffect(() => {
+    const timer = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Suppliers for the product form (the usual supplier of a product). Optional: the form works without them.
   useEffect(() => {
@@ -140,6 +157,26 @@ export function ProductsPage() {
       setTimeout(() => barcodeInputRef.current?.focus(), 100);
     }
   }, [modal]);
+
+  // Live SKU preview while a new product's category and name are typed (a moment after the last key).
+  useEffect(() => {
+    if (modal !== 'create' || ownSku || !formCategory || !formName.trim()) {
+      setSkuPreview('');
+      return;
+    }
+    let stale = false;
+    const timer = setTimeout(() => {
+      previewSku(parseInt(formCategory, 10), formName)
+        .then((r) => { if (!stale) setSkuPreview(r.sku); })
+        .catch(() => { if (!stale) setSkuPreview(''); });
+    }, 300);
+    return () => { stale = true; clearTimeout(timer); };
+  }, [modal, ownSku, formCategory, formName]);
+
+  const sku = skuField({
+    mode: modal === 'edit' ? 'edit' : 'create', ownSku, savedSku: target?.sku ?? '',
+    categoryId: formCategory, name: formName, preview: skuPreview,
+  });
 
   /** Received stock goes to the branch picked in the sidebar, else the user's own, else the first. */
   function defaultStockStore() {
@@ -166,6 +203,8 @@ export function ProductsPage() {
     setModal('create');
     setTarget(null);
     setFormSku('');
+    setSkuPreview('');
+    setOwnSku(false);
     setFormName('');
     setFormPrice('');
     setFormTax('0');
@@ -190,6 +229,7 @@ export function ProductsPage() {
     setModal('edit');
     setTarget(p);
     setFormSku(p.sku || '');
+    setOwnSku(false);
     setFormName(p.name);
     setFormPrice(String(p.price));
     setFormTax(String(p.tax_rate));
@@ -273,9 +313,10 @@ export function ProductsPage() {
     setSaving(true);
     setFormError('');
     setReceived(null);
+    setSavedSku(null);
     try {
       const created = await createProduct({
-        sku: formSku || undefined,
+        sku: ownSku && formSku.trim() ? formSku.trim() : undefined,
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
@@ -290,6 +331,7 @@ export function ProductsPage() {
         barcodes: barcodesList,
       });
       setModal(null);
+      setSavedSku({ name: created.name, sku: created.sku });
       await receiveStock(created);
       fetchAll();
     } catch (err) {
@@ -311,7 +353,7 @@ export function ProductsPage() {
     setReceived(null);
     try {
       const updated = await updateProduct(target.id, {
-        sku: formSku,
+        ...(ownSku ? { sku: formSku.trim() } : {}), // otherwise the SKU stays as it is
         name: formName,
         price: parseFloat(formPrice),
         tax_rate: parseFloat(formTax) || 0,
@@ -363,6 +405,12 @@ export function ProductsPage() {
       </div>
 
       {error && <div className="page-error">{error}</div>}
+      {savedSku && (
+        <div className="notice-bar">
+          {t('products.savedWithSku', { name: savedSku.name, sku: savedSku.sku })}
+          <button className="btn-sm" onClick={() => setSavedSku(null)}>{t('common.dismiss')}</button>
+        </div>
+      )}
       {received && (
         <div className="notice-bar">
           {t('common.received', { qty: received.qty, name: received.name })}
@@ -381,6 +429,15 @@ export function ProductsPage() {
         </div>
       )}
       <StatusTabs value={view} onChange={(v) => { setView(v); setPage(1); }} />
+      <div className="form-row" style={{ marginBottom: 12 }}>
+        <MarathiInput
+          className="field-input"
+          value={search}
+          onChange={setSearch}
+          maxLength={100}
+          placeholder={t('products.searchPlaceholder')}
+        />
+      </div>
       {loading && <div className="loading-text">{t('products.loading')}</div>}
 
       <div className="table-card">
@@ -479,20 +536,40 @@ export function ProductsPage() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box modal-wide">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{modal === 'create' ? t('products.addTitle') : t('products.editTitle', { name: target?.name })}</h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={modal === 'create' ? handleCreate : handleEdit} className="modal-form">
               <div className="form-row">
                 <label className="field-label">
-                  {t('products.sku')}
-                  <input
-                    className="field-input"
-                    value={formSku}
-                    onChange={(e) => setFormSku(e.target.value)}
-                    placeholder={t('products.skuPlaceholder')}
-                  />
+                  {sku.kind === 'preview' ? t('products.skuPreviewLabel') : t('products.sku')}
+                  {sku.kind === 'own' ? (
+                    <input
+                      className="field-input"
+                      value={formSku}
+                      onChange={(e) => setFormSku(e.target.value)}
+                      maxLength={50}
+                      required={modal === 'edit'}
+                      placeholder={t('products.skuPlaceholder')}
+                    />
+                  ) : (
+                    <input
+                      className="field-input"
+                      readOnly
+                      tabIndex={-1}
+                      value={sku.kind === 'waiting' ? '' : sku.sku}
+                      placeholder={t('products.skuWaiting')}
+                    />
+                  )}
+                  <span className="hint-text">
+                    {sku.kind === 'preview' ? t('products.skuPreviewHint')
+                      : sku.kind === 'saved' ? t('products.skuSavedHint')
+                      : sku.kind === 'waiting' ? t('products.skuWaitingHint') : t('products.skuOwnHint')}
+                  </span>
                 </label>
                 <label className="field-label">
                   {t('products.productName')}
@@ -506,6 +583,19 @@ export function ProductsPage() {
                   />
                 </label>
               </div>
+              {user?.role === 'admin' && (
+                <label className="field-label checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={ownSku}
+                    onChange={(e) => {
+                      setOwnSku(e.target.checked);
+                      setFormSku(modal === 'edit' ? target?.sku ?? '' : '');
+                    }}
+                  />
+                  {modal === 'edit' ? t('products.skuChangeOwn') : t('products.skuUseOwn')}
+                </label>
+              )}
 
               <div className="form-row form-row-3">
                 <label className="field-label">

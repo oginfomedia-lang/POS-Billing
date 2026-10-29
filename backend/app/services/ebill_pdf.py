@@ -115,7 +115,8 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
     pdf.rule()
 
     item_savings = r.discount_amount - r.bill_offer_discount - r.reward_discount
-    pdf.row("Subtotal", rs(r.subtotal))
+    # Prices are before GST; the subtotal includes GST so that subtotal − savings = total.
+    pdf.row("Subtotal", rs(r.subtotal + r.tax_amount))
     if item_savings > 0:
         pdf.row("Item savings", f"− {rs(item_savings)}")
     if r.bill_offer_discount > 0:

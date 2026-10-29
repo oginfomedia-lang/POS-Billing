@@ -31,7 +31,8 @@ hiddenimports = app_modules + [
     "logging.config",
 ]
 # Packages with native parts / data files that PyInstaller does not find on its own.
-for pkg in ("psycopg", "psycopg_binary", "uharfbuzz", "fpdf", "cryptography", "paramiko"):
+for pkg in ("psycopg", "psycopg_binary", "uharfbuzz", "fpdf", "cryptography", "paramiko",
+            "indic_transliteration"):  # its scripts are .toml data files
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
