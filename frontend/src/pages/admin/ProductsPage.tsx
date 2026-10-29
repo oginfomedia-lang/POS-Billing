@@ -20,6 +20,7 @@ import { formatRupees } from '../../utils/money';
 import { skuField } from '../../utils/sku';
 import type { BarcodeType, CategoryOut, ProductOut, UOMType } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { MarathiInput } from '../../components/common/MarathiInput';
 import { ProductImportDialog } from '../../components/admin/ProductImportDialog';
 import type { SupplierOut } from '../../types/api';
@@ -48,6 +49,9 @@ export function ProductsPage() {
   const [view, setView] = useState<StatusView>('active');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // Search box: name / SKU / barcode, English or Marathi ("sakhar" also finds "साखर").
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState(''); // what was actually searched (a moment after the last key)
 
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [target, setTarget] = useState<ProductOut | null>(null);
@@ -118,7 +122,7 @@ export function ProductsPage() {
     setError('');
     try {
       const [prod, cats] = await Promise.all([
-        listProducts({ page: p, per_page: 25, status: view, store_id: branchId ?? undefined }),
+        listProducts({ page: p, per_page: 25, status: view, store_id: branchId ?? undefined, q: query || undefined }),
         listCategories(),
       ]);
       setProducts(prod.items);
@@ -133,7 +137,13 @@ export function ProductsPage() {
 
   useEffect(() => {
     fetchAll();
-  }, [page, view, branchId]);
+  }, [page, view, branchId, query]);
+
+  // Search 350 ms after the last key, from page 1.
+  useEffect(() => {
+    const timer = setTimeout(() => { setPage(1); setQuery(search.trim()); }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Suppliers for the product form (the usual supplier of a product). Optional: the form works without them.
   useEffect(() => {
@@ -419,6 +429,15 @@ export function ProductsPage() {
         </div>
       )}
       <StatusTabs value={view} onChange={(v) => { setView(v); setPage(1); }} />
+      <div className="form-row" style={{ marginBottom: 12 }}>
+        <MarathiInput
+          className="field-input"
+          value={search}
+          onChange={setSearch}
+          maxLength={100}
+          placeholder={t('products.searchPlaceholder')}
+        />
+      </div>
       {loading && <div className="loading-text">{t('products.loading')}</div>}
 
       <div className="table-card">
@@ -517,8 +536,11 @@ export function ProductsPage() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-box modal-wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box modal-wide">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>{modal === 'create' ? t('products.addTitle') : t('products.editTitle', { name: target?.name })}</h3>
             {formError && <div className="form-error">{formError}</div>}
             <form onSubmit={modal === 'create' ? handleCreate : handleEdit} className="modal-form">

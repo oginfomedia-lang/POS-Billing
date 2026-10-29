@@ -349,8 +349,8 @@ function ReturnApprovalDialog({ amount, onConfirm, onClose }: ApprovalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={() => !busy && onClose()}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{t('returns.approvalSubtitle')}</span>

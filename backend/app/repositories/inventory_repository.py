@@ -9,6 +9,7 @@ from app.models.inventory import Inventory, InventoryTransaction
 from app.models.enums import InventoryTxnType
 from app.models.product import Product
 from app.repositories.base_repository import BaseRepository
+from app.repositories.product_repository import search_filter
 
 
 class InventoryRepository(BaseRepository):
@@ -68,8 +69,9 @@ class InventoryRepository(BaseRepository):
             .execution_options(populate_existing=True)
         )
 
-    def stock_levels(self, store_id: int) -> list[tuple[Product, Inventory | None]]:
-        """Every active product sold in this store, with its stock row (None = never stocked)."""
+    def stock_levels(self, store_id: int, search: str | None = None) -> list[tuple[Product, Inventory | None]]:
+        """Every active product sold in this store, with its stock row (None = never stocked).
+        search: same match as the Products list (name, SKU, barcode, or how the name sounds)."""
         q = (
             db.select(Product, Inventory)
             .outerjoin(
@@ -80,6 +82,8 @@ class InventoryRepository(BaseRepository):
             .where((Product.store_id == store_id) | (Product.store_id.is_(None)))
             .order_by(Product.name)
         )
+        if search:
+            q = q.where(search_filter(search))
         return [(p, inv) for p, inv in db.session.execute(q).all()]
 
     def list_transactions(

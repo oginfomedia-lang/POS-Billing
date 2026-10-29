@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { MarathiInput } from '../../components/common/MarathiInput';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { useAuth } from '../../hooks/useAuth';
@@ -251,8 +252,11 @@ export function CountersPage() {
       )}
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3>
               {modal.kind === 'store'
                 ? (modal.store ? t('stores.editStore', { name: modal.store.name }) : t('stores.addStoreTitle'))

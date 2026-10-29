@@ -386,12 +386,14 @@ export function SuppliersPage() {
 
       {/* Add / Edit modal */}
       {modal && (
-        <div className="modal-overlay" onClick={closeModal}>
+        <div className="modal-overlay">
           <div
             className="modal-box"
             style={{ maxWidth: 640, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
           >
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={closeModal} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             <h3 style={{ marginBottom: 16 }}>
               {modal === 'add' ? t('suppliers.addTitle') : t('suppliers.editTitle', { name: target?.company_name })}
             </h3>

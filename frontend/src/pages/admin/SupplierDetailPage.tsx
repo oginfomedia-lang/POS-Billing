@@ -969,9 +969,8 @@ export function SupplierDetailPage() {
           : { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', dot: '#fb923c' };
         const statusLabel = invReceipt.payment_status === 'partially_paid' ? 'Partial' : invReceipt.payment_status === 'paid' ? 'Paid' : invReceipt.payment_status === 'cancelled' ? 'Cancelled' : 'Unpaid';
         return (
-          <div className="modal-overlay" onClick={() => setInvReceipt(null)} style={{ zIndex: 60 }}>
-            <div className="modal-box" style={{ maxWidth: 620, width: '96%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
-              onClick={(e) => e.stopPropagation()}>
+          <div className="modal-overlay" style={{ zIndex: 60 }}>
+            <div className="modal-box" style={{ maxWidth: 620, width: '96%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}>
 
               {/* Header bar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 22px', borderBottom: '1px solid var(--color-border)' }}>
@@ -1096,9 +1095,8 @@ export function SupplierDetailPage() {
 
       {/* GRN Receipt modal */}
       {(grnReceipt || grnReceiptLoading) && (
-        <div className="modal-overlay" onClick={() => { setGrnReceipt(null); setGrnReceiptMeta(null); }} style={{ zIndex: 60 }}>
-          <div className="modal-box" style={{ maxWidth: 580, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
-            onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={{ zIndex: 60 }}>
+          <div className="modal-box" style={{ maxWidth: 580, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}>
             {grnReceiptLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
             ) : grnReceipt && grnReceiptMeta && (
@@ -1225,9 +1223,8 @@ export function SupplierDetailPage() {
 
       {/* PO Receipt modal */}
       {(poReceipt || poReceiptLoading) && (
-        <div className="modal-overlay" onClick={() => setPoReceipt(null)} style={{ zIndex: 60 }}>
-          <div className="modal-box" style={{ maxWidth: 600, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}
-            onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" style={{ zIndex: 60 }}>
+          <div className="modal-box" style={{ maxWidth: 600, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}>
             {poReceiptLoading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>Loading…</div>
             ) : poReceipt && (() => {

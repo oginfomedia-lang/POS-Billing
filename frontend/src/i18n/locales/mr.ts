@@ -454,6 +454,7 @@ export const mr: typeof en = {
     title: 'उत्पादन व्यवस्थापन',
     add: '+ उत्पादन जोडा',
     loading: 'उत्पादने लोड होत आहेत…',
+    searchPlaceholder: 'नाव, SKU किंवा बारकोड शोधा (मराठी किंवा English)',
     colSku: 'SKU',
     colName: 'नाव',
     colPrice: 'किंमत',

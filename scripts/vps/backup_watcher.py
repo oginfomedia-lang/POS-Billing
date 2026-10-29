@@ -58,7 +58,9 @@ def describe(f: Path) -> tuple[str, datetime]:
 
 
 def register_new(cur, files: dict[str, Path]) -> None:
-    cur.execute("SELECT filename FROM backup_runs WHERE filename = ANY(%s)", (list(files),))
+    # A "running"/"failed" row whose file is here came in with a restored database (or never finished): fix it below.
+    cur.execute("SELECT filename FROM backup_runs WHERE filename = ANY(%s) AND status NOT IN ('running', 'failed')",
+                (list(files),))
     known = {row[0] for row in cur.fetchall()}
     for name in sorted(set(files) - known):
         f = files[name]
@@ -70,7 +72,10 @@ def register_new(cur, files: dict[str, Path]) -> None:
                    (filename, file_path, file_size_bytes, status, storage_location, verified,
                     restore_tested, download_count, started_at, completed_at)
                VALUES (%s, %s, %s, 'success', 'local', false, false, 0, %s, %s)
-               ON CONFLICT (filename) DO NOTHING""",
+               ON CONFLICT (filename) DO UPDATE
+                   SET file_path = EXCLUDED.file_path, file_size_bytes = EXCLUDED.file_size_bytes,
+                       status = 'success', error_message = NULL, completed_at = EXCLUDED.completed_at
+                   WHERE backup_runs.status IN ('running', 'failed')""",
             (name, str(f), size, when, datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)),
         )
         if cur.rowcount:

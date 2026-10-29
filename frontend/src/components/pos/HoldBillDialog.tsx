@@ -22,8 +22,8 @@ export function HoldBillDialog({ busy, error, onConfirm, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <div className="title-with-icon">
             <IconPauseCircle size={22} color="#d97706" />

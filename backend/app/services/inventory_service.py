@@ -29,11 +29,11 @@ from app.services import audit_service, batch_service, settings_service
 from app.utils.transactions import transaction
 
 
-def stock_levels(store_id: int) -> list[StockLevelOut]:
+def stock_levels(store_id: int, search: str | None = None) -> list[StockLevelOut]:
     _get_store_or_404(store_id)
     default_threshold = settings_service.get_settings().low_stock_threshold
     out = []
-    for product, inv in InventoryRepository().stock_levels(store_id):
+    for product, inv in InventoryRepository().stock_levels(store_id, search):
         qty = inv.qty_on_hand if inv else Decimal("0")
         own = inv.low_stock_threshold if inv else None
         threshold = own if own is not None else default_threshold

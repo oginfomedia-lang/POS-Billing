@@ -67,6 +67,8 @@ class BaseConfig:
     # --- WhatsApp Business Cloud API (nightly collection summary to the owner, e-bill to the customer) ---
     # Directory where pg_dump files are stored.  Defaults to <project_root>/backups/daily.
     BACKUP_DIR = os.environ.get("BACKUP_DIR") or None
+    # VPS only: the folder client shops upload their backups to (scripts/vps/backup_watcher.py registers them).
+    CLIENT_BACKUP_DIR = os.environ.get("CLIENT_BACKUP_DIR") or None
     # Full path to the PostgreSQL bin directory (e.g. C:\Program Files\PostgreSQL\16\bin).
     # Leave empty when pg_dump / pg_restore are already on PATH.
     PGBIN = os.environ.get("PGBIN") or None

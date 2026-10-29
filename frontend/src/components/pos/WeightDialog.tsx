@@ -38,8 +38,8 @@ export function WeightDialog({ product, busy, onConfirm, onClose }: Props) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box">
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{t('weight.subtitle')}</span>

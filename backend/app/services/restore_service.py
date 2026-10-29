@@ -1,6 +1,7 @@
 """Restore service — runs pg_restore against a target database with a safety pre-backup, in the background."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -54,6 +55,46 @@ _last: dict | None = None     # how the last restore ended (its row may be gone 
 _thread: threading.Thread | None = None
 
 
+def _state_file() -> Path:
+    from app.services.backup_service import _backup_dir
+    return _backup_dir() / "restore_state.json"
+
+
+def _save_state() -> None:
+    """Every server process (several Gunicorn workers) reads this: only the one running the restore has _active."""
+    active = dict(_active, pid=os.getpid()) if _active else None
+    try:
+        _state_file().write_text(json.dumps({"active": active, "last": _last}))
+    except OSError:
+        current_app.logger.warning("Could not write %s", _state_file())
+
+
+def _pid_alive(pid) -> bool:
+    if not pid or pid == os.getpid():
+        return False  # our own restore is in _active; our pid without it is left over from before
+    if os.name == "nt":
+        return False  # the Windows service is one process: another pid is a server that has stopped
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def _shared() -> tuple[dict | None, dict | None]:
+    """(restore under way in any process, how the last one ended)."""
+    if _active is not None:
+        return _active, _last
+    try:
+        data = json.loads(_state_file().read_text())
+    except (OSError, ValueError):
+        return None, _last
+    active = data.get("active")
+    return (active if active and _pid_alive(active.get("pid")) else None), data.get("last") or _last
+
+
 def current_db_name() -> str:
     """The database this server uses (literetailer_db on an installed shop, pos_db in development)."""
     return _parse_db_url(current_app.config["SQLALCHEMY_DATABASE_URI"])["dbname"]
@@ -62,12 +103,14 @@ def current_db_name() -> str:
 def status() -> dict:
     """Answered without the database, so it works while the live database is being replaced."""
     with _lock:
-        return {"running": _active is not None, "active": dict(_active) if _active else None,
-                "last": dict(_last) if _last else None}
+        active, last = _shared()
+        return {"running": active is not None, "active": dict(active) if active else None,
+                "last": dict(last) if last else None}
 
 
 def live_restore_running() -> bool:
-    return _active is not None and _active["live"]
+    active, _ = _shared()
+    return active is not None and active["live"]
 
 
 def wait(timeout: float | None = None) -> None:
@@ -128,20 +171,23 @@ def restore_backup(backup_run_id: int, target_db: str, user: User) -> RestoreRec
     if run.status != "success" or not run.file_path:
         raise BadRequestError("Only a successful backup can be restored.")
 
+    from app.services.backup_service import check_backup_file
+
     source_path = Path(run.file_path)
-    if not source_path.exists():
-        raise BadRequestError("Backup file is missing from disk.")
+    check_backup_file(source_path)
     user_id = user.id
 
     with _lock:
-        if _active is not None:
-            raise ConflictError(f"Restore #{_active['id']} is still running. Wait for it to finish.")
+        running, _ = _shared()
+        if running is not None:
+            raise ConflictError(f"Restore #{running['id']} is still running. Wait for it to finish.")
         record = RestoreRecord(backup_run_id=backup_run_id, target_db=target_db, status="running",
                                triggered_by_id=user_id)
         db.session.add(record)
         db.session.commit()
         _active = {"id": record.id, "target_db": target_db, "live": target_db == current_db_name(),
                    "phase": "safety_copy", "started_at": record.started_at.isoformat()}
+        _save_state()
         # Hand this request's connection back (record stays readable): the restore closes every open connection.
         db.session.close()
         _thread = threading.Thread(
@@ -168,12 +214,15 @@ def _run(app, record_id, started_at, backup_run_id, target_db, source_path, user
         _last = {"id": outcome["id"], "status": outcome["status"], "target_db": target_db, "live": _active["live"],
                  "completed_at": datetime.now(timezone.utc).isoformat()}
         _active = None
+        with app.app_context():
+            _save_state()
 
 
 def _phase(name: str) -> None:
     with _lock:
         if _active is not None:
             _active["phase"] = name
+            _save_state()
 
 
 def _end_other_connections(target_db: str) -> None:
@@ -256,6 +305,14 @@ def _restore(record_id, started_at, backup_run_id, target_db, source_path, user_
     record.safety_backup_path = safety_path
     record.completed_at = datetime.now(timezone.utc)
     record.error_message = restore_error
+    # The safety copy goes in the Backups list, so it can be restored from the screen if this restore was a mistake.
+    if safety_path and Path(safety_path).exists() and not db.session.execute(
+            db.select(BackupRun).filter_by(filename=Path(safety_path).name)).scalar_one_or_none():
+        from app.services.backup_service import _sha256
+        sp = Path(safety_path)
+        db.session.add(BackupRun(filename=sp.name, file_path=str(sp), file_size_bytes=sp.stat().st_size,
+                                 checksum_sha256=_sha256(sp), status="success", storage_location="local",
+                                 started_at=started_at, completed_at=datetime.now(timezone.utc)))
     db.session.commit()
 
     try:
@@ -276,8 +333,9 @@ def _close_stale() -> None:
     """Rows still "running" that are not the restore under way were cut off (the server stopped mid-way, or an
     older version left them behind): they are failed."""
     q = RestoreRecord.query.filter(RestoreRecord.status == "running")
-    if _active is not None:
-        q = q.filter(RestoreRecord.id != _active["id"])
+    active, _ = _shared()
+    if active is not None:
+        q = q.filter(RestoreRecord.id != active["id"])
     stale = q.all()
     for r in stale:
         r.status = "failed"

@@ -454,6 +454,7 @@ export const en = {
     title: 'Products Management',
     add: '+ Add Product',
     loading: 'Loading products…',
+    searchPlaceholder: 'Search name, SKU or barcode (English or मराठी)',
     colSku: 'SKU',
     colName: 'Name',
     colPrice: 'Price',

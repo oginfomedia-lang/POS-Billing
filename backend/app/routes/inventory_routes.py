@@ -29,7 +29,7 @@ def _store_id_arg() -> int:
 @inventory_bp.get("/inventory")
 @require_permission("inventory.read")
 def stock_levels():
-    levels = inventory_service.stock_levels(_store_id_arg())
+    levels = inventory_service.stock_levels(_store_id_arg(), request.args.get("q", "").strip() or None)
     return jsonify([lv.model_dump(mode="json") for lv in levels]), 200
 
 

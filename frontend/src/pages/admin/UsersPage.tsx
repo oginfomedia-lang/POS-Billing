@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { getErrorMessage, httpClient } from '../../services/api/httpClient';
 import type { PagedResponse, StoreOut, UserOut, UserRole } from '../../types/api';
 import { AdminNav } from '../../components/admin/AdminNav';
+import { IconX } from '../../components/common/Icons';
 import { MarathiInput } from '../../components/common/MarathiInput';
 import { StatusTabs, type StatusView } from '../../components/admin/StatusTabs';
 import { useStoreContext } from '../../store/storeContext';
@@ -195,8 +196,11 @@ export function UsersPage() {
       </div>
 
       {modal && (
-        <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <button type="button" className="modal-close-btn modal-close-corner" onClick={() => setModal(null)} title={t('common.close')} aria-label={t('common.close')}>
+              <IconX size={18} />
+            </button>
             {modal === 'create' && (
               <>
                 <h3>{t('users.addTitle')}</h3>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { IconDatabase, IconDownload, IconShield, IconTrash, IconX } from '../../components/common/Icons';
 import { backupApi } from '../../services/api/backupApi';
-import { getErrorMessage } from '../../services/api/httpClient';
+import { getBlobErrorMessage, getErrorMessage } from '../../services/api/httpClient';
 import type {
   BackupRunOut,
   CloudUploadAttemptOut,
@@ -49,8 +49,8 @@ function ConfirmModal({
   loading: boolean; onConfirm: () => void; onClose: () => void;
 }) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 400 }}>
         <div className="modal-header">
           <h3 className="modal-title" style={{ margin: 0 }}>Confirm</h3>
           <button className="modal-close-btn" onClick={onClose}><IconX size={16} /></button>
@@ -117,7 +117,7 @@ function BackupsTab() {
       document.body.appendChild(a); a.click();
       document.body.removeChild(a); URL.revokeObjectURL(url);
       await load(page);
-    } catch (e) { setActionError(getErrorMessage(e)); }
+    } catch (e) { setActionError(await getBlobErrorMessage(e)); }
     finally { setBusyId(null); }
   }
 
@@ -472,7 +472,7 @@ function RestoreTab() {
         {active && (
           <div className="hint-text" style={{ marginTop: 12 }}>
             <strong>Restore #{active.id} into {active.target_db} is running.</strong>{' '}
-            {RESTORE_PHASE[active.phase] ?? ''} You can leave this screen: it keeps going on the Main PC.
+            {RESTORE_PHASE[active.phase] ?? ''} You can leave this screen: it keeps going on the server.
             {active.live && ' Billing on the counters pauses until it finishes (usually under a minute).'}
           </div>
         )}

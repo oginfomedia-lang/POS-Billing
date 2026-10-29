@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -26,6 +26,20 @@ def _backup_dir() -> Path:
         d = Path(__file__).parent.parent.parent.parent / "backups" / "daily"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _client_backup_dir() -> Path | None:
+    cfg = current_app.config.get("CLIENT_BACKUP_DIR")
+    return Path(cfg) if cfg else None
+
+
+def check_backup_file(path: Path) -> None:
+    """The file must exist, inside this server's BACKUP_DIR or (VPS) the client upload folder."""
+    if not path.exists():
+        raise BadRequestError("Backup file is missing from the server disk.")
+    resolved = path.resolve()
+    if not any(resolved.is_relative_to(d.resolve()) for d in (_backup_dir(), _client_backup_dir()) if d):
+        raise BadRequestError("Invalid backup file path.")
 
 
 def _parse_db_url(url: str) -> dict:
@@ -151,7 +165,25 @@ def create_backup(user: User) -> BackupRun:
         return run
 
 
+# pg_dump is stopped after 600 s, so a backup still "running" after this never finished.
+STALE_AFTER = timedelta(minutes=15)
+
+
+def close_stale_backups() -> None:
+    """Rows still "running" long after any pg_dump could have ended: the server stopped mid-way, or the row came in
+    with a restored database (every dump holds its own row as "running", saved just before pg_dump started)."""
+    cutoff = datetime.now(timezone.utc) - STALE_AFTER
+    stale = BackupRun.query.filter(BackupRun.status == "running", BackupRun.started_at < cutoff).all()
+    for r in stale:
+        r.status = "failed"
+        r.completed_at = r.completed_at or datetime.now(timezone.utc)
+        r.error_message = r.error_message or "Not finished: the server stopped, or this row came from a restored backup."
+    if stale:
+        db.session.commit()
+
+
 def list_backups(page: int = 1, per_page: int = 20) -> tuple[list[BackupRun], int]:
+    close_stale_backups()
     q = BackupRun.query.order_by(BackupRun.started_at.desc())
     total = q.count()
     items = q.offset((page - 1) * per_page).limit(per_page).all()
@@ -173,14 +205,7 @@ def get_download_path(backup_id: int) -> tuple[Path, BackupRun]:
     if run.status != "success":
         raise BadRequestError(f"Backup is not available for download (status: {run.status}).")
     path = Path(run.file_path)
-    if not path.exists():
-        raise BadRequestError("Backup file is missing from the server disk.")
-    # Guard against path traversal: file must live inside the backup directory.
-    backup_dir = _backup_dir()
-    try:
-        path.resolve().relative_to(backup_dir.resolve())
-    except ValueError:
-        raise BadRequestError("Invalid backup file path.")
+    check_backup_file(path)
     return path, run
 
 
@@ -189,8 +214,7 @@ def verify_backup(backup_id: int, user: User) -> BackupRun:
     if run.status != "success" or not run.file_path:
         raise BadRequestError("Only a successful local backup can be verified.")
     path = Path(run.file_path)
-    if not path.exists():
-        raise BadRequestError("Backup file not found on disk.")
+    check_backup_file(path)
 
     try:
         env = os.environ.copy()
