@@ -47,7 +47,7 @@ export interface ShiftReturn {
   return_number: string | null;
   bill_number: string | null;
   created_at: string;
-  refund_method: 'cash' | 'card' | 'upi' | 'split';
+  refund_method: 'cash' | 'card' | 'upi' | 'split' | 'credit';
   refund_amount: string;
 }
 
@@ -60,6 +60,8 @@ export interface ShiftSummary {
   cash_sales: string;
   card_sales: string;
   upi_sales: string;
+  credit_sales: string; // sold on udhari: owed by customers, not in the drawer
+  udhari_cash: string; // udhari paid back in cash into this drawer
   returns: number;
   cash_refunds: string;
   other_refunds: string;

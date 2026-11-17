@@ -21,7 +21,7 @@ KEY_PREFIX = "int."
 
 @dataclass(frozen=True)
 class Field:
-    section: str  # razorpay / paytm / whatsapp
+    section: str  # razorpay / paytm / whatsapp / email
     kind: str = "str"  # str / bool / int
     secret: bool = False
 
@@ -46,6 +46,13 @@ FIELDS: dict[str, Field] = {
     "WHATSAPP_EBILL_TEMPLATE_NAME": Field("whatsapp"),
     "WHATSAPP_TEMPLATE_LANG": Field("whatsapp"),
     "WHATSAPP_MOCK": Field("whatsapp", "bool"),
+    # Outgoing email (purchase orders to suppliers). Port 465 = SSL, anything else = STARTTLS (e.g. 587).
+    "SMTP_HOST": Field("email"),
+    "SMTP_PORT": Field("email", "int"),
+    "SMTP_USERNAME": Field("email"),
+    "SMTP_PASSWORD": Field("email", secret=True),
+    "SMTP_FROM": Field("email"),  # empty = the username
+    "EMAIL_MOCK": Field("email", "bool"),
 }
 MOCK_FIELDS = {name for name in FIELDS if name.endswith("_MOCK")}
 

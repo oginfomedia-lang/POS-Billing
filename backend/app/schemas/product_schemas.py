@@ -4,8 +4,9 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Annotated
 
-from pydantic import BaseModel, field_validator, ValidationInfo
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 from app.models.enums import BarcodeType, UOMType
 
@@ -17,6 +18,10 @@ class CategoryOut(BaseModel):
     name: str
     parent_id: int | None
     is_active: bool
+    target_margin_percent: Decimal | None = None  # None = parent's, else the default in Settings
+
+
+MarginPercent = Annotated[Decimal, Field(ge=0, le=1000, max_digits=6, decimal_places=2)]
 
 
 def _category_name(v: str | None) -> str | None:
@@ -33,15 +38,18 @@ def _category_name(v: str | None) -> str | None:
 class CategoryCreate(BaseModel):
     name: str
     parent_id: int | None = None
+    target_margin_percent: MarginPercent | None = None
 
     _name = field_validator("name")(_category_name)
 
 
 class CategoryUpdate(BaseModel):
-    """Only the fields sent are changed; "parent_id": null moves the category to the top level."""
+    """Only the fields sent are changed; "parent_id": null moves the category to the top level,
+    "target_margin_percent": null goes back to the parent's / default profit %."""
     name: str | None = None
     parent_id: int | None = None
     is_active: bool | None = None
+    target_margin_percent: MarginPercent | None = None
 
     _name = field_validator("name")(_category_name)
 
@@ -190,6 +198,7 @@ class ProductOut(BaseModel):
     is_variable_weight: bool
     plu_code: str | None = None
     is_active: bool
+    details_pending: bool = False
     store_id: int | None
     supplier_id: int | None = None
     barcodes: list[BarcodeOut] = []
@@ -241,6 +250,17 @@ class ProductCreate(BaseModel):
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
     _plu = field_validator("plu_code", mode="before")(classmethod(lambda cls, v: _optional_plu(v)))
     _cost = field_validator("cost_price", mode="before")(classmethod(lambda cls, v: _optional_cost(v)))
+
+class PendingProductCreate(BaseModel):
+    """A new product typed on a purchase order: only what is known before the supplier's bill.
+    Selling price, GST, HSN and MRP come later (goods receipt / Selling prices page)."""
+    name: str
+    category_id: int | None = None
+    uom: UOMType = UOMType.PCS
+    supplier_id: int | None = None
+    store_id: int | None = None
+
+    _name = field_validator("name", mode="before")(classmethod(lambda cls, v: _product_name(v)))
 
 
 class ProductUpdate(BaseModel):

@@ -10,6 +10,15 @@ class Category(TimestampMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    # Profit wanted on cost, in % (12 = sell at cost × 1.12 before GST). NULL = parent's, else Settings default.
+    target_margin_percent = db.Column(db.Numeric(6, 2), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "target_margin_percent IS NULL OR (target_margin_percent >= 0 AND target_margin_percent <= 1000)",
+            name="ck_categories_target_margin_range",
+        ),
+    )
 
     parent = db.relationship("Category", remote_side="Category.id", back_populates="children")
     children = db.relationship("Category", back_populates="parent")

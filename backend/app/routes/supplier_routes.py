@@ -121,6 +121,17 @@ def list_supplier_grns(supplier_id: int):
     return jsonify([g.model_dump(mode="json") for g in grns]), 200
 
 
+@supplier_bp.get("/suppliers/<int:supplier_id>/returns")
+@require_permission("purchases.read")
+def list_supplier_returns(supplier_id: int):
+    """Stocked goods sent back to this supplier, newest first, with the debit note amount."""
+    from app.services import supplier_return_service
+
+    supplier_service.get_supplier(supplier_id)
+    returns, _total = supplier_return_service.list_returns(supplier_id, per_page=200)
+    return jsonify([r.model_dump(mode="json") for r in returns]), 200
+
+
 # ── Supplier-product mapping ──────────────────────────────────────────────────
 
 @supplier_bp.get("/suppliers/<int:supplier_id>/products")

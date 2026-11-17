@@ -126,7 +126,7 @@ class CustomerMobileRequest(BaseModel):
 
 
 class CompleteSaleRequest(BaseModel):
-    method: Literal["cash", "card", "upi"]
+    method: Literal["cash", "card", "upi", "credit"]
     cash_tendered: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)
     reference: str | None = Field(None, max_length=100)
     payment_intent_id: int | None = None   # required for card/upi: proof Razorpay confirmed the money

@@ -469,7 +469,12 @@ export function ProductsPage() {
               return (
                 <tr key={p.id}>
                   <td><code>{p.sku}</code></td>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.details_pending && (
+                      <span className="status-badge badge-warning" style={{ marginLeft: 6 }}>{t('products.pricePending')}</span>
+                    )}
+                  </td>
                   <td title={p.store_price ? t('products.branchPriceTip') : undefined}>
                     {formatRupees(p.store_price ?? p.price)}
                     {p.store_price && <span className="status-muted price-hq">{t('products.hqPrice', { price: formatRupees(p.price) })}</span>}

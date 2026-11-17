@@ -220,6 +220,10 @@ export interface SettingsData {
   low_stock_threshold: string;
   /** Bills older than this many days can't be returned. */
   return_window_days: number;
+  /** Godown (back room) kept apart from the shop shelf. */
+  godown_enabled: boolean;
+  /** Profit wanted on cost, in %, for categories without their own target (Review selling prices). */
+  default_margin_percent: string;
   /** Reward points for customers identified by mobile number. */
   rewards_enabled: boolean;
   /** ₹ paid for 1 point. */
@@ -316,7 +320,7 @@ export interface ReturnListRow {
   cashier_name: string;
   approved_by_name: string;
   reason: string;
-  refund_method: 'cash' | 'card' | 'upi' | 'split';
+  refund_method: 'cash' | 'card' | 'upi' | 'split' | 'credit';
   refund_amount: string;
   items_count: number;
 }

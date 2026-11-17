@@ -3,7 +3,7 @@ from app.models.audit_log import AuditLog  # noqa: F401
 from app.models.category import Category  # noqa: F401
 from app.models.customer import Customer, RewardTransaction  # noqa: F401
 from app.models.discount import Discount  # noqa: F401
-from app.models.inventory import Inventory, InventoryTransaction, SaleItemBatch, StockBatch  # noqa: F401
+from app.models.inventory import Inventory, InventoryTransaction, SaleItemBatch, StockBatch, StockTransfer  # noqa: F401
 from app.models.notification import NotificationLog  # noqa: F401
 from app.models.product import Product, ProductBarcode  # noqa: F401
 from app.models.returns import SaleReturn, SaleReturnItem  # noqa: F401
@@ -24,3 +24,4 @@ from app.models.supplier_product import SupplierProduct  # noqa: F401
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN  # noqa: F401
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation  # noqa: F401
 from app.models.supplier_document import SupplierDocument  # noqa: F401
+from app.models.supplier_return import SupplierReturn  # noqa: F401

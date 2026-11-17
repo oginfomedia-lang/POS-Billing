@@ -261,6 +261,10 @@ export interface PurchaseOrderItemOut {
   line_discount: string;
   tax_amount: string;
   line_total: string;
+  /** For the goods receipt screen. */
+  product_details_pending?: boolean;
+  product_mrp?: string | null;
+  product_hsn_code?: string | null;
 }
 
 export interface PurchaseOrderOut {
@@ -289,6 +293,16 @@ export interface PurchaseOrderOut {
   closed_at: string | null;
   created_by_id: number | null;
   created_by_name: string;
+  supplier_phone: string | null;
+  supplier_email: string | null;
+  /** First confirmed send to the supplier (email, or marked by staff). */
+  sent_at: string | null;
+  sent_via: POSentVia | null;
+  sent_by_name: string;
+  /** Latest automatic email: null = never emailed. */
+  email_status: 'sending' | 'sent' | 'failed' | null;
+  email_to: string | null;
+  email_error: string | null;
   items: PurchaseOrderItemOut[];
   created_at: string;
   updated_at: string;
@@ -303,9 +317,22 @@ export interface PurchaseOrderOut {
   amount_paid: string;
   /** payable − paid */
   outstanding_amount: string;
+  is_direct: boolean;  // goods arrived without a PO; entered from the supplier's bill
 }
 
 export type POPaymentStatus = 'not_invoiced' | 'unpaid' | 'partially_paid' | 'paid' | 'overdue';
+
+export type POSentVia = 'email' | 'whatsapp' | 'phone' | 'in_person' | 'other';
+
+/** What the "Send to supplier" box needs (GET /purchases/:id/supplier-message). */
+export interface SupplierMessageOut {
+  text: string;
+  /** wa.me link with the text; null when the supplier has no valid mobile. */
+  whatsapp_url: string | null;
+  supplier_mobile: string | null;
+  supplier_email: string | null;
+  email_configured: boolean;
+}
 
 export interface PurchaseDashboard {
   total: number;

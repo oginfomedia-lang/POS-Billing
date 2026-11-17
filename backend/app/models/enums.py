@@ -20,6 +20,7 @@ class PaymentMethod(str, enum.Enum):
     CARD = "card"
     UPI = "upi"
     SPLIT = "split"
+    CREDIT = "credit"
 
 
 class InventoryTxnType(str, enum.Enum):
@@ -133,3 +134,9 @@ class NotificationStatus(str, enum.Enum):
     PENDING = "pending"  # row claimed, message not confirmed yet (or the run crashed mid-send)
     SENT = "sent"
     FAILED = "failed"
+
+class CreditTxnType(str, enum.Enum):
+    UDHARI = "udhari"  # customer owes money for a sale
+    PAYMENT = "payment"  # customer pays back some or all of the owed money
+    RETURN = "return"  # customer returns goods and gets a credit note
+    ADJUST = "adjust"  # manual correction by an admin (future)

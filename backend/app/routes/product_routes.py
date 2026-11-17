@@ -14,6 +14,7 @@ from app.schemas.product_schemas import (
     ProductCreate,
     ProductOut,
     ProductUpdate,
+    PendingProductCreate
 )
 from app.schemas.product_import_schemas import ImportOptions
 from app.services import auth_service, inventory_service, product_import_service, product_service, sku_service
@@ -110,6 +111,17 @@ def _with_store_prices(products: list, store_id: int | None) -> list[dict]:
 def create_product():
     data = _without_cost(ProductCreate.model_validate(request.get_json(force=True)))
     product = product_service.create_product(data)
+    return jsonify(_with_store_prices([product], None)[0]), 201
+
+
+@product_bp.post("/products/pending")
+@require_permission("products.create")
+def create_pending_product():
+    """+ New product on a purchase order: name, category, unit only. Admin and manager."""
+    data = PendingProductCreate.model_validate(request.get_json(force=True))
+    if data.store_id is not None:
+        require_store_access(auth_service.current_user(), data.store_id)
+    product = product_service.create_pending_product(data)
     return jsonify(_with_store_prices([product], None)[0]), 201
 
 

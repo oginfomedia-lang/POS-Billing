@@ -4,13 +4,16 @@ from flask import Blueprint, jsonify, request
 from app.errors.exceptions import ValidationError
 from app.schemas.inventory_schemas import (
     AdjustStockRequest,
+    BatchReturnRequest,
     BatchWriteOffRequest,
     InventoryTxnOut,
+    ShelfMinRequest,
     StockInRequest,
     StorePriceRequest,
     ThresholdRequest,
+    TransferRequest,
 )
-from app.services import auth_service, inventory_service
+from app.services import auth_service, godown_service, inventory_service, supplier_return_service
 from app.utils.permissions import require_permission
 from app.utils.store_scope import is_head_office, require_store_access
 
@@ -103,6 +106,59 @@ def write_off_batch(batch_id: int):
     allowed = None if is_head_office(actor) else {actor.store_id}
     batch = inventory_service.write_off_batch(batch_id, data, actor, allowed)
     return jsonify({"batch_id": batch.id, "qty_remaining": str(batch.qty_remaining)}), 200
+
+
+@inventory_bp.post("/inventory/batches/<int:batch_id>/return-to-supplier")
+@require_permission("inventory.manage")
+def return_batch_to_supplier(batch_id: int):
+    """Goods of a GRN batch go back to its supplier: out of stock, and a debit note for their value."""
+    data = BatchReturnRequest.model_validate(request.get_json(force=True))
+    actor = auth_service.current_user()
+    allowed = None if is_head_office(actor) else {actor.store_id}
+    ret = supplier_return_service.return_batch(batch_id, data, actor, allowed)
+    return jsonify(supplier_return_service.enrich(ret).model_dump(mode="json")), 201
+
+
+@inventory_bp.post("/inventory/transfer")
+@require_permission("inventory.manage")
+def transfer():
+    """Move goods godown → shop shelf (or back): {"store_id", "product_id", "qty", "direction"}."""
+    data = TransferRequest.model_validate(request.get_json(force=True))
+    actor = auth_service.current_user()
+    require_store_access(actor, data.store_id)
+    row = godown_service.transfer(data, actor)
+    return jsonify({
+        "product_id": row.product_id,
+        "shop_qty": str(godown_service.shop_qty(row)),
+        "godown_qty": str(row.godown_qty),
+    }), 200
+
+
+@inventory_bp.post("/inventory/shelf-min")
+@require_permission("inventory.manage")
+def set_shelf_min():
+    data = ShelfMinRequest.model_validate(request.get_json(force=True))
+    actor = auth_service.current_user()
+    require_store_access(actor, data.store_id)
+    row = godown_service.set_shelf_min(data, actor)
+    level = None if row.shelf_min_qty is None else str(row.shelf_min_qty)
+    return jsonify({"product_id": row.product_id, "shelf_min_qty": level}), 200
+
+
+@inventory_bp.get("/inventory/refill")
+@require_permission("inventory.read")
+def refill():
+    """Shelves at or below their refill level with stock waiting in the godown."""
+    return jsonify([r.model_dump(mode="json") for r in godown_service.refill_list(_store_id_arg())]), 200
+
+
+@inventory_bp.get("/inventory/transfers")
+@require_permission("inventory.read")
+def transfers():
+    """Recent godown ↔ shelf moves (?product_id= for one product)."""
+    product_id = request.args.get("product_id", type=int)
+    rows = godown_service.recent_transfers(_store_id_arg(), product_id)
+    return jsonify([r.model_dump(mode="json") for r in rows]), 200
 
 
 @inventory_bp.get("/inventory/ledger")

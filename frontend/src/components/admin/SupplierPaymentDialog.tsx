@@ -9,7 +9,7 @@ import { supplierInvoiceApi } from '../../services/api/supplierInvoiceApi';
 import { supplierPaymentApi } from '../../services/api/supplierPaymentApi';
 import { uploadApi } from '../../services/api/uploadApi';
 import type { SupplierInvoiceOut, SupplierOut, SupplierPaymentMethod, SupplierPaymentOut } from '../../types/api';
-import { formatDate } from '../../utils/format';
+import { formatDate, isoDateIst } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconX } from '../common/Icons';
 
@@ -50,7 +50,7 @@ export function SupplierPaymentDialog({ supplier, preselectInvoiceId, applyAdvan
   const [mode, setMode] = useState<Mode>('invoices');
   const [amount, setAmount] = useState(applyAdvance?.unallocated_amount ?? '');
   const [alloc, setAlloc] = useState<Record<number, string>>({});
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(isoDateIst());
   const [method, setMethod] = useState<SupplierPaymentMethod>('bank_transfer');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
@@ -99,6 +99,7 @@ export function SupplierPaymentDialog({ supplier, preselectInvoiceId, applyAdvan
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (date > isoDateIst()) return setError('Payment date cannot be in the future.');
     if (amountPaise <= 0) return setError('Enter the amount paid.');
     if (overInvoice) return setError(`Invoice ${overInvoice.invoice_number}: only ${formatRupees(overInvoice.outstanding)} is left to pay.`);
     if (mustMatch && allocatedPaise !== amountPaise) {
@@ -199,7 +200,7 @@ export function SupplierPaymentDialog({ supplier, preselectInvoiceId, applyAdvan
                   </label>
                   <label className="field-label">
                     Date
-                    <input className="field-input" type="date" required value={date} onChange={(e) => setDate(e.target.value)} disabled={busy} />
+                    <input className="field-input" type="date" required value={date} max={isoDateIst()} onChange={(e) => setDate(e.target.value)} disabled={busy} />
                   </label>
                   <label className="field-label">
                     Method

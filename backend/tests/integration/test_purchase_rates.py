@@ -79,13 +79,32 @@ def test_goods_receipt_remembers_the_rate(client, admin_headers, store, supplier
 
     link = _link(supplier, p["id"])
     assert (link.purchase_price, link.last_purchase_price) == (Decimal("40.50"), None)
-    assert db.session.get(Product, p["id"]).cost_price == Decimal("40.5000")  # empty default cost filled in
+    assert db.session.get(Product, p["id"]).cost_price == Decimal("40.5000")  # empty cost filled in
     assert _po_row(client, admin_headers, supplier, p["id"])["purchase_price"] == 40.5
 
     _receive(client, admin_headers, store, supplier, p["id"], 10, "43")
     link = _link(supplier, p["id"])
     assert (link.purchase_price, link.last_purchase_price) == (Decimal("43.00"), Decimal("40.50"))
-    assert db.session.get(Product, p["id"]).cost_price == Decimal("40.5000")  # a set default cost is kept
+    assert db.session.get(Product, p["id"]).cost_price == Decimal("43.0000")  # follows the latest rate paid
+
+
+def test_cost_follows_the_latest_rate_even_if_typed_by_hand(client, admin_headers, store, supplier):
+    """Sugar was ₹40; the supplier now charges ₹45. The product's cost must show ₹45, not the old ₹40, so a
+    selling price below ₹45 can be spotted."""
+    p = _new_product(client, admin_headers, store, supplier, cost_price="40")
+    _receive(client, admin_headers, store, supplier, p["id"], 10, "45")
+    assert db.session.get(Product, p["id"]).cost_price == Decimal("45.0000")
+
+
+def test_rate_from_another_supplier_also_updates_the_cost(client, admin_headers, store, supplier):
+    p = _new_product(client, admin_headers, store, supplier)
+    _receive(client, admin_headers, store, supplier, p["id"], 10, "40")
+    other = Supplier(supplier_code="SUP-RAT002", company_name="Patil Wholesale", payment_terms=PaymentTerms.NET_30)
+    db.session.add(other)
+    db.session.commit()
+    _receive(client, admin_headers, store, other, p["id"], 10, "38")
+    assert db.session.get(Product, p["id"]).cost_price == Decimal("38.0000")  # the latest purchase, any supplier
+    assert _link(supplier, p["id"]).purchase_price == Decimal("40.00")  # each supplier keeps its own rate
 
 
 def test_receipt_from_a_new_supplier_adds_the_product_to_their_list(client, admin_headers, store, supplier):

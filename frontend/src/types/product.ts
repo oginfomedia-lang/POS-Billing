@@ -6,6 +6,8 @@ export interface CategoryOut {
   name: string;
   parent_id: number | null;
   is_active: boolean;
+  /** Profit wanted on cost, in %. null = the parent category's, else the default in Settings. */
+  target_margin_percent: string | null;
 }
 
 export interface BarcodeOut {
@@ -40,6 +42,8 @@ export interface ProductOut {
   /** Loose items: the item code set on the weighing scale (no leading zeros). */
   plu_code: string | null;
   is_active: boolean;
+  /** Typed on a purchase order: no selling price yet, so billing refuses it. */
+  details_pending?: boolean;
   store_id: number | null;
   /** Usual supplier (for information). */
   supplier_id: number | null;

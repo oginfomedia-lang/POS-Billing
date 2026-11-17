@@ -87,13 +87,15 @@ class CustomerRepository:
         q = db.select(db.func.coalesce(db.func.sum(SaleReturn.refund_amount), 0)).where(SaleReturn.sale_id == sale_id)
         return db.session.scalar(q)
 
-    def search(self, text: str | None, page: int = 1, per_page: int = 25) -> tuple[list[Customer], int]:
+    def search(self, text: str | None, page: int = 1, per_page: int = 25, with_dues: bool = False) -> tuple[list[Customer], int]:
         q = db.select(Customer)
         if text and text.strip():
             needle = text.strip()
             q = q.where(db.or_(Customer.mobile.contains(needle), Customer.name.ilike(f"%{needle}%")))
+        if with_dues:
+            q = q.where(Customer.credit_balance > 0)
         total = db.session.scalar(db.select(db.func.count()).select_from(q.subquery())) or 0
-        q = q.order_by(Customer.last_visit_at.desc().nulls_last(), Customer.id.desc())
+        q = q.order_by(Customer.credit_balance.desc(), Customer.last_visit_at.desc().nulls_last(), Customer.id.desc())
         items = db.session.scalars(q.offset((page - 1) * per_page).limit(per_page)).all()
         return list(items), total
 

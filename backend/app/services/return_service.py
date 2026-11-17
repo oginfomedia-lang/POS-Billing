@@ -2,7 +2,7 @@
 
 Rules: a manager/admin approves with their PIN, the cashier has an open shift (the cash comes out
 of their drawer), same store as the bill, within the return window, and never more than was sold.
-Every refund is paid in cash.
+Refunds are paid in cash, except for a bill paid on udhari: its refund comes off the customer's khata.
 """
 from __future__ import annotations
 
@@ -29,12 +29,13 @@ from app.schemas.sale_schemas import GstSummaryRow
 from app.services import (
     audit_service,
     billing_service,
+    customer_credit_service,
     inventory_service,
     loyalty_service,
     pricing_service,
     settings_service,
 )
-from app.services.shift_service import require_active_shift
+from app.services.shift_service import expected_cash, require_active_shift
 from app.utils.dates import IST, now_ist
 from app.utils.money import round_money
 from app.utils.phone import normalize_mobile
@@ -118,6 +119,8 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
         blocked = _blocked_reason(sale, shift.store_id, window)
         if blocked:
             raise AppError(blocked)
+        # A bill paid on udhari was never paid in cash: the refund comes off the khata, not out of the drawer.
+        on_credit = customer_credit_service.sale_on_credit(sale)
 
         done = ReturnRepository().returned_by_item(sale.id)
         items = {i.id: i for i in sale.items}
@@ -129,7 +132,7 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
             cashier_id=actor.id,
             approved_by_id=approver.id,
             reason=data.reason.strip(),
-            refund_method=PaymentMethod.CASH,
+            refund_method=PaymentMethod.CREDIT if on_credit else PaymentMethod.CASH,
         )
         for ln in data.lines:
             item = items.get(ln.sale_item_id)
@@ -169,6 +172,13 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
         ret.tax_amount = sum((i.tax_amount for i in ret.items), ZERO)
         ret.refund_amount = sum((i.refund_amount for i in ret.items), ZERO)
 
+        drawer = None if on_credit else expected_cash(shift)
+        if drawer is not None and ret.refund_amount > drawer:
+            raise AppError(
+                f"Not enough cash in this drawer: the refund is ₹{ret.refund_amount}, "
+                f"the drawer should hold ₹{drawer}."
+            )
+
         db.session.add(ret)
         db.session.flush()
         ret.return_number = f"RT{sale.store_id:02d}-{now_ist():%y%m%d}-{ret.id:05d}"
@@ -180,6 +190,8 @@ def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:
             f"Return {ret.return_number} of bill {sale.bill_number}",
         )
         loyalty_service.reverse_for_return(sale, ret, actor)  # take back points earned on the refunded money
+        if on_credit:
+            customer_credit_service.reverse_for_return(sale, ret, actor)  # same transaction as the return
         audit_service.log(
             actor, "sale.return", "sale", sale.id, None,
             {

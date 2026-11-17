@@ -21,6 +21,8 @@ const DEFAULTS: SettingsData = {
   fssai_number: '',
   low_stock_threshold: '5',
   return_window_days: 30,
+  godown_enabled: false,
+  default_margin_percent: '10',
   rewards_enabled: false,
   reward_rupees_per_point: '100',
   reward_block_points: 100,
@@ -170,6 +172,33 @@ export function SettingsPage() {
               required
             />
             <span className="hint-text">{t('settings.returnWindowHint')}</span>
+          </label>
+          <h3 className="section-title settings-anchor" id="settings-godown">{t('settings.godown.title')}</h3>
+          <label className="field-label checkbox-label">
+            <input
+              type="checkbox"
+              checked={settings.godown_enabled}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('godown_enabled', e.target.checked)}
+            />
+            {t('settings.godown.enabled')}
+          </label>
+          <p className="hint-text">{t('settings.godown.hint')}</p>
+          <h3 className="section-title settings-anchor" id="settings-profit">{t('settings.profit.title')}</h3>
+          <label className="field-label">
+            {t('settings.profit.defaultMargin')}
+            <input
+              className="field-input"
+              type="number"
+              min="0"
+              max="1000"
+              step="0.01"
+              value={settings.default_margin_percent}
+              disabled={!isAdmin || saving}
+              onChange={(e) => update('default_margin_percent', e.target.value)}
+              required
+            />
+            <span className="hint-text">{t('settings.profit.hint')}</span>
           </label>
           <h3 className="section-title settings-anchor" id="settings-rewards">{t('settings.rewards.title')}</h3>
           <label className="field-label checkbox-label">

@@ -1,6 +1,6 @@
 // Settings → Integrations (backend services/integration_settings_service.py).
 
-export type IntegrationProvider = 'razorpay' | 'paytm' | 'whatsapp';
+export type IntegrationProvider = 'razorpay' | 'paytm' | 'whatsapp' | 'email';
 
 /** A normal field: its value, and whether it currently comes from the server's .env file. */
 export interface PlainField {

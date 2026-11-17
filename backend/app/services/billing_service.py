@@ -27,6 +27,7 @@ from app.schemas.sale_schemas import (
 from app.services import (
     audit_service,
     bill_number_service,
+    customer_credit_service,
     discount_service,
     ebill_service,
     inventory_service,
@@ -66,6 +67,8 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
         # store_id NULL = product sold in every store.
         if product is None or not product.is_active or product.store_id not in (None, sale.store_id):
             raise NotFoundError(f"Product {data.product_id} not found.")
+        if product.details_pending:
+            raise AppError(f"{product.name} is pending a selling price and cannot be billed yet.")
         _check_whole_qty(product, data.qty)
 
         item = SaleRepository().find_item(sale.id, product.id)
@@ -282,6 +285,7 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         sale.status = SaleStatus.PAID
         sale.completed_at = now_ist()
         loyalty_service.settle_sale(sale, actor)  # same transaction: points and sale commit or fail together
+        customer_credit_service.settle_sale_credit(sale, actor) #updates khata if paid on udhari
         ebill_queued = ebill_service.queue(sale)  # same transaction: a paid bill always has its e-bill on record
         audit_service.log(
             actor, "sale.complete", "sale", sale.id, None,

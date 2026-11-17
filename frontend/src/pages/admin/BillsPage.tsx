@@ -109,7 +109,7 @@ export function BillsPage() {
             {t(r.label)}
           </button>
         ))}
-        <input className="field-input filter-input" type="date" value={from} max={to} aria-label={t('bills.from')}
+        <input className="field-input filter-input" type="date" value={from} max={to || isoDateIst()} aria-label={t('bills.from')}
                onChange={(e) => e.target.value && update({ from: e.target.value })} />
         <span className="hint-text">{t('reports.to')}</span>
         <input className="field-input filter-input" type="date" value={to} min={from} max={isoDateIst()} aria-label={t('bills.to')}

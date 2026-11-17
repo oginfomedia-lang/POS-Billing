@@ -5,15 +5,13 @@ Devanagari fallback font so Marathi store/product names render correctly.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from fpdf import FPDF
 
 from app.schemas.sale_schemas import ReceiptOut
+from app.services import pdf_fonts
 from app.services.daily_report_service import inr
 from app.utils.dates import IST
 
-FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 WIDTH = 80  # mm
 MARGIN = 4  # mm
 LINE = 4.2  # mm per text line
@@ -29,11 +27,7 @@ class _Bill(FPDF):
         super().__init__(unit="mm", format=(WIDTH, height))
         self.set_margins(MARGIN, MARGIN, MARGIN)
         self.set_auto_page_break(False)
-        for family, file in (("NotoSans", "NotoSans"), ("NotoDeva", "NotoSansDevanagari")):
-            self.add_font(family, "", str(FONTS / f"{file}-Regular.ttf"))
-            self.add_font(family, "B", str(FONTS / f"{file}-Bold.ttf"))
-        self.set_fallback_fonts(["NotoDeva"])
-        self.set_text_shaping(True)
+        pdf_fonts.setup(self)
         self.add_page()
         self.font(8)
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ReceiptGstTable } from '../../components/pos/ReceiptGstTable';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { useReceiptPrint } from '../../hooks/useReceiptPrint';
 import { getErrorMessage } from '../../services/api/httpClient';
@@ -9,7 +10,7 @@ import { getReturn } from '../../services/api/returnApi';
 import type { ReturnOut } from '../../types/returns';
 import { VENDOR_CREDIT } from '../../utils/brand';
 import { formatDateTime } from '../../utils/format';
-import { formatRupees } from '../../utils/money';
+import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 
 export function ReturnReceiptPage() {
   const { t, i18n } = useTranslation();
@@ -99,14 +100,16 @@ export function ReturnReceiptPage() {
           </table>
           <hr />
 
-          <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(ret.subtotal)}</span></div>
+          <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(paiseToString(toPaise(ret.subtotal) + toPaise(ret.tax_amount)))}</span></div>
           {Number(ret.discount_amount) > 0 && (
             <div className="receipt-row"><span>{t('returns.lessDiscount')}</span><span>− {formatRupees(ret.discount_amount)}</span></div>
           )}
           <div className="receipt-row receipt-total">
-            <span>{t('returns.cashRefunded')}</span><span>{formatRupees(ret.refund_amount)}</span>
+            <span>{t(ret.refund_method === 'credit' ? 'returns.udhariReduced' : 'returns.cashRefunded')}</span><span>{formatRupees(ret.refund_amount)}</span>
           </div>
           <hr />
+          <ReceiptGstTable rows={ret.gst_summary} />
+          {ret.gst_summary.length > 0 && <hr />}
 
           <div className="receipt-row"><span>{t('returns.reason')}</span><span>{ret.reason}</span></div>
           <div className="receipt-row"><span>{t('returns.approvedBy')}</span><span>{ret.approved_by_name}</span></div>

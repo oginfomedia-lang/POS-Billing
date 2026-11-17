@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func
@@ -30,8 +30,12 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderUpdate,
     SupplierGRNOut,
 )
-from app.services import audit_service, batch_service, inventory_service
+from app.services import audit_service, batch_service, godown_service, inventory_service, po_sending_service
+from app.utils.dates import business_date
 from app.utils.transactions import transaction
+
+# An automatic PO email still "sending" after this long was cut off (a send takes seconds; SMTP timeout is 20 s).
+EMAIL_STUCK_AFTER = timedelta(minutes=2)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,7 +54,12 @@ def _remember_purchase_price(supplier_id: int, product, unit_cost: Decimal) -> N
     """After goods arrive, the next purchase order from this supplier starts at the rate just paid.
 
     The supplier's product link keeps the rate (the old one moves to last_purchase_price), and is created
-    if the product wasn't in the supplier's list yet. A product with no default cost gets this one.
+    if the product wasn't in the supplier's list yet.
+
+    The product's cost price always becomes this latest rate (before GST, after discount), so the product page
+    shows what the next stock really costs and selling prices can be checked against it. Billing and the profit
+    report don't use it while the store has stock with an average cost (inventory.avg_cost), so this never
+    changes the profit of goods already sold.
     """
     rate = unit_cost.quantize(Decimal("0.01"))
     link = db.session.scalar(
@@ -72,8 +81,7 @@ def _remember_purchase_price(supplier_id: int, product, unit_cost: Decimal) -> N
         if link.purchase_price is not None:
             link.last_purchase_price = link.purchase_price
         link.purchase_price = rate
-    if product.cost_price is None:
-        product.cost_price = unit_cost.quantize(Decimal("0.0001"))
+    product.cost_price = unit_cost.quantize(Decimal("0.0001"))
 
 
 def _unique_receipt_number() -> str:
@@ -114,6 +122,37 @@ def _recalc_totals(po: PurchaseOrder) -> None:
     shipping = Decimal(str(po.shipping_charges or 0))
     other = Decimal(str(po.other_charges or 0))
     po.grand_total = subtotal - disc_total + tax_total + shipping + other
+
+
+def _apply_bill_details(poi: PurchaseOrderItem, ri, changes: list[dict]) -> None:
+    """The supplier's bill wins. A different rate / GST corrects the PO line (receive_goods checked that nothing
+    of this line was received yet, so no earlier receipt changes value). MRP and HSN go on the product. A product
+    typed on the PO (details_pending) also takes the bill's GST as its selling GST; an existing product keeps its
+    own selling GST (changing it would change every bill)."""
+    old_rate = Decimal(str(poi.unit_price)).quantize(Decimal("0.01"))
+    old_gst = Decimal(str(poi.tax_rate)).quantize(Decimal("0.01"))
+    paisa = Decimal("0.01")
+    if ri.bill_unit_price is not None:
+        poi.unit_price = Decimal(str(ri.bill_unit_price)).quantize(paisa)
+    if ri.bill_tax_rate is not None:
+        poi.tax_rate = Decimal(str(ri.bill_tax_rate)).quantize(paisa)
+    if poi.unit_price != old_rate or poi.tax_rate != old_gst:
+        poi.line_total, poi.line_discount, poi.tax_amount = _calc_line(
+            poi.ordered_qty, poi.unit_price, poi.discount_percent, poi.tax_rate
+        )
+        changes.append({
+            "item": poi.product_name,
+            "old": {"unit_price": str(old_rate), "tax_rate": str(old_gst)},
+            "new": {"unit_price": str(poi.unit_price), "tax_rate": str(poi.tax_rate)},
+        })
+
+    product = poi.product
+    if ri.mrp is not None:
+        product.mrp = Decimal(str(ri.mrp))
+    if ri.hsn_code:
+        product.hsn_code = ri.hsn_code
+    if product.details_pending and ri.bill_tax_rate is not None:
+        product.tax_rate = Decimal(str(ri.bill_tax_rate))
 
 
 def grn_value(receipt: GoodsReceipt) -> Decimal:
@@ -169,10 +208,26 @@ def _payment_status(payable: Decimal, paid: Decimal, invoice_count: int, overdue
 def _enrich_po(po: PurchaseOrder, money: dict | None = None) -> PurchaseOrderOut:
     """PO plus its money: received value (GRNs), invoiced, payable, paid and balance (payable − paid)."""
     out = PurchaseOrderOut.model_validate(po)
+    if po.email_status == "sending" and po.updated_at is not None and (
+        datetime.now(timezone.utc) - po.updated_at > EMAIL_STUCK_AFTER
+    ):
+        # The background send never finished (the server restarted mid-send): show it as failed so the screen
+        # offers Retry instead of "Sending…" for ever. Retrying records the real result.
+        out.email_status = "failed"
+        out.email_error = "The email did not finish sending (the server may have restarted). Press Retry."
+    for row, item in zip(out.items, po.items):  # same order: the rows were validated from po.items
+        if item.product is not None:
+            row.product_details_pending = item.product.details_pending
+            row.product_mrp = item.product.mrp
+            row.product_hsn_code = item.product.hsn_code
     if po.supplier:
         out.supplier_name = po.supplier.company_name
+        out.supplier_phone = po.supplier.phone or po.supplier.alt_phone
+        out.supplier_email = po.supplier.email
     if po.created_by:
         out.created_by_name = po.created_by.full_name or po.created_by.username
+    if po.sent_by:
+        out.sent_by_name = po.sent_by.full_name or po.sent_by.username
     if money is None:
         money = _po_money_map([po.id])[po.id]
     invoiced_grns = set(db.session.scalars(
@@ -481,6 +536,7 @@ def place_order(po_id: int, actor: User | None) -> PurchaseOrder:
             {"status": "draft"},
             {"status": "ordered", "ordered_at": po.ordered_at.isoformat()},
         )
+    po_sending_service.auto_email(po, actor)  # after the commit: email never holds up or undoes the order
     return po
 
 
@@ -603,9 +659,32 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
                 f"'{poi.product_name}': accepted ({good}) + rejected/damaged ({bad}) must equal the "
                 f"quantity that arrived ({arrived})."
             )
+        if bad > 0 and not (ri.remarks or "").strip():
+            raise ValidationError(
+                f"'{poi.product_name}': write the reason for the {bad} rejected / damaged."
+            )
+        # Never stock goods already past their expiry date: they must be marked rejected instead.
+        if ri.expiry_date and ri.expiry_date < business_date() and good > 0:
+            raise ValidationError(
+                f"'{poi.product_name}': expiry date {ri.expiry_date} has already passed. "
+                f"Mark these goods as rejected (reason: Expired)."
+            )
+        if ri.mfg_date and ri.expiry_date and ri.mfg_date > ri.expiry_date:
+            raise ValidationError(f"'{poi.product_name}': manufacturing date is after the expiry date.")
+        # The bill's rate / GST can correct the PO line only before any of it came in: otherwise goods already
+        # received (and maybe invoiced) would change value.
+        rate_differs = ri.bill_unit_price is not None and Decimal(str(ri.bill_unit_price)) != Decimal(str(poi.unit_price))
+        gst_differs = ri.bill_tax_rate is not None and Decimal(str(ri.bill_tax_rate)) != Decimal(str(poi.tax_rate))
+        if (rate_differs or gst_differs) and Decimal(str(poi.received_qty)) > 0:
+            raise ValidationError(
+                f"'{poi.product_name}': {poi.received_qty} already came in at ₹{poi.unit_price} + {poi.tax_rate}% GST, "
+                f"so the rate can't change now. Enter the difference on the supplier's invoice."
+            )
         accepted[n] = good
 
     inv_repo = InventoryRepository()
+    use_godown = godown_service.is_enabled()
+    bill_changes: list[dict] = []
 
     with transaction():
         receipt = GoodsReceipt(
@@ -620,6 +699,7 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
 
         for n, ri in enumerate(data.items):
             poi = item_map[ri.purchase_order_item_id]
+            _apply_bill_details(poi, ri, bill_changes)  # before the cost below is worked out from the PO line
             qty = Decimal(str(ri.qty_received))
             good = accepted[n]
 
@@ -649,6 +729,8 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
                 inventory_service.add_purchase_cost(inv_row, poi.product, good, unit_cost)
                 _remember_purchase_price(po.supplier_id, poi.product, unit_cost)
                 inv_row.qty_on_hand = Decimal(str(inv_row.qty_on_hand)) + good
+                if use_godown and not ri.to_shop:
+                    godown_service.add_to_godown(inv_row, good)  # unloaded in the godown, not on the shelf yet
                 batch_service.add(
                     po.store_id, poi.product_id, good, source="grn", reference_id=receipt.id,
                     batch_number=ri.batch_number, mfg_date=ri.mfg_date, expiry_date=ri.expiry_date,
@@ -664,6 +746,13 @@ def receive_goods(po_id: int, data: GoodsReceiptCreate, actor: User | None) -> G
                     notes=note,
                     expiry_date=ri.expiry_date,
                 )
+
+        if bill_changes:
+            _recalc_totals(po)  # the PO total (and so the supplier's balance) follows the corrected lines
+            audit_service.log(
+                actor, "purchase.rate_from_bill", "purchase_order", po.id, None,
+                {"receipt": receipt.receipt_number, "lines": bill_changes},
+            )
 
         # Update PO status based on whether everything is received
         all_received = all(

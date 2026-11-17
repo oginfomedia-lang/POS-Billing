@@ -109,10 +109,14 @@ def _require_no_unfinished_bills(shift: CashierShift) -> None:
 
 def expected_cash(shift: CashierShift) -> Decimal:
     """Expected cash in the drawer = opening float + cash taken on this shift's paid bills
-    − cash paid out for returns during this shift. Card and UPI never go in the drawer."""
+    + udhari paid back in cash on this shift − cash paid out for returns during this shift.
+    Card and UPI never go in the drawer; neither do bills sold on udhari."""
+    from app.services.customer_credit_service import cash_repayments_for_shift
+
     return (
         shift.opening_float
         + PaymentRepository().cash_total_for_shift(shift.id)
+        + cash_repayments_for_shift(shift.id)
         - ReturnRepository().cash_refunds_for_shift(shift.id)
     )
 
@@ -122,6 +126,8 @@ def shift_bills(shift_id: int, actor: User) -> ShiftBillsOut:
 
     A cashier sees only their own shifts; an admin / manager any shift of their store (head office: all).
     """
+    from app.services.customer_credit_service import cash_repayments_for_shift
+
     shift = _get_shift_or_404(shift_id)
     if not _can_view_shift(shift, actor):
         raise NotFoundError("Shift not found.")
@@ -160,6 +166,8 @@ def shift_bills(shift_id: int, actor: User) -> ShiftBillsOut:
         cash_sales=by_method.get(PaymentMethod.CASH, zero),
         card_sales=by_method.get(PaymentMethod.CARD, zero),
         upi_sales=by_method.get(PaymentMethod.UPI, zero),
+        credit_sales=by_method.get(PaymentMethod.CREDIT, zero),
+        udhari_cash=cash_repayments_for_shift(shift.id),
         returns=len(returns),
         cash_refunds=cash_refunds,
         other_refunds=sum((r.refund_amount for r in returns if r.refund_method != PaymentMethod.CASH), zero),

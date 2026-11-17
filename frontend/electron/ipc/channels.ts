@@ -16,4 +16,6 @@ export const IPC = {
   offlineGetBill: 'offline:get-bill',
   offlineMarkSynced: 'offline:mark-synced',
   offlineMarkFailed: 'offline:mark-failed',
+  openWhatsApp: 'shell:open-whatsapp',
+  openDocument: 'shell:open-document',
 } as const;

@@ -17,8 +17,9 @@ const PREVIEW_LIMIT = 24;
 
 // Option text comes from labels.sizes.<key> in the language files.
 const SIZES = {
-  'roll-50x25': { page: '50mm 25mm', perPage: 1 },
+  'roll-50x30': { page: '50mm 30mm', perPage: 1 },
   'roll-38x25': { page: '38mm 25mm', perPage: 1 },
+  'roll-preprinted': { page: '50mm 38mm', perPage: 1 },
   'a4-24': { page: 'A4', perPage: 24 },
 } as const;
 type SizeKey = keyof typeof SIZES;
@@ -30,7 +31,7 @@ function savedSize(): SizeKey {
     const v = localStorage.getItem(SIZE_STORAGE_KEY);
     if (v && v in SIZES) return v as SizeKey;
   } catch { /* storage unavailable */ }
-  return 'roll-50x25';
+  return 'roll-50x30';
 }
 
 /** Selling price is tax-exclusive; the sticker shows what the customer pays, at this branch's price. */
@@ -61,6 +62,7 @@ export function LabelPrintPage() {
   const [copies, setCopies] = useState(params.get('qty') ?? '1');
   const [size, setSize] = useState<SizeKey>(savedSize);
   const [showPrice, setShowPrice] = useState(true);
+  const [showMrp, setShowMrp] = useState(true);
 
   const [search, setSearch] = useState('');
   const [results, setResults] = useState<ProductOut[]>([]);
@@ -109,6 +111,7 @@ export function LabelPrintPage() {
   const countValid = Number.isInteger(count) && count >= 1 && count <= MAX_COPIES;
   const ready = product !== null && pattern !== null && countValid;
   const price = product && showPrice ? priceWithTax(product) : null;
+  const mrp = product && showMrp ? product.mrp : null;
   const labels = ready ? Array.from({ length: count }, (_, i) => i) : [];
   const spec = SIZES[size];
 
@@ -191,10 +194,16 @@ export function LabelPrintPage() {
             </select>
           </label>
 
-          <label className="field-label checkbox-label">
-            <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} />
-            {t('labels.showPrice')}
-          </label>
+          <div className="label-checkboxes-group">
+            <label className="field-label checkbox-label">
+              <input type="checkbox" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} />
+              {t('labels.showPrice')}
+            </label>
+            <label className="field-label checkbox-label">
+              <input type="checkbox" checked={showMrp} onChange={(e) => setShowMrp(e.target.checked)} />
+              {t('labels.showMrp')}
+            </label>
+          </div>
         </div>
 
         {product && product.barcodes.length === 0 && (
@@ -217,7 +226,7 @@ export function LabelPrintPage() {
             </p>
             <div className={`label-preview size-${size}`}>
               {labels.slice(0, PREVIEW_LIMIT).map((i) => (
-                <BarcodeLabel key={i} name={product.name} price={price} code={barcode} pattern={pattern} />
+                <BarcodeLabel key={i} name={product.name} price={price} mrp={mrp} code={barcode} pattern={pattern} />
               ))}
             </div>
           </>
@@ -229,7 +238,7 @@ export function LabelPrintPage() {
           {chunk(labels, spec.perPage).map((page, pi) => (
             <div key={pi} className="label-page">
               {page.map((i) => (
-                <BarcodeLabel key={i} name={product.name} price={price} code={barcode} pattern={pattern} />
+                <BarcodeLabel key={i} name={product.name} price={price} mrp={mrp} code={barcode} pattern={pattern} />
               ))}
             </div>
           ))}

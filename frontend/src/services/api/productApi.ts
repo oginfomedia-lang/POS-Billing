@@ -65,6 +65,18 @@ export async function createProduct(data: {
   return resp.data;
 }
 
+/** + New product on a purchase order: name, category, unit only. Selling price, GST, MRP come later. */
+export async function createPendingProduct(data: {
+  name: string;
+  category_id: number | null;
+  uom: UOMType;
+  supplier_id?: number;
+  store_id?: number;
+}): Promise<ProductOut> {
+  const resp = await httpClient.post<ProductOut>('/products/pending', data);
+  return resp.data;
+}
+
 /** What the automatic SKU will look like (KIR-SAK-0001). Uses up no number: the real SKU is made on save. */
 export async function previewSku(categoryId: number | null, name: string): Promise<SkuPreview> {
   const resp = await httpClient.get<SkuPreview>('/products/sku-preview', {
@@ -139,15 +151,18 @@ export async function listCategories(activeOnly = false): Promise<CategoryOut[]>
   return resp.data;
 }
 
-export async function createCategory(data: { name: string; parent_id?: number | null }): Promise<CategoryOut> {
+export async function createCategory(
+  data: { name: string; parent_id?: number | null; target_margin_percent?: string | null },
+): Promise<CategoryOut> {
   const resp = await httpClient.post<CategoryOut>('/categories', data);
   return resp.data;
 }
 
-/** Only the fields given change; parent_id: null moves it to the top level. */
+/** Only the fields given change; parent_id: null moves it to the top level, target_margin_percent: null goes
+ *  back to the parent's / default profit %. */
 export async function updateCategory(
   id: number,
-  data: { name?: string; parent_id?: number | null; is_active?: boolean },
+  data: { name?: string; parent_id?: number | null; is_active?: boolean; target_margin_percent?: string | null },
 ): Promise<CategoryOut> {
   const resp = await httpClient.put<CategoryOut>(`/categories/${id}`, data);
   return resp.data;

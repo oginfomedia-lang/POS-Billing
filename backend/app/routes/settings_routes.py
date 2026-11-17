@@ -6,6 +6,7 @@ from app.schemas.settings_schemas import IntegrationsUpdate, SettingsData
 from app.services import (
     auth_service,
     daily_report_service,
+    email_gateway,
     integration_settings_service,
     razorpay_gateway,
     settings_service,
@@ -63,7 +64,11 @@ def update_integrations():
 @require_permission("integrations.manage")
 def test_integration(provider: str):
     """Checks the saved credentials with a read-only call (no money moves, no message is sent)."""
-    checks = {"razorpay": razorpay_gateway.check_credentials, "whatsapp": whatsapp_gateway.check_credentials}
+    checks = {
+        "razorpay": razorpay_gateway.check_credentials,
+        "whatsapp": whatsapp_gateway.check_credentials,
+        "email": email_gateway.check_credentials,
+    }
     if provider not in checks:
         raise NotFoundError(f"No connection test for '{provider}'.")
     return jsonify({"message": checks[provider]()}), 200

@@ -77,8 +77,9 @@ def test_goods_receipts_keep_a_weighted_average_cost(client, admin_headers, stor
     assert _avg_cost(store, oil) == Decimal("108.5000")
 
     listed = client.get(f"/api/v1/products?store_id={store.id}&q=Oil", headers=admin_headers).get_json()["items"][0]
-    # The product had no default cost: the first receipt's rate became it.
-    assert listed["store_avg_cost"] == "108.5000" and listed["cost_price"] == "100.0000"
+    # Profit uses the average (₹108.50, what the stock on hand really cost); the product's cost price shows the
+    # latest rate paid (₹117, what the next stock costs), so selling prices can be checked against it.
+    assert listed["store_avg_cost"] == "108.5000" and listed["cost_price"] == "117.0000"
 
 
 def test_first_receipt_averages_with_the_default_cost(client, admin_headers, store):

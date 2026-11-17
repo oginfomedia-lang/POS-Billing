@@ -97,7 +97,8 @@ def test_dashboard_counts_products_near_expiry(client, admin_headers, store):
 def test_settings_defaults_update_and_receipt(client, admin_headers, cashier_headers, shift, store):
     s = client.get("/api/v1/settings", headers=admin_headers).get_json()
     assert s == {
-        "receipt_header": "", "receipt_footer": "Thank you! Visit again.", "low_stock_threshold": "5", "return_window_days": 30,
+        "receipt_header": "", "receipt_footer": "Thank you! Visit again.", "low_stock_threshold": "5", "return_window_days": 30, "godown_enabled": False,
+        "default_margin_percent": "10",
         "rewards_enabled": False, "reward_rupees_per_point": "100", "reward_block_points": 100, "reward_block_value": "100",
         "daily_report_enabled": False, "daily_report_time": "22:30", "daily_report_mobiles": "",
         "ebill_enabled": False,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createCategory, deleteCategory, listCategories, updateCategory } from '../../services/api/productApi';
 import { getErrorMessage } from '../../services/api/httpClient';
+import { getSettings } from '../../services/api/reportApi';
 import type { CategoryOut } from '../../types/product';
 import { AdminNav } from '../../components/admin/AdminNav';
 import { IconX } from '../../components/common/Icons';
@@ -34,6 +35,8 @@ export function CategoriesPage() {
   const [formName, setFormName] = useState('');
   const [formParent, setFormParent] = useState('');
   const [formActive, setFormActive] = useState(true);
+  const [formMargin, setFormMargin] = useState(''); // '' = parent's / default profit %
+  const [defaultMargin, setDefaultMargin] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -53,11 +56,27 @@ export function CategoriesPage() {
     }
   }
 
-  useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => {
+    fetchCategories();
+    getSettings().then((s) => setDefaultMargin(s.default_margin_percent)).catch(() => {});
+  }, []);
+
+  /** The profit % a category really uses: its own, else its parent's, ..., else the default in Settings. */
+  function effectiveMargin(c: CategoryOut): { value: string | null; own: boolean } {
+    const seen = new Set<number>();
+    let cur: CategoryOut | undefined = c;
+    while (cur && !seen.has(cur.id)) {
+      if (cur.target_margin_percent !== null) return { value: cur.target_margin_percent, own: cur.id === c.id };
+      seen.add(cur.id);
+      const parentId: number | null = cur.parent_id;
+      cur = parentId !== null ? categories.find((p) => p.id === parentId) : undefined;
+    }
+    return { value: defaultMargin, own: false };
+  }
 
   function openCreate() {
     setEditing('new');
-    setFormName(''); setFormParent(''); setFormActive(true); setFormError('');
+    setFormName(''); setFormParent(''); setFormActive(true); setFormMargin(''); setFormError('');
   }
 
   function openEdit(c: CategoryOut) {
@@ -65,6 +84,7 @@ export function CategoriesPage() {
     setFormName(c.name);
     setFormParent(c.parent_id !== null ? String(c.parent_id) : '');
     setFormActive(c.is_active);
+    setFormMargin(c.target_margin_percent !== null ? String(Number(c.target_margin_percent)) : '');
     setFormError('');
   }
 
@@ -75,11 +95,18 @@ export function CategoriesPage() {
       setFormError(t('categories.nameRequired'));
       return;
     }
+    const marginText = formMargin.trim();
+    const margin = marginText === '' ? null : Number(marginText);
+    if (margin !== null && (!Number.isFinite(margin) || margin < 0 || margin > 1000)) {
+      setFormError(t('categories.marginInvalid'));
+      return;
+    }
     setSaving(true); setFormError('');
     const parent_id = formParent ? parseInt(formParent) : null;
+    const target_margin_percent = margin === null ? null : margin.toFixed(2);
     try {
-      if (editing === 'new') await createCategory({ name, parent_id });
-      else if (editing) await updateCategory(editing.id, { name, parent_id, is_active: formActive });
+      if (editing === 'new') await createCategory({ name, parent_id, target_margin_percent });
+      else if (editing) await updateCategory(editing.id, { name, parent_id, is_active: formActive, target_margin_percent });
       setEditing(null);
       fetchCategories();
     } catch (err) {
@@ -123,20 +150,26 @@ export function CategoriesPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>{t('common.name')}</th><th>{t('categories.colParent')}</th><th>{t('common.active')}</th>
+              <th>{t('common.name')}</th><th>{t('categories.colParent')}</th>
+              <th className="num">{t('categories.colMargin')}</th><th>{t('common.active')}</th>
               <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {categories.length === 0 && !loading && (
-              <tr><td colSpan={4} className="empty-row">{t('categories.empty')}</td></tr>
+              <tr><td colSpan={5} className="empty-row">{t('categories.empty')}</td></tr>
             )}
             {categories.map((c) => {
               const parent = categories.find((p) => p.id === c.parent_id);
+              const margin = effectiveMargin(c);
               return (
                 <tr key={c.id}>
                   <td>{c.name}</td>
                   <td>{parent?.name ?? '—'}</td>
+                  <td className="num">
+                    {margin.value !== null ? `${Number(margin.value)}%` : '—'}
+                    {margin.value !== null && !margin.own && <div className="hint-text">{t('categories.marginInherited')}</div>}
+                  </td>
                   <td>{c.is_active ? '✓' : '—'}</td>
                   <td className="table-actions">
                     <button className="btn-sm" onClick={() => openEdit(c)}>{t('common.edit')}</button>
@@ -168,6 +201,19 @@ export function CategoriesPage() {
                   <option value="">{t('categories.topLevel')}</option>
                   {parentChoices.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+              </label>
+              <label className="field-label">{t('categories.margin')}
+                <input
+                  className="field-input"
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="0.01"
+                  value={formMargin}
+                  placeholder={defaultMargin !== null ? t('categories.marginPlaceholder', { pct: Number(defaultMargin) }) : ''}
+                  onChange={(e) => setFormMargin(e.target.value)}
+                />
+                <span className="hint-text">{t('categories.marginHint')}</span>
               </label>
               {editing !== 'new' && (
                 <label className="field-label checkbox-label">

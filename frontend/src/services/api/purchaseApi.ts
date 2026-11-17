@@ -3,9 +3,11 @@ import type {
   PagedResponse,
   POPaymentHistoryOut,
   POPaymentSummary,
+  POSentVia,
   PurchaseDashboard,
   PurchaseOrderOut,
   PurchaseStatus,
+  SupplierMessageOut,
 } from '../../types/api';
 import { httpClient } from './httpClient';
 
@@ -45,7 +47,32 @@ export interface GoodsReceiptItemPayload {
   batch_number?: string | null;
   mfg_date?: string | null;
   remarks?: string | null;
+  /** With the godown on: true = straight to the shop shelf instead of the godown. */
+  to_shop?: boolean;
+  /** From the supplier's bill, only when different: corrects the PO line (before any of it came in). */
+  bill_unit_price?: number; // before discount and GST
+  bill_tax_rate?: number;
+  /** Goes on the product. */
+  mrp?: number;
+  hsn_code?: string;
 }
+
+export interface DirectPurchasePayload {
+  supplier_id: number;
+  store_id: number;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string | null;
+  other_charges: number;
+  grand_total: number;
+  difference_reason: string | null;
+  items: {
+    product_id: number; qty: number; unit_price: number; tax_rate: number;
+    mrp: number | null; hsn_code: string | null; batch_number: string | null; expiry_date: string | null;
+    to_shop: boolean;
+  }[];
+}
+
 
 export interface GoodsReceiptCreatePayload {
   received_at?: string | null;
@@ -107,4 +134,40 @@ export const purchaseApi = {
   getPaymentHistory(id: number) {
     return httpClient.get<POPaymentHistoryOut>(`/purchases/${id}/payment-history`);
   },
+  getSupplierMessage(id: number) {
+    return httpClient.get<SupplierMessageOut>(`/purchases/${id}/supplier-message`);
+  },
+  /** Emails the PO now (the screen waits up to ~20 s); the result is in email_status / email_error. */
+  emailPo(id: number) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/email`, {}, { timeout: 60_000 });
+  },
+  markSent(id: number, via: POSentVia) {
+    return httpClient.post<PurchaseOrderOut>(`/purchases/${id}/mark-sent`, { via });
+  },
+  /** Saves the PO as a PDF (PO-number.pdf) to the user's computer. */
+  async downloadPdf(id: number, poNumber: string): Promise<void> {
+    const resp = await httpClient.get<Blob>(`/purchases/${id}/pdf`, { responseType: 'blob' });
+    const url = URL.createObjectURL(resp.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${poNumber}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
+
+  createDirect(data: DirectPurchasePayload, file: File) {
+    const form = new FormData();
+    form.append('data', JSON.stringify(data));
+    form.append('file', file);
+    return httpClient.post<{ purchase_order: PurchaseOrderOut }>('/purchases/direct', form, {timeout: 60_000});
+  },
 };
+
+/** Opens WhatsApp with the message: through the Electron app, or a new tab in a plain browser. */
+export async function openWhatsApp(url: string): Promise<void> {
+  if (typeof window !== 'undefined' && window.posBridge?.openWhatsApp) {
+    await window.posBridge.openWhatsApp(url);
+  } else {
+    window.open(url, '_blank', 'noopener');
+  }
+}

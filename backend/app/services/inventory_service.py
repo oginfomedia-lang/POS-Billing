@@ -25,7 +25,7 @@ from app.schemas.inventory_schemas import (
     ThresholdRequest,
     StorePriceRequest,
 )
-from app.services import audit_service, batch_service, settings_service
+from app.services import audit_service, batch_service, godown_service, settings_service
 from app.utils.transactions import transaction
 
 
@@ -35,6 +35,7 @@ def stock_levels(store_id: int, search: str | None = None) -> list[StockLevelOut
     out = []
     for product, inv in InventoryRepository().stock_levels(store_id, search):
         qty = inv.qty_on_hand if inv else Decimal("0")
+        godown = inv.godown_qty if inv else Decimal("0")
         own = inv.low_stock_threshold if inv else None
         threshold = own if own is not None else default_threshold
         primary = next((b for b in product.barcodes if b.is_primary), None) or next(iter(product.barcodes), None)
@@ -43,6 +44,10 @@ def stock_levels(store_id: int, search: str | None = None) -> list[StockLevelOut
             product_name=product.name,
             barcode=primary.barcode if primary else None,
             qty_on_hand=qty,
+            shop_qty=qty - godown,
+            godown_qty=godown,
+            shelf_min_qty=inv.shelf_min_qty if inv else None,
+            needs_refill=godown_service.needs_refill(inv),
             uom=product.uom,
             low_stock_threshold=own,
             effective_threshold=threshold,
@@ -128,6 +133,8 @@ def stock_in(data: StockInRequest, actor: User) -> Inventory:
         row = repo.lock_or_create(data.store_id, data.product_id)
         old = row.qty_on_hand
         row.qty_on_hand = old + data.qty
+        if data.to_godown:
+            godown_service.add_to_godown(row, data.qty)
         batch_service.add(
             data.store_id, data.product_id, data.qty, source="stock_in",
             batch_number=data.batch_number, expiry_date=data.expiry_date,
@@ -162,6 +169,7 @@ def expiring_soon(store_id: int, days: int = 30) -> list[ExpiringBatchOut]:
             batch_id=batch.id,
             batch_number=batch.batch_number,
             batch_qty=batch.qty_remaining,
+            batch_source=batch.source,
         ))
     return out
 
@@ -180,28 +188,49 @@ def list_batches(store_id: int, product_id: int) -> list[BatchOut]:
     ]
 
 
-def write_off_batch(batch_id: int, data: BatchWriteOffRequest, actor: User, store_ids: set[int] | None) -> StockBatch:
-    """Takes expired / damaged goods of one batch out of stock. store_ids: the stores the actor may change
-    (None = all)."""
+def get_batch(batch_id: int, store_ids: set[int] | None) -> StockBatch:
+    """One batch, if it is in a store the actor may change (store_ids None = all)."""
     batch = db.session.get(StockBatch, batch_id)
     if batch is None or (store_ids is not None and batch.store_id not in store_ids):
         raise NotFoundError(f"Batch {batch_id} not found.")
+    return batch
+
+
+def take_from_batch(batch: StockBatch, qty: Decimal | None, from_godown: bool, note: str,
+                    godown_reason: str) -> Decimal:
+    """Takes qty (None = all that's left) of one batch out of the store's stock and returns the qty taken.
+    Used by write-off and return to supplier; call inside a transaction."""
     repo = InventoryRepository()
+    row = repo.lock_or_create(batch.store_id, batch.product_id)
+    db.session.refresh(batch, with_for_update=True)
+    qty = qty if qty is not None else Decimal(str(batch.qty_remaining))
+    if qty <= 0 or qty > batch.qty_remaining:
+        raise AppError(f"This batch has {_qty_text(batch.qty_remaining)} left; take out at most that.")
+    if qty > row.qty_on_hand:
+        raise AppError(f"Only {_qty_text(row.qty_on_hand)} in stock.")
+    if from_godown:
+        if qty > row.godown_qty:
+            raise AppError(f"Only {_qty_text(row.godown_qty)} in the godown.")
+        row.godown_qty = Decimal(str(row.godown_qty)) - qty  # before the total, so godown never exceeds it
+    batch.qty_remaining = Decimal(str(batch.qty_remaining)) - qty
+    row.qty_on_hand = Decimal(str(row.qty_on_hand)) - qty
+    if not from_godown:
+        godown_service.settle_after_stock_out(row, reason=godown_reason, reference_id=batch.id)
+    repo.add_transaction(
+        batch.store_id, batch.product_id, InventoryTxnType.ADJUSTMENT, -qty,
+        notes=note, expiry_date=batch.expiry_date,
+    )
+    return qty
+
+
+def write_off_batch(batch_id: int, data: BatchWriteOffRequest, actor: User, store_ids: set[int] | None) -> StockBatch:
+    """Takes expired / damaged goods of one batch out of stock. store_ids: the stores the actor may change
+    (None = all)."""
+    batch = get_batch(batch_id, store_ids)
+    label = batch.batch_number or f"#{batch.id}"
     with transaction():
-        row = repo.lock_or_create(batch.store_id, batch.product_id)
-        db.session.refresh(batch, with_for_update=True)
-        qty = data.qty if data.qty is not None else Decimal(str(batch.qty_remaining))
-        if qty <= 0 or qty > batch.qty_remaining:
-            raise AppError(f"This batch has {_qty_text(batch.qty_remaining)} left; write off at most that.")
-        if qty > row.qty_on_hand:
-            raise AppError(f"Only {_qty_text(row.qty_on_hand)} in stock.")
-        batch.qty_remaining = Decimal(str(batch.qty_remaining)) - qty
-        row.qty_on_hand = Decimal(str(row.qty_on_hand)) - qty
-        label = batch.batch_number or f"#{batch.id}"
-        repo.add_transaction(
-            batch.store_id, batch.product_id, InventoryTxnType.ADJUSTMENT, -qty,
-            notes=f"Write-off batch {label}: {data.reason}", expiry_date=batch.expiry_date,
-        )
+        qty = take_from_batch(batch, data.qty, data.from_godown,
+                              f"Write-off batch {label}: {data.reason}", "auto_write_off")
         audit_service.log(
             actor, "inventory.write_off", "stock_batch", batch.id,
             {"qty_remaining": str(batch.qty_remaining + qty)},
@@ -217,8 +246,19 @@ def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
     with transaction():
         row = repo.lock_or_create(data.store_id, data.product_id)
         old = row.qty_on_hand
-        delta = data.new_qty - old
-        row.qty_on_hand = data.new_qty
+        godown = Decimal(str(row.godown_qty))
+        if data.location == "godown":  # counted the godown only: the shelf keeps its figure
+            new_total = old - godown + data.new_qty
+            new_godown = data.new_qty
+        elif data.location == "shop":  # counted the shelf only: the godown keeps its figure
+            new_total = godown + data.new_qty
+            new_godown = godown
+        else:  # counted everything: the godown can't hold more than was counted
+            new_total = data.new_qty
+            new_godown = min(godown, data.new_qty)
+        delta = new_total - old
+        row.qty_on_hand = new_total
+        row.godown_qty = new_godown
         if delta > 0:  # found more than recorded: a batch of its own (no expiry known)
             batch_service.add(data.store_id, data.product_id, delta, source="adjustment")
         elif delta < 0:  # less on the shelf: gone from the batches that would have been sold first
@@ -229,7 +269,9 @@ def adjust(data: AdjustStockRequest, actor: User) -> Inventory:
             )
         audit_service.log(
             actor, "inventory.adjust", "inventory", row.id,
-            {"qty_on_hand": str(old)}, {"qty_on_hand": str(data.new_qty), "reason": data.notes},
+            {"qty_on_hand": str(old), "godown_qty": str(godown)},
+            {"qty_on_hand": str(new_total), "godown_qty": str(new_godown), "counted": data.location or "all",
+             "reason": data.notes},
         )
     return row
 
@@ -285,6 +327,7 @@ def deduct_for_sale(store_id: int, items: list[SaleItem], sale_id: int) -> None:
 
     for product_id, qty in wanted.items():
         rows[product_id].qty_on_hand -= qty
+        godown_service.settle_after_stock_out(rows[product_id], reference_id=sale_id)
         # Ledger qty is signed: negative = stock out.
         repo.add_transaction(store_id, product_id, InventoryTxnType.SALE, -qty, reference_id=sale_id)
     for item in sorted(items, key=lambda i: (i.product_id, i.id)):  # earliest-expiring batches first (FEFO)
@@ -309,6 +352,7 @@ def deduct_for_offline_sale(store_id: int, items: list[SaleItem], sale_id: int) 
         available = Decimal(str(row.qty_on_hand))
         taken = min(qty, available)
         row.qty_on_hand = available - taken
+        godown_service.settle_after_stock_out(row, reference_id=sale_id)
         note = None
         if taken < qty:
             shortages.append({"product_id": product_id, "product_name": names[product_id],

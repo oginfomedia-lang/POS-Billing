@@ -14,12 +14,19 @@ class Inventory(db.Model):
         UniqueConstraint("store_id", "product_id", name="uq_inventory_store_product"),
         CheckConstraint("qty_on_hand >= 0", name="ck_inventory_qty_non_negative"),
         CheckConstraint("price IS NULL OR price >= 0", name="ck_inventory_price_non_negative"),
+        # The godown part can never be more than the whole stock (shop = qty_on_hand - godown_qty >= 0).
+        CheckConstraint("godown_qty >= 0 AND godown_qty <= qty_on_hand", name="ck_inventory_godown_within_stock"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    # The WHOLE stock in this store (godown + shop). Billing, batches and reports keep using this.
     qty_on_hand = db.Column(db.Numeric(12, 3), nullable=False, default=0)
+    # The part of qty_on_hand kept in the godown (back room). Shop shelf = qty_on_hand - godown_qty.
+    godown_qty = db.Column(db.Numeric(12, 3), nullable=False, default=0, server_default="0")
+    # Refill the shelf when it drops to this. NULL = no shelf alert for this product.
+    shelf_min_qty = db.Column(db.Numeric(12, 3), nullable=True)
     low_stock_threshold = db.Column(db.Numeric(12, 3), nullable=True)
     # This store's own selling price (before GST). NULL = use the head-office price (products.price).
     price = db.Column(db.Numeric(12, 2), nullable=True)
@@ -37,6 +44,34 @@ class Inventory(db.Model):
 
     def __repr__(self) -> str:
         return f"<Inventory product={self.product_id} store={self.store_id} qty={self.qty_on_hand}>"
+
+
+class StockTransfer(db.Model):
+    """Goods moved between the godown and the shop shelf. The whole stock doesn't change, so this is kept apart
+    from the stock ledger (inventory_transactions)."""
+
+    __tablename__ = "stock_transfers"
+    __table_args__ = (
+        CheckConstraint("qty > 0", name="ck_stock_transfers_qty_positive"),
+        db.Index("ix_stock_transfers_store_product", "store_id", "product_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    qty = db.Column(db.Numeric(12, 3), nullable=False)
+    direction = db.Column(db.String(10), nullable=False)  # to_shop / to_godown
+    # manual = staff moved it; auto_sale = a bill needed more than the shelf had, so the rest came from the godown
+    reason = db.Column(db.String(20), nullable=False)
+    reference_id = db.Column(db.Integer, nullable=True)  # the sale, for auto_sale
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    product = db.relationship("Product")
+    user = db.relationship("User")
 
 
 class InventoryTransaction(db.Model):

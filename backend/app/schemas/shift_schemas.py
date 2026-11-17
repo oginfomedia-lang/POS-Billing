@@ -74,6 +74,8 @@ class ShiftSummaryOut(BaseModel):
     cash_sales: Decimal
     card_sales: Decimal
     upi_sales: Decimal
+    credit_sales: Decimal = Decimal("0")  # sold on udhari: owed by customers, not in the drawer
+    udhari_cash: Decimal = Decimal("0")  # udhari paid back in cash into this drawer
     returns: int
     cash_refunds: Decimal
     other_refunds: Decimal

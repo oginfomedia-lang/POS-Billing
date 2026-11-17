@@ -2,7 +2,7 @@
 // Money fields are decimal strings (e.g. "157.50") — never parse them into floats for maths.
 
 export type SaleStatus = 'open' | 'paid' | 'voided' | 'held';
-export type PaymentMethod = 'cash' | 'card' | 'upi' | 'split';
+export type PaymentMethod = 'cash' | 'card' | 'upi' | 'split' | 'credit';
 
 export interface PaymentOut {
   id: number;
@@ -128,7 +128,7 @@ export interface EbillStatus {
 export type TenderMethod = Exclude<PaymentMethod, 'split'>;
 
 /** Card/UPI go through Razorpay; cash is completed directly. */
-export type DigitalMethod = Exclude<TenderMethod, 'cash'>;
+export type DigitalMethod = 'card' | 'upi';
 
 export type PaymentIntentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
 

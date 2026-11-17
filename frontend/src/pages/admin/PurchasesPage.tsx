@@ -1,5 +1,5 @@
 // Purchase Orders management page — admin and manager.
-import { useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { AdminNav } from '../../components/admin/AdminNav';
@@ -12,8 +12,8 @@ import {
   IconTrash,
   IconX,
 } from '../../components/common/Icons';
-import { getErrorMessage } from '../../services/api/httpClient';
-import { purchaseApi } from '../../services/api/purchaseApi';
+import { getBlobErrorMessage, getErrorMessage } from '../../services/api/httpClient';
+import { openWhatsApp, purchaseApi } from '../../services/api/purchaseApi';
 import type {
   GoodsReceiptItemPayload,
   PurchaseOrderCreatePayload,
@@ -22,19 +22,25 @@ import type {
 } from '../../services/api/purchaseApi';
 import { supplierApi } from '../../services/api/supplierApi';
 import { listStores } from '../../services/api/storeApi';
-import { listProducts } from '../../services/api/productApi';
+import { createPendingProduct, listCategories, listProducts } from '../../services/api/productApi';
+import { MarathiInput } from '../../components/common/MarathiInput';
+import type { CategoryOut, UOMType } from '../../types/product';
+import { getSettings } from '../../services/api/reportApi';
+import { getPriceReview } from '../../services/api/priceReviewApi';
 import type {
   GoodsReceiptOut,
   POPaymentHistoryOut,
   POPaymentSummary,
+  POSentVia,
   PurchaseDashboard,
   PurchaseOrderItemOut,
   PurchaseOrderOut,
   PurchaseStatus,
+  SupplierMessageOut,
   SupplierOut,
   StoreOut,
 } from '../../types/api';
-import { formatDate } from '../../utils/format';
+import { formatDate, formatDateTime, isoDateIst, isoDateTimeLocalIst } from '../../utils/format';
 
 const PER_PAGE = 20;
 
@@ -195,15 +201,106 @@ interface ProductRow {
   price: number | null; // purchase rate to start the line at; null = unknown, the user types it
   selling: number | null; // selling price (before GST), only to warn about a rate that isn't below it
   tax_rate: number;
+  linked?: boolean; // already in this supplier's product list (bought from them before)
 }
 
 /** Matches shown in the picker; type more of the name / SKU / barcode to narrow it down. */
 const PICKER_LIMIT = 20;
 const SEARCH_DELAY_MS = 300;
 
+const UOMS: UOMType[] = ['pcs', 'kg', 'g', 'ltr', 'ml', 'pack'];
+
 /**
- * Product picker for PO lines.
- * When a supplier is selected: shows only products linked to that supplier (fetched once, filtered locally).
+ * + New product: one not in the system yet. Only name, category and unit now; GST, HSN, MRP come from the bill
+ * on the goods receipt, and the selling price after that (Selling prices page). Billing refuses it until then.
+ * Loose (weighed) items need a scale code, so they are added on the Products page instead.
+ */
+function NewProductModal({
+  supplierId,
+  storeId,
+  onCreated,
+  onClose,
+}: {
+  supplierId?: number;
+  storeId?: number | '';
+  onCreated: (p: ProductRow) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [uom, setUom] = useState<UOMType>('pcs');
+  const [categories, setCategories] = useState<CategoryOut[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => { listCategories(true).then(setCategories).catch(() => {}); }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const p = await createPendingProduct({
+        name: name.trim(),
+        category_id: categoryId ? Number(categoryId) : null,
+        uom,
+        supplier_id: supplierId,
+        store_id: typeof storeId === 'number' && storeId > 0 ? storeId : undefined,
+      });
+      // No rate yet: the line's rate box starts empty, so the agreed rate must be typed before saving the PO.
+      onCreated({ id: p.id, name: p.name, sku: p.sku, price: null, selling: null, tax_rate: 0, linked: false });
+    } catch (e2) {
+      setErr(getErrorMessage(e2));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 460 }}>
+        <button type="button" className="modal-close-btn modal-close-corner" onClick={onClose} aria-label={t('common.close')}>
+          <IconX size={18} />
+        </button>
+        <h3>{t('purchases.newProductTitle')}</h3>
+        <p className="hint-text">{t('purchases.newProductHint')}</p>
+        {err && <div className="form-error">{err}</div>}
+        <form onSubmit={save} className="modal-form">
+          <label className="field-label">
+            {t('common.name')}
+            <MarathiInput className="field-input" value={name} maxLength={200} onChange={setName} required autoFocus />
+          </label>
+          <label className="field-label">
+            {t('products.category')}
+            <select className="field-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">—</option>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          <label className="field-label">
+            {t('products.uom')}
+            <select className="field-input" value={uom} onChange={(e) => setUom(e.target.value as UOMType)}>
+              {UOMS.map((u) => <option key={u} value={u}>{t(`products.uoms.${u}`)}</option>)}
+            </select>
+          </label>
+          <div className="modal-buttons">
+            <button type="button" className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
+              {busy ? t('common.saving') : t('common.create')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Product picker for PO lines. Any product can be ordered from any supplier: no need to link it first.
+ * - The supplier's own products (bought from them before) come first, marked "linked", at their last rate.
+ * - Then every other matching product from the catalogue, at its cost price if known.
+ * Receiving the goods links the product to the supplier automatically, so it is "linked" next time.
  * When no supplier is selected: input is locked with a hint to pick a supplier first.
  */
 function ProductSearch({
@@ -238,6 +335,7 @@ function ProductSearch({
           price: p.purchase_price,
           selling: p.selling_price,
           tax_rate: p.tax_rate,
+          linked: true,
         })));
       })
       .catch(() => setSupplierProducts([]));
@@ -246,18 +344,14 @@ function ProductSearch({
   useEffect(() => {
     if (!open) return;
 
-    // Supplier selected: filter locally from the pre-loaded list.
-    if (supplierId && supplierId > 0) {
-      const lq = q.trim().toLowerCase();
-      setResults(
-        supplierProducts
-          .filter((p) => !lq || p.name.toLowerCase().includes(lq) || (p.sku ?? '').toLowerCase().includes(lq))
-          .slice(0, PICKER_LIMIT),
-      );
-      return;
-    }
+    // The supplier's own products that match, first (filtered locally from the pre-loaded list).
+    const lq = q.trim().toLowerCase();
+    const linked = supplierProducts
+      .filter((p) => !lq || p.name.toLowerCase().includes(lq) || (p.sku ?? '').toLowerCase().includes(lq))
+      .slice(0, PICKER_LIMIT);
+    setResults(linked);
 
-    // No supplier: fall back to full-catalogue search (shouldn't reach here because input is disabled, but just in case).
+    // Then the rest of the catalogue (search by name / SKU / barcode on the server).
     let cancelled = false;
     const sid = typeof storeId === 'number' && storeId > 0 ? storeId : undefined;
     const timer = window.setTimeout(() => {
@@ -265,17 +359,22 @@ function ProductSearch({
       listProducts({ q: q.trim() || undefined, per_page: PICKER_LIMIT, active_only: true, store_id: sid })
         .then((data) => {
           if (cancelled) return;
-          setResults((data.items || []).map((p) => ({
-            id: p.id,
-            name: p.name,
-            sku: p.sku,
-            // Never the selling price as a purchase rate: the cost if known, else typed in.
-            price: p.cost_price != null ? Math.round(parseFloat(p.cost_price) * 100) / 100 : null,
-            selling: parseFloat(p.store_price ?? p.price ?? '0'),
-            tax_rate: parseFloat(p.tax_rate ?? '0'),
-          })));
+          const linkedIds = new Set(supplierProducts.map((p) => p.id));
+          const others: ProductRow[] = (data.items || [])
+            .filter((p) => !linkedIds.has(p.id))
+            .map((p) => ({
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              // Never the selling price as a purchase rate: the cost if known, else typed in.
+              price: p.cost_price != null ? Math.round(parseFloat(p.cost_price) * 100) / 100 : null,
+              selling: parseFloat(p.store_price ?? p.price ?? '0'),
+              tax_rate: parseFloat(p.tax_rate ?? '0'),
+              linked: false,
+            }));
+          setResults([...linked, ...others]);
         })
-        .catch(() => { if (!cancelled) setResults([]); })
+        .catch(() => { /* keep the supplier's own products */ })
         .finally(() => { if (!cancelled) setLoading(false); });
     }, q.trim() ? SEARCH_DELAY_MS : 0);
     return () => {
@@ -299,14 +398,14 @@ function ProductSearch({
           {t('purchases.productSearch', 'Search product name or SKU')}
           {!noSupplier && supplierProducts.length > 0 && (
             <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: '#6366f1', background: '#eef2ff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '1px 8px' }}>
-              {supplierProducts.length} linked products
+              {t('purchases.linkedCount', { count: supplierProducts.length })}
             </span>
           )}
         </label>
         {noSupplier ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, color: '#94a3b8', fontSize: '0.88em' }}>
             <span style={{ fontSize: 18 }}>🔒</span>
-            <span>Select a <strong style={{ color: '#64748b' }}>Supplier</strong> above to see their linked products</span>
+            <span>{t('purchases.pickSupplierFirst')}</span>
           </div>
         ) : (
           <>
@@ -344,7 +443,7 @@ function ProductSearch({
                 )}
                 {!loading && results.length === 0 && (
                   <div style={{ padding: '9px 14px', color: 'var(--muted)' }}>
-                    {t('purchases.noProductMatch', 'No product found — make sure this product is linked to the supplier')}
+                    {t('purchases.noProductMatch')}
                   </div>
                 )}
                 {results.map((p) => (
@@ -375,6 +474,11 @@ function ProductSearch({
                           }}
                         >
                           {p.sku}
+                        </span>
+                      )}
+                      {p.linked && (
+                        <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 500, color: '#6366f1', background: '#eef2ff', border: '1px solid #e0e7ff', borderRadius: 10, padding: '1px 8px' }}>
+                          {t('purchases.linkedTag')}
                         </span>
                       )}
                     </div>
@@ -430,9 +534,10 @@ interface PoFormProps {
 
 function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormProps) {
   const { t } = useTranslation();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDateIst();
 
   const [supplierId, setSupplierId] = useState(editing?.supplier_id ?? 0);
+  const [newProductOpen, setNewProductOpen] = useState(false);
   const [storeId, setStoreId] = useState<number | ''>(editing?.store_id ?? '');
   const [purchaseDate, setPurchaseDate] = useState(editing?.purchase_date ?? today);
   const [expectedDate, setExpectedDate] = useState(editing?.expected_delivery_date ?? '');
@@ -503,6 +608,7 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
   const grandTotal = subtotal - discTotal + taxTotal;
 
   async function save() {
+    if (purchaseDate > isoDateIst()) { setErr(t('purchases.fieldDate') + ' cannot be in the future'); return; }
     if (!supplierId) { setErr(t('purchases.fieldSupplier') + ' is required'); return; }
     if (lines.length === 0) { setErr(t('purchases.noItems')); return; }
     const missing = lines.filter((l) => l._rateMissing).map((l) => l._name);
@@ -604,6 +710,7 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
                   className="field-input"
                   type="date"
                   value={purchaseDate}
+                  max={isoDateIst()}
                   onChange={(e) => setPurchaseDate(e.target.value)}
                 />
               </label>
@@ -613,6 +720,7 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
                   className="field-input"
                   type="date"
                   value={expectedDate}
+                  min={purchaseDate || isoDateIst()}
                   onChange={(e) => setExpectedDate(e.target.value)}
                 />
               </label>
@@ -648,6 +756,19 @@ function PoFormModal({ editing, suppliers, stores, onClose, onSaved }: PoFormPro
           <fieldset className="form-section">
             <legend>{t('purchases.sectionItems')}</legend>
             <ProductSearch onSelect={addLine} storeId={storeId} supplierId={supplierId || undefined} />
+            {supplierId ? (
+              <button type="button" className="btn-sm" style={{ marginTop: -8, marginBottom: 12 }} onClick={() => setNewProductOpen(true)}>
+                + {t('purchases.newProduct')}
+              </button>
+            ) : null}
+            {newProductOpen && (
+              <NewProductModal
+                supplierId={supplierId || undefined}
+                storeId={storeId}
+                onClose={() => setNewProductOpen(false)}
+                onCreated={(p) => { addLine(p); setNewProductOpen(false); }}
+              />
+            )}
 
             {lines.length > 0 && (
               <div className="table-card" style={{ marginTop: 12 }}>
@@ -796,6 +917,7 @@ function DetailModal({
   onCancel,
   onReceive,
   onEdit,
+  onSend,
   onOpenInvoices,
 }: {
   po: PurchaseOrderOut;
@@ -805,6 +927,8 @@ function DetailModal({
   onCancel: () => void;
   onReceive: () => void;
   onEdit: () => void;
+  /** Opens "Send to supplier" (email / WhatsApp / PDF / mark as sent). */
+  onSend: () => void;
   /** Payments are made on the supplier's invoices: go to the supplier's Invoices tab. */
   onOpenInvoices: () => void;
 }) {
@@ -818,6 +942,7 @@ function DetailModal({
   const canReceive = po.status === 'ordered' || po.status === 'partially_received';
   const canEdit = po.status === 'draft';
   const canPay = po.status !== 'draft' && po.status !== 'cancelled';
+  const canSend = SENDABLE.includes(po.status) && !po.is_direct; // a direct purchase: the goods already came
 
   useEffect(() => {
     if (!canPay) return;
@@ -912,6 +1037,21 @@ function DetailModal({
                 Ordered
               </div>
               <div style={{ fontWeight: 600 }}>{formatDate(po.ordered_at)}</div>
+            </div>
+          )}
+          {canSend && (
+            <div>
+              <div style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>
+                {t('purchases.send.fieldSent')}
+              </div>
+              <div style={{ fontWeight: 600, color: po.sent_at ? 'var(--ok-text)' : 'var(--warn-text)' }}>
+                {po.sent_at && po.sent_via
+                  ? t('purchases.send.sentLine', {
+                    via: t(`purchases.send.via.${po.sent_via}` as const),
+                    date: formatDate(po.sent_at),
+                  })
+                  : t('purchases.send.notSent')}
+              </div>
             </div>
           )}
           {po.notes && (
@@ -1078,6 +1218,8 @@ function DetailModal({
                       >
                         {ri.product_name}: {ri.qty_accepted ?? ri.qty_received}
                         {parseFloat(ri.qty_rejected) > 0 ? ` (+${ri.qty_rejected} rejected)` : ''}
+                        {parseFloat(ri.qty_damaged) > 0 ? ` (+${ri.qty_damaged} damaged)` : ''}
+                        {ri.remarks ? ` · ${ri.remarks}` : ''}
                         {ri.expiry_date ? ` · exp ${ri.expiry_date}` : ''}
                       </span>
                     ))}
@@ -1099,6 +1241,14 @@ function DetailModal({
           {canEdit && (
             <button className="btn-secondary" onClick={onEdit}>
               <IconEdit size={14} /> {t('common.edit')}
+            </button>
+          )}
+          <button className="btn-secondary" onClick={() => void downloadPoPdf(po)}>
+            {t('purchases.send.downloadPdf')}
+          </button>
+          {canSend && (
+            <button className="btn-primary" onClick={onSend}>
+              {t('purchases.send.button')}
             </button>
           )}
           {canPay && (
@@ -1146,10 +1296,17 @@ function ReceiveModal({
   onSaved: () => void;
 }) {
   const { t } = useTranslation();
-  const today = new Date().toISOString().slice(0, 16);
+  const today = isoDateTimeLocalIst();
   const [receivedAt, setReceivedAt] = useState(today);
   const [notes, setNotes] = useState('');
-  const [lines, setLines] = useState<{ item: PurchaseOrderItemOut; qty: string; rejected: string; expiry: string; batch: string }[]>(
+  // With the godown on, goods go to the godown unless a line is ticked "straight to shelf" (milk, bread).
+  const [godownOn, setGodownOn] = useState(false);
+  useEffect(() => { getSettings().then((s) => setGodownOn(s.godown_enabled)).catch(() => {}); }, []);
+  const [lines, setLines] = useState<{
+    item: PurchaseOrderItemOut; qty: string; rejected: string; damaged: string; expiry: string; batch: string; remarks: string; toShop: boolean;
+    // From the supplier's bill; they start at the PO / product figures, so a matching bill needs no typing.
+    rate: string; gst: string; mrp: string; hsn: string;
+  }[]>(
     () =>
       po.items
         .filter((i) => parseFloat(i.received_qty) < parseFloat(i.ordered_qty))
@@ -1157,16 +1314,44 @@ function ReceiveModal({
           item: i,
           qty: (parseFloat(i.ordered_qty) - parseFloat(i.received_qty)).toFixed(3),
           rejected: '',
+          damaged: '',
           expiry: '',
           batch: '',
+          remarks: '',
+          toShop: false,
+          rate: String(Number(i.unit_price)),
+          gst: String(Number(i.tax_rate)),
+          mrp: i.product_mrp ? String(Number(i.product_mrp)) : '',
+          hsn: i.product_hsn_code ?? '',
         })),
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [toReview, setToReview] = useState<number[] | null>(null); // goods saved; these prices need a look
+  const navigate = useNavigate();
+
+  type Line = (typeof lines)[number];
+  function setLine(idx: number, patch: Partial<Line>) {
+    setLines((prev) => prev.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+  }
+  const bad = (l: Line) => (parseFloat(l.rejected) || 0) + (parseFloat(l.damaged) || 0);
+  const todayDate = today.slice(0, 10); // YYYY-MM-DD, India time
+  // Days from today to the expiry date (negative = already expired); null when no date is entered.
+  function daysLeft(expiry: string): number | null {
+    if (!expiry) return null;
+    return Math.round((new Date(expiry).getTime() - new Date(todayDate).getTime()) / 86_400_000);
+  }
 
   async function submit() {
-    const wrong = lines.find((l) => (parseFloat(l.rejected) || 0) > (parseFloat(l.qty) || 0));
-    if (wrong) { setErr(`${wrong.item.product_name}: rejected can't be more than what arrived.`); return; }
+    const wrong = lines.find((l) => bad(l) > (parseFloat(l.qty) || 0));
+    if (wrong) { setErr(`${wrong.item.product_name}: rejected + damaged can't be more than what arrived.`); return; }
+    const noReason = lines.find((l) => bad(l) > 0 && !l.remarks.trim());
+    if (noReason) { setErr(`${noReason.item.product_name}: write the reason for the rejected / damaged goods.`); return; }
+    const expired = lines.find((l) => {
+      const d = daysLeft(l.expiry);
+      return d !== null && d < 0 && (parseFloat(l.qty) || 0) - bad(l) > 0;
+    });
+    if (expired) { setErr(`${expired.item.product_name}: already expired. Mark these goods as rejected.`); return; }
     const items: GoodsReceiptItemPayload[] = lines
       .filter((l) => parseFloat(l.qty) > 0)
       .map((l) => ({
@@ -1174,10 +1359,24 @@ function ReceiveModal({
         qty_received: parseFloat(l.qty),
         // Rejected / damaged goods: not stocked, not paid for, still owed by the supplier.
         qty_rejected: parseFloat(l.rejected) || 0,
+        qty_damaged: parseFloat(l.damaged) || 0,
+        remarks: l.remarks.trim() || null,
         expiry_date: l.expiry || null,
         batch_number: l.batch || null,
+        to_shop: godownOn && l.toShop,
+        // Bill details: only what differs, so a line that matches the PO stays exactly as it was. A new product
+        // always sends its GST: it becomes the product's selling GST.
+        ...(l.rate !== '' && Number(l.rate) !== Number(l.item.unit_price) ? { bill_unit_price: Number(l.rate) } : {}),
+        ...(l.gst !== '' && (l.item.product_details_pending || Number(l.gst) !== Number(l.item.tax_rate))
+          ? { bill_tax_rate: Number(l.gst) } : {}),
+        ...(l.mrp !== '' && Number(l.mrp) !== Number(l.item.product_mrp ?? 0) ? { mrp: Number(l.mrp) } : {}),
+        ...(l.hsn.trim() && l.hsn.trim() !== (l.item.product_hsn_code ?? '') ? { hsn_code: l.hsn.trim() } : {}),
       }));
     if (items.length === 0) { setErr('No items to receive.'); return; }
+    if (receivedAt && receivedAt > isoDateTimeLocalIst()) {
+      setErr(t('purchases.receiveDate') + ' cannot be in the future.');
+      return;
+    }
     setSaving(true);
     setErr('');
     try {
@@ -1186,6 +1385,13 @@ function ReceiveModal({
         notes: notes || null,
         items,
       });
+      // The cost may have changed: ask about selling prices that no longer give the profit wanted.
+      const productIds = lines.filter((l) => parseFloat(l.qty) > 0).map((l) => l.item.product_id);
+      const review = await getPriceReview(productIds).catch(() => null);
+      if (review && review.items.length > 0) {
+        setToReview(review.items.map((r) => r.product_id));
+        return;
+      }
       onSaved();
     } catch (e) {
       setErr(getErrorMessage(e));
@@ -1194,11 +1400,33 @@ function ReceiveModal({
     }
   }
 
+  if (toReview) {
+    // Goods are saved. Some selling prices no longer give the profit wanted: offer to fix them now.
+    return (
+      <div className="modal-overlay">
+        <div className="modal-box" style={{ maxWidth: 480 }}>
+          <h3>{t('purchases.receivedTitle')}</h3>
+          <p>{t('purchases.pricesToReview', { count: toReview.length })}</p>
+          <div className="modal-buttons">
+            <button type="button" className="btn-secondary" onClick={onSaved}>{t('purchases.reviewLater')}</button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => navigate(`/admin/price-review?products=${toReview.join(',')}`)}
+            >
+              {t('purchases.reviewNow')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="modal-overlay">
       <div
         className="modal-box"
-        style={{ maxWidth: 680, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
+        style={{ maxWidth: 940, width: '95%', maxHeight: '90vh', overflowY: 'auto' }}
       >
         <div className="modal-header">
           <div>
@@ -1225,6 +1453,7 @@ function ReceiveModal({
                 className="field-input"
                 type="datetime-local"
                 value={receivedAt}
+                max={isoDateTimeLocalIst()}
                 onChange={(e) => setReceivedAt(e.target.value)}
               />
             </label>
@@ -1238,20 +1467,28 @@ function ReceiveModal({
             </label>
           </div>
 
-          <div className="table-card">
+          <div className="table-card" style={{ overflowX: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
                   <th>{t('purchases.colProduct')}</th>
                   <th className="num">{t('purchases.receiveQty')}</th>
-                  <th className="num" title="Not added to stock, not paid for; the supplier still owes them">Rejected / damaged</th>
+                  <th className="num" title="Sent back: expired, wrong item, bad quality. Not stocked, not paid for; the supplier still owes them">Rejected</th>
+                  <th className="num" title="Arrived broken or leaking. Not stocked, not paid for; the supplier still owes them">Damaged</th>
+                  <th title="Required when goods are rejected or damaged">Reason</th>
                   <th>Batch No.</th>
                   <th>{t('purchases.expiryDate')}</th>
+                  {godownOn && <th title={t('purchases.toShopHint')}>{t('purchases.toShop')}</th>}
+                  <th className="num" title={t('purchases.billRateHint')}>{t('purchases.billRate')}</th>
+                  <th className="num">{t('purchases.billGst')}</th>
+                  <th className="num">MRP</th>
+                  <th>HSN</th>
                 </tr>
               </thead>
               <tbody>
                 {lines.map((l, idx) => {
                   const outstanding = parseFloat(l.item.ordered_qty) - parseFloat(l.item.received_qty);
+                  const d = daysLeft(l.expiry);
                   return (
                     <tr key={l.item.id}>
                       <td>
@@ -1268,11 +1505,7 @@ function ReceiveModal({
                           max={outstanding}
                           step="0.001"
                           value={l.qty}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) => i === idx ? { ...x, qty: e.target.value } : x)
-                            )
-                          }
+                          onChange={(e) => setLine(idx, { qty: e.target.value })}
                           style={{ padding: '5px 8px', minHeight: 34, width: 100 }}
                         />
                       </td>
@@ -1284,16 +1517,24 @@ function ReceiveModal({
                           step="0.001"
                           value={l.rejected}
                           placeholder="0"
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) => i === idx ? { ...x, rejected: e.target.value } : x)
-                            )
-                          }
-                          style={{ padding: '5px 8px', minHeight: 34, width: 90 }}
+                          onChange={(e) => setLine(idx, { rejected: e.target.value })}
+                          style={{ padding: '5px 8px', minHeight: 34, width: 80 }}
                         />
-                        {(parseFloat(l.rejected) || 0) > 0 && (
+                      </td>
+                      <td>
+                        <input
+                          className="field-input"
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={l.damaged}
+                          placeholder="0"
+                          onChange={(e) => setLine(idx, { damaged: e.target.value })}
+                          style={{ padding: '5px 8px', minHeight: 34, width: 80 }}
+                        />
+                        {bad(l) > 0 && (
                           <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                            To stock: {Math.max((parseFloat(l.qty) || 0) - (parseFloat(l.rejected) || 0), 0).toFixed(3)}
+                            To stock: {Math.max((parseFloat(l.qty) || 0) - bad(l), 0).toFixed(3)}
                           </div>
                         )}
                       </td>
@@ -1301,13 +1542,24 @@ function ReceiveModal({
                         <input
                           className="field-input"
                           type="text"
+                          list="grn-reasons"
+                          value={l.remarks}
+                          placeholder={bad(l) > 0 ? 'Required' : 'Optional'}
+                          onChange={(e) => setLine(idx, { remarks: e.target.value })}
+                          style={{
+                            minHeight: 34,
+                            width: 140,
+                            borderColor: bad(l) > 0 && !l.remarks.trim() ? 'var(--danger)' : undefined,
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          className="field-input"
+                          type="text"
                           value={l.batch}
                           placeholder="Optional"
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) => i === idx ? { ...x, batch: e.target.value } : x)
-                            )
-                          }
+                          onChange={(e) => setLine(idx, { batch: e.target.value })}
                           style={{ minHeight: 34, width: 110 }}
                         />
                       </td>
@@ -1316,19 +1568,90 @@ function ReceiveModal({
                           className="field-input"
                           type="date"
                           value={l.expiry}
-                          onChange={(e) =>
-                            setLines((prev) =>
-                              prev.map((x, i) => i === idx ? { ...x, expiry: e.target.value } : x)
-                            )
-                          }
+                          onChange={(e) => setLine(idx, { expiry: e.target.value })}
                           style={{ minHeight: 34 }}
                         />
+                        {d !== null && d < 0 && (
+                          <div style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>
+                            Expired {-d} day(s) ago.{' '}
+                            <button
+                              type="button"
+                              onClick={() => setLine(idx, { rejected: l.qty, damaged: '', remarks: 'Expired' })}
+                              style={{ background: 'none', border: 0, padding: 0, color: 'inherit', textDecoration: 'underline', cursor: 'pointer', font: 'inherit' }}
+                            >
+                              Reject all as expired
+                            </button>
+                          </div>
+                        )}
+                        {d !== null && d >= 0 && d <= 30 && (
+                          <div style={{ fontSize: 11, color: 'var(--warn-text)' }}>Expires in {d} day(s)</div>
+                        )}
                       </td>
+                      {godownOn && (
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={l.toShop}
+                            onChange={(e) => setLine(idx, { toShop: e.target.checked })}
+                          />
+                        </td>
+                      )}
+                      {(() => {
+                        // Part of this line already came in at the PO rate: its rate / GST can't change now.
+                        const locked = parseFloat(l.item.received_qty) > 0;
+                        const box = { padding: '5px 8px', minHeight: 34, width: 90 } as const;
+                        return (
+                          <>
+                            <td>
+                              <input
+                                className="field-input" type="number" min="0" step="0.01" style={box}
+                                value={l.rate} disabled={locked} title={locked ? t('purchases.rateLocked') : ''}
+                                aria-label={t('purchases.billRate')}
+                                onChange={(e) => setLine(idx, { rate: e.target.value })}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="field-input" type="number" min="0" max="100" step="0.01" style={{ ...box, width: 70 }}
+                                value={l.gst} disabled={locked} title={locked ? t('purchases.rateLocked') : ''}
+                                aria-label={t('purchases.billGst')}
+                                onChange={(e) => setLine(idx, { gst: e.target.value })}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="field-input" type="number" min="0" step="0.01" style={box}
+                                value={l.mrp} placeholder="—" aria-label="MRP"
+                                onChange={(e) => setLine(idx, { mrp: e.target.value })}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="field-input" type="text" inputMode="numeric" maxLength={8} style={box}
+                                value={l.hsn} placeholder={l.item.product_details_pending ? t('purchases.fromBill') : '—'}
+                                aria-label="HSN"
+                                onChange={(e) => setLine(idx, { hsn: e.target.value.replace(/\D/g, '') })}
+                              />
+                              {l.item.product_details_pending && (
+                                <div style={{ fontSize: 11, color: 'var(--warn-text)' }}>{t('purchases.newProductLine')}</div>
+                              )}
+                            </td>
+                          </>
+                        );
+                      })()}
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+            <datalist id="grn-reasons">
+              <option value="Expired" />
+              <option value="Near expiry" />
+              <option value="Broken / leaking" />
+              <option value="Wrong item" />
+              <option value="Poor quality" />
+              <option value="Extra quantity" />
+            </datalist>
           </div>
         </div>
 
@@ -1337,6 +1660,263 @@ function ReceiveModal({
           <button className="btn-primary" onClick={submit} disabled={saving}>
             {saving ? t('common.saving') : t('purchases.submitReceive')}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Send to supplier ──────────────────────────────────────────────────────────
+
+const SENDABLE: PurchaseStatus[] = ['ordered', 'partially_received', 'received'];
+// Email isn't a manual choice: the app records an email itself when it goes out.
+const MANUAL_VIA: POSentVia[] = ['whatsapp', 'phone', 'in_person', 'other'];
+
+/** "Sent: WhatsApp · 02 Nov 2026" / "Not sent" next to the status of an ordered PO. */
+function SentBadge({ po }: { po: PurchaseOrderOut }) {
+  const { t } = useTranslation();
+  if (!SENDABLE.includes(po.status)) return null;
+  const sent = po.sent_at !== null;
+  return (
+    <div
+      style={{ fontSize: 11, marginTop: 3, fontWeight: 600, color: sent ? 'var(--ok-text)' : 'var(--warn-text)' }}
+      title={sent && po.sent_via ? t(`purchases.send.via.${po.sent_via}` as const) : undefined}
+    >
+      {sent ? `✓ ${t('purchases.send.sent')}` : t('purchases.send.notSent')}
+    </div>
+  );
+}
+
+async function downloadPoPdf(po: PurchaseOrderOut) {
+  try {
+    await purchaseApi.downloadPdf(po.id, po.po_number);
+  } catch (e) {
+    alert(await getBlobErrorMessage(e));
+  }
+}
+
+/**
+ * Email (automatic when the PO is placed, or the button here), WhatsApp, PDF, copy text and "mark as sent".
+ * onChanged gets the PO back whenever its sent / email state changes.
+ */
+function SendToSupplierModal({
+  po,
+  onClose,
+  onChanged,
+}: {
+  po: PurchaseOrderOut;
+  onClose: () => void;
+  onChanged: (po: PurchaseOrderOut) => void;
+}) {
+  const { t } = useTranslation();
+  const [msg, setMsg] = useState<SupplierMessageOut | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState<'email' | 'mark' | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [via, setVia] = useState<POSentVia>('whatsapp');
+
+  useEffect(() => {
+    purchaseApi.getSupplierMessage(po.id)
+      .then((r) => setMsg(r.data))
+      .catch((e) => setError(getErrorMessage(e)));
+  }, [po.id]);
+
+  // The automatic email runs in the background after "Place order": check back until it has finished.
+  useEffect(() => {
+    if (po.email_status !== 'sending') return;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries += 1;
+      try {
+        const r = await purchaseApi.get(po.id);
+        if (r.data.email_status !== 'sending' || tries >= 15) {
+          clearInterval(timer);
+          onChanged(r.data);
+        }
+      } catch {
+        if (tries >= 15) clearInterval(timer);
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [po.id, po.email_status]);
+
+  async function sendEmail() {
+    setBusy('email');
+    setError('');
+    try {
+      onChanged((await purchaseApi.emailPo(po.id)).data);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function markSent() {
+    // The app can't see whether a WhatsApp message or call really happened: staff confirm it themselves.
+    const sure = window.confirm(
+      t('purchases.send.markConfirm', { po: po.po_number, via: t(`purchases.send.via.${via}` as const) }),
+    );
+    if (!sure) return;
+    setBusy('mark');
+    setError('');
+    try {
+      onChanged((await purchaseApi.markSent(po.id, via)).data);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendWhatsApp() {
+    if (!msg?.whatsapp_url) return;
+    setError('');
+    try {
+      await openWhatsApp(msg.whatsapp_url);
+      setVia('whatsapp');
+    } catch (e) {
+      setError(getErrorMessage(e));
+    }
+  }
+
+  async function copyText() {
+    if (!msg) return;
+    try {
+      await navigator.clipboard.writeText(msg.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      setError(getErrorMessage(e));
+    }
+  }
+
+  const to = po.email_to || po.supplier_email || '';
+  const canEmail = Boolean(msg?.supplier_email) && Boolean(msg?.email_configured);
+  const emailLine =
+    po.email_status === 'sending' ? t('purchases.send.emailSending', { to })
+    : po.email_status === 'sent' ? t('purchases.send.emailSent', { to })
+    : po.email_status === 'failed' ? t('purchases.send.emailFailed', { to, error: po.email_error ?? '' })
+    : t('purchases.send.emailNotYet');
+  const emailButton =
+    po.email_status === 'failed' ? t('purchases.send.retry')
+    : po.email_status === 'sent' ? t('purchases.send.sendAgain')
+    : t('purchases.send.sendEmail');
+  const section: CSSProperties = {
+    padding: '12px 14px',
+    background: 'var(--surface-2)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    marginBottom: 12,
+  };
+  const label: CSSProperties = {
+    color: 'var(--muted)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6,
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 560, width: '95%' }}>
+        <div className="modal-header">
+          <div>
+            <p className="modal-subtitle">{t('purchases.send.button')}</p>
+            <h3 className="modal-title" style={{ margin: 0 }}>
+              {t('purchases.send.title', { po: po.po_number, supplier: po.supplier_name })}
+            </h3>
+          </div>
+          <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
+        </div>
+
+        {error && <div className="form-error">{error}</div>}
+        {!msg && !error && <div className="loading-text">{t('common.loading')}</div>}
+
+        {msg && (
+          <>
+            <div style={section}>
+              <div style={label}>{t('purchases.send.email')}</div>
+              {!msg.supplier_email ? (
+                <p className="hint-text" style={{ margin: 0 }}>{t('purchases.send.emailNoAddress')}</p>
+              ) : !msg.email_configured ? (
+                <p className="hint-text" style={{ margin: 0 }}>{t('purchases.send.emailNotSetUp')}</p>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      minWidth: 200,
+                      fontSize: 13,
+                      color: po.email_status === 'failed' ? 'var(--danger-text)'
+                        : po.email_status === 'sent' ? 'var(--ok-text)' : 'var(--text-2)',
+                    }}
+                  >
+                    {emailLine}
+                  </span>
+                  <button
+                    className="btn-secondary"
+                    disabled={!canEmail || busy !== null || po.email_status === 'sending'}
+                    onClick={sendEmail}
+                  >
+                    {busy === 'email' ? t('purchases.send.emailing') : emailButton}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={section}>
+              <div style={label}>{t('purchases.send.otherWays')}</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-primary"
+                  style={{ background: 'linear-gradient(180deg,#22c55e,#16a34a)', borderColor: '#15803d' }}
+                  disabled={!msg.whatsapp_url}
+                  title={msg.whatsapp_url ? undefined : t('purchases.send.noMobile')}
+                  onClick={sendWhatsApp}
+                >
+                  {t('purchases.send.whatsapp')}
+                </button>
+                <button className="btn-secondary" onClick={() => void downloadPoPdf(po)}>
+                  {t('purchases.send.downloadPdf')}
+                </button>
+                <button className="btn-secondary" onClick={copyText}>
+                  {copied ? t('purchases.send.copied') : t('purchases.send.copyText')}
+                </button>
+              </div>
+              <p className="hint-text" style={{ margin: '8px 0 0' }}>
+                {msg.whatsapp_url ? t('purchases.send.whatsappPdfHint') : t('purchases.send.noMobile')}
+              </p>
+
+              {po.sent_at && po.sent_via ? (
+                // Recorded once (email, or marked by hand); sending again above doesn't change it.
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--ok-text)', fontWeight: 600 }}>
+                    ✓ {t('purchases.send.fieldSent')}:{' '}
+                    {t('purchases.send.sentLine', {
+                      via: t(`purchases.send.via.${po.sent_via}` as const),
+                      date: formatDateTime(po.sent_at),
+                    })}
+                    {po.sent_by_name && ` (${t('purchases.send.sentBy', { name: po.sent_by_name })})`}
+                  </p>
+                  <p className="hint-text" style={{ margin: '4px 0 0' }}>{t('purchases.send.resendHint')}</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <label className="field-label" style={{ margin: 0 }}>
+                    {t('purchases.send.markVia')}
+                    <select className="field-input" value={via} onChange={(e) => setVia(e.target.value as POSentVia)}>
+                      {MANUAL_VIA.map((v) => <option key={v} value={v}>{t(`purchases.send.via.${v}` as const)}</option>)}
+                    </select>
+                  </label>
+                  <button className="btn-secondary" disabled={busy !== null} onClick={markSent}>
+                    <IconCheck size={14} /> {t('purchases.send.markSent')}
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="modal-buttons">
+          <button className="btn-secondary" onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>
@@ -1611,8 +2191,255 @@ function PaymentHistoryModal({
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ── Goods arrived without a PO ────────────────────────────────────────────────
 
+interface DirectLine {
+  _id: number;
+  product: ProductRow;
+  qty: string; rate: string; gst: string; mrp: string; hsn: string; batch: string; expiry: string;
+  toShop: boolean; // false = godown (default)
+}
+
+/** Line value the same way the server works it out (_calc_line): qty × rate, + GST, each to the paisa. */
+function directLineValue(l: DirectLine): number {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const gross = r2((parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0));
+  return gross + r2((gross * (parseFloat(l.gst) || 0)) / 100);
+}
+
+/** The supplier's bill, entered once: PO + goods receipt + invoice are made together on the server. */
+function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
+  suppliers: SupplierOut[];
+  stores: StoreOut[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [supplierId, setSupplierId] = useState(0);
+  const [storeId, setStoreId] = useState<number | ''>(stores.length === 1 ? stores[0].id : '');
+  const [invoiceNo, setInvoiceNo] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(isoDateIst());
+  const [dueDate, setDueDate] = useState('');
+  const [other, setOther] = useState('');
+  const [billTotal, setBillTotal] = useState('');
+  const [reason, setReason] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [lines, setLines] = useState<DirectLine[]>([]);
+  const [godownOn, setGodownOn] = useState(false);
+  const [newProductOpen, setNewProductOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [toReview, setToReview] = useState<number[] | null>(null);
+
+  useEffect(() => { getSettings().then((s) => setGodownOn(s.godown_enabled)).catch(() => {}); }, []);
+
+  function addLine(p: ProductRow) {
+    if (lines.some((l) => l.product.id === p.id)) {
+      setErr(t('purchases.direct.twice', { name: p.name }));
+      return;
+    }
+    setErr('');
+    setLines((cur) => [...cur, {
+      _id: Date.now() + Math.random(), product: p, qty: '1',
+      rate: p.price != null ? String(p.price) : '', gst: String(p.tax_rate ?? 0),
+      mrp: '', hsn: '', batch: '', expiry: '', toShop: false,
+    }]);
+  }
+
+  function setLine(id: number, patch: Partial<DirectLine>) {
+    setLines((cur) => cur.map((l) => (l._id === id ? { ...l, ...patch } : l)));
+  }
+
+  const goods = lines.reduce((sum, l) => sum + directLineValue(l), 0);
+  const expected = goods + (parseFloat(other) || 0);
+  const total = parseFloat(billTotal);
+  const differs = Number.isFinite(total) && Math.abs(total - expected) > 1; // server allows ₹1 round-off
+  const ready = supplierId > 0 && storeId !== '' && invoiceNo.trim() !== '' && file !== null && lines.length > 0
+    && lines.every((l) => parseFloat(l.qty) > 0 && l.rate.trim() !== '')
+    && Number.isFinite(total) && total > 0 && (!differs || reason.trim() !== '');
+
+  async function save() {
+    // `ready` already checked storeId !== '', so TypeScript knows storeId is a number past this line.
+    if (!ready || !file) return;
+    setSaving(true);
+    setErr('');
+    try {
+      await purchaseApi.createDirect({
+        supplier_id: supplierId, store_id: storeId, invoice_number: invoiceNo.trim(), invoice_date: invoiceDate,
+        due_date: dueDate || null, other_charges: parseFloat(other) || 0, grand_total: total,
+        difference_reason: differs ? reason.trim() : null,
+        items: lines.map((l) => ({
+          product_id: l.product.id, qty: parseFloat(l.qty), unit_price: parseFloat(l.rate),
+          tax_rate: parseFloat(l.gst) || 0, mrp: l.mrp ? parseFloat(l.mrp) : null,
+          hsn_code: l.hsn.trim() || null, batch_number: l.batch.trim() || null,
+          expiry_date: l.expiry || null, to_shop: godownOn && l.toShop,
+        })),
+      }, file);
+      // New costs: offer to fix selling prices that no longer give the profit wanted.
+      const review = await getPriceReview(lines.map((l) => l.product.id)).catch(() => null);
+      if (review && review.items.length > 0) {
+        setToReview(review.items.map((r) => r.product_id));
+        return;
+      }
+      onSaved();
+    } catch (e) {
+      setErr(getErrorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (toReview) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal-box" style={{ maxWidth: 480 }}>
+          <h3>{t('purchases.receivedTitle')}</h3>
+          <p>{t('purchases.pricesToReview', { count: toReview.length })}</p>
+          <div className="modal-buttons">
+            <button type="button" className="btn-secondary" onClick={onSaved}>{t('purchases.reviewLater')}</button>
+            <button type="button" className="btn-primary"
+              onClick={() => navigate(`/admin/price-review?products=${toReview.join(',')}`)}>
+              {t('purchases.reviewNow')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const small = { padding: '5px 8px', minHeight: 34, width: 90 } as const;
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 1100, width: '96%', maxHeight: '92vh', overflowY: 'auto' }}>
+        <div className="modal-header">
+          <h3 className="modal-title" style={{ margin: 0 }}>{t('purchases.direct.title')}</h3>
+          <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
+        </div>
+        <p className="hint-text">{t('purchases.direct.hint')}</p>
+        {err && <div className="page-error">{err}</div>}
+
+        <div className="form-row form-row-3">
+          <label className="field-label">{t('purchases.fieldSupplier')}
+            <select className="field-input" value={supplierId} onChange={(e) => { setSupplierId(Number(e.target.value)); setLines([]); }}>
+              <option value={0}>—</option>
+              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.company_name}</option>)}
+            </select>
+          </label>
+          <label className="field-label">{t('purchases.fieldStore')}
+            <select className="field-input" value={storeId} onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : '')}>
+              <option value="">—</option>
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <label className="field-label">{t('purchases.direct.billFile')}
+            <input className="field-input" type="file" accept="application/pdf,image/*"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        <div className="form-row form-row-3">
+          <label className="field-label">{t('purchases.direct.invoiceNo')}
+            <input className="field-input" value={invoiceNo} maxLength={100} onChange={(e) => setInvoiceNo(e.target.value)} />
+          </label>
+          <label className="field-label">{t('purchases.direct.invoiceDate')}
+            <input className="field-input" type="date" value={invoiceDate} max={isoDateIst()} onChange={(e) => setInvoiceDate(e.target.value)} />
+          </label>
+          <label className="field-label">{t('purchases.direct.dueDate')}
+            <input className="field-input" type="date" value={dueDate} min={invoiceDate} onChange={(e) => setDueDate(e.target.value)} />
+          </label>
+        </div>
+
+        <ProductSearch onSelect={addLine} storeId={storeId} supplierId={supplierId || undefined} />
+        {supplierId > 0 && (
+          <button type="button" className="btn-sm" style={{ marginTop: -8, marginBottom: 12 }} onClick={() => setNewProductOpen(true)}>
+            + {t('purchases.newProduct')}
+          </button>
+        )}
+        {newProductOpen && (
+          <NewProductModal supplierId={supplierId || undefined} storeId={storeId}
+            onClose={() => setNewProductOpen(false)}
+            onCreated={(p) => { addLine(p); setNewProductOpen(false); }} />
+        )}
+
+        {lines.length > 0 && (
+          <div className="table-card" style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>{t('purchases.colProduct')}</th>
+                  <th className="num">{t('purchases.receiveQty')}</th>
+                  <th className="num">{t('purchases.billRate')}</th>
+                  <th className="num">{t('purchases.billGst')}</th>
+                  <th className="num">MRP</th>
+                  <th>HSN</th>
+                  <th>Batch No.</th>
+                  <th>{t('purchases.expiryDate')}</th>
+                  {godownOn && <th>{t('purchases.direct.location')}</th>}
+                  <th className="num">{t('purchases.direct.value')}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l._id}>
+                    <td><strong>{l.product.name}</strong></td>
+                    <td><input className="field-input" type="number" min="0" step="0.001" style={small} value={l.qty} onChange={(e) => setLine(l._id, { qty: e.target.value })} /></td>
+                    <td><input className="field-input" type="number" min="0" step="0.01" style={small} value={l.rate} onChange={(e) => setLine(l._id, { rate: e.target.value })} /></td>
+                    <td><input className="field-input" type="number" min="0" max="100" step="0.01" style={{ ...small, width: 70 }} value={l.gst} onChange={(e) => setLine(l._id, { gst: e.target.value })} /></td>
+                    <td><input className="field-input" type="number" min="0" step="0.01" style={small} value={l.mrp} placeholder="—" onChange={(e) => setLine(l._id, { mrp: e.target.value })} /></td>
+                    <td><input className="field-input" inputMode="numeric" maxLength={8} style={small} value={l.hsn} placeholder="—" onChange={(e) => setLine(l._id, { hsn: e.target.value.replace(/\D/g, '') })} /></td>
+                    <td><input className="field-input" maxLength={100} style={{ ...small, width: 110 }} value={l.batch} onChange={(e) => setLine(l._id, { batch: e.target.value })} /></td>
+                    <td><input className="field-input" type="date" style={{ minHeight: 34 }} value={l.expiry} onChange={(e) => setLine(l._id, { expiry: e.target.value })} /></td>
+                    {godownOn && (
+                      <td>
+                        <select className="field-input" style={{ minHeight: 34 }} value={l.toShop ? 'shop' : 'godown'}
+                          onChange={(e) => setLine(l._id, { toShop: e.target.value === 'shop' })}>
+                          <option value="godown">{t('purchases.direct.godown')}</option>
+                          <option value="shop">{t('purchases.direct.shelf')}</option>
+                        </select>
+                      </td>
+                    )}
+                    <td className="num">₹{directLineValue(l).toFixed(2)}</td>
+                    <td>
+                      <button type="button" className="btn-icon" title={t('purchases.direct.removeLine')}
+                        onClick={() => setLines((cur) => cur.filter((x) => x._id !== l._id))}>
+                        <IconTrash size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="form-row form-row-3" style={{ marginTop: 12 }}>
+          <label className="field-label">{t('purchases.direct.otherCharges')}
+            <input className="field-input" type="number" min="0" step="0.01" value={other} placeholder="0" onChange={(e) => setOther(e.target.value)} />
+          </label>
+          <label className="field-label">{t('purchases.direct.billTotal')}
+            <input className="field-input" type="number" min="0" step="0.01" value={billTotal} onChange={(e) => setBillTotal(e.target.value)} />
+            <span className="hint-text">{t('purchases.direct.expected', { amount: `₹${expected.toFixed(2)}` })}</span>
+          </label>
+          {differs && (
+            <label className="field-label">{t('purchases.direct.reason')}
+              <input className="field-input" value={reason} maxLength={1000} onChange={(e) => setReason(e.target.value)} />
+            </label>
+          )}
+        </div>
+
+        <div className="modal-buttons">
+          <button type="button" className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+          <button type="button" className="btn-primary" disabled={!ready || saving} onClick={save}>
+            {saving ? t('common.saving') : t('purchases.direct.save')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export function PurchasesPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -1630,7 +2457,8 @@ export function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<SupplierOut[]>([]);
   const [stores, setStores] = useState<StoreOut[]>([]);
 
-  type ModalKind = 'create' | 'edit' | 'detail' | 'receive' | 'payment-history' | 'place-confirm' | 'cancel-confirm' | null;
+  type ModalKind =
+    'create' | 'edit' | 'detail' | 'receive' | 'payment-history' | 'place-confirm' | 'cancel-confirm' | 'send' | 'direct' | null;
   const [modal, setModal] = useState<ModalKind>(null);
   const [selected, setSelected] = useState<PurchaseOrderOut | null>(null);
   const [actioning, setActioning] = useState(false);
@@ -1730,9 +2558,10 @@ export function PurchasesPage() {
     if (!selected) return;
     setActioning(true);
     try {
-      await purchaseApi.placeOrder(selected.id);
-      setModal(null);
-      setSelected(null);
+      const placed = (await purchaseApi.placeOrder(selected.id)).data;
+      // Straight on to sending it: shows the automatic email's progress, or the WhatsApp / PDF options.
+      setSelected(placed);
+      setModal('send');
       load(page, search, statusFilter, paymentFilter);
       loadDash();
     } catch (e) {
@@ -1758,6 +2587,12 @@ export function PurchasesPage() {
     }
   }
 
+  /** A PO came back from a send / email action: show it in the open box and in the list. */
+  function poChanged(po: PurchaseOrderOut) {
+    setSelected(po);
+    setItems((rows) => rows.map((row) => (row.id === po.id ? po : row)));
+  }
+
   const pages = Math.ceil(total / PER_PAGE);
 
   return (
@@ -1771,6 +2606,9 @@ export function PurchasesPage() {
           <h2>{t('purchases.title')}</h2>
         </div>
         <div className="admin-actions">
+          <button className="btn-secondary" onClick={() => { setSelected(null); setModal('direct'); }}>
+            {t('purchases.direct.button')}
+          </button>
           <button
             className="btn-primary"
             onClick={() => { setSelected(null); setModal('create'); }}
@@ -1913,6 +2751,9 @@ export function PurchasesPage() {
                   >
                     {po.po_number}
                   </span>
+                  {po.is_direct && (
+                    <span className="status-badge badge-info" style={{ marginLeft: 6 }}>{t('purchases.direct.badge')}</span>
+                  )}
                 </td>
                 <td style={{ fontWeight: 600 }}>{po.supplier_name}</td>
                 <td className="ts-cell">{formatDate(po.purchase_date)}</td>
@@ -1920,7 +2761,10 @@ export function PurchasesPage() {
                 <td className="num" style={{ fontWeight: 700 }}>
                   ₹{parseFloat(po.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </td>
-                <td><StatusBadge status={po.status} /></td>
+                <td>
+                  <StatusBadge status={po.status} />
+                  <SentBadge po={po} />
+                </td>
                 <td>
                   <PaymentStatusBadge
                     status={po.payment_status}
@@ -2012,7 +2856,17 @@ export function PurchasesPage() {
           onPlace={() => setModal('place-confirm')}
           onCancel={() => setModal('cancel-confirm')}
           onReceive={() => setModal('receive')}
+          onSend={() => setModal('send')}
           onOpenInvoices={() => navigate(`/admin/suppliers/${selected.supplier_id}?tab=invoices`)}
+        />
+      )}
+
+      {modal === 'direct' && (
+        <DirectPurchaseModal
+          suppliers={suppliers}
+          stores={stores}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); load(page, search, statusFilter, paymentFilter); loadDash(); }}
         />
       )}
 
@@ -2044,6 +2898,14 @@ export function PurchasesPage() {
           loading={actioning}
           onConfirm={doPlace}
           onClose={() => setModal(selected ? 'detail' : null)}
+        />
+      )}
+
+      {modal === 'send' && selected && (
+        <SendToSupplierModal
+          po={selected}
+          onClose={() => setModal('detail')}
+          onChanged={poChanged}
         />
       )}
 

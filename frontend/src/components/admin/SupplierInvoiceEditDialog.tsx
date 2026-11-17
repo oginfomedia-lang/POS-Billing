@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { supplierInvoiceApi } from '../../services/api/supplierInvoiceApi';
 import { uploadApi } from '../../services/api/uploadApi';
 import type { SupplierInvoiceOut } from '../../types/api';
+import { isoDateIst } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconX } from '../common/Icons';
 
@@ -45,6 +46,7 @@ export function SupplierInvoiceEditDialog({ invoice, onClose, onSaved }: Props) 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (invoiceDate > isoDateIst()) return setError('Invoice date cannot be in the future.');
     if (mismatch && !reason.trim()) return setError('Write why the bill differs from the goods received.');
     if (payablePaise < paidPaise) return setError(`${formatRupees(invoice.amount_paid)} is already paid; the payable amount can't go below that.`);
     setBusy(true);
@@ -99,7 +101,7 @@ export function SupplierInvoiceEditDialog({ invoice, onClose, onSaved }: Props) 
             </label>
             <label className="field-label">
               Invoice date
-              <input className="field-input" type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} disabled={busy} />
+              <input className="field-input" type="date" required value={invoiceDate} max={isoDateIst()} onChange={(e) => setInvoiceDate(e.target.value)} disabled={busy} />
             </label>
             <label className="field-label">
               Due date
