@@ -1993,6 +1993,13 @@ select.field-input {
   white-space: nowrap;
 }
 
+.price-gst-note {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 /* Quantity stepper */
 .qty-stepper {
   display: inline-flex;
@@ -3874,6 +3881,9 @@ button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring);
   .cart-item-row .unit-price-cell::after {
     content: ' each';
   }
+  .cart-item-row .price-gst-note {
+    display: none;
+  }
   .cart-item-row .qty-cell { grid-area: qty; }
   .cart-item-row .line-total-cell { grid-area: total; min-width: 76px; }
   .cart-item-row .actions-cell { grid-area: remove; justify-self: end; }
@@ -3937,6 +3947,22 @@ button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring);
 
 /* ───────────────────────── Print ───────────────────────── */
 @media print {
+  /* A document in a modal (e.g. a debit note): print only that box, full width, not the page behind it. */
+  body.printing-doc * { visibility: hidden; }
+  body.printing-doc .print-doc,
+  body.printing-doc .print-doc * { visibility: visible; }
+  body.printing-doc .print-doc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none;
+    box-shadow: none;
+  }
+
   /* Printer test: print only the sample slip, not the Settings page. */
   body.printing-test * { visibility: hidden; }
   body.printing-test .print-test-receipt,
