@@ -198,6 +198,27 @@ export async function downloadImportTemplate(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Saves every product matching the Products page filters (all pages, not only the 25 on screen) as an Excel or
+ * CSV file. Same columns as the import template, so the file can be edited and imported back.
+ */
+export async function downloadProductsExport(
+  format: 'xlsx' | 'csv',
+  params: { q?: string; status?: 'active' | 'inactive'; store_id?: number },
+): Promise<void> {
+  const resp = await httpClient.get<Blob>('/products/export', {
+    params: { ...params, format },
+    responseType: 'blob',
+    timeout: IMPORT_TIMEOUT_MS, // thousands of products can take a few seconds
+  });
+  const url = URL.createObjectURL(resp.data);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `products-${new Date().toLocaleDateString('en-CA')}.${format}`; // en-CA = YYYY-MM-DD
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Checks every row and says what would happen. Saves nothing. */
 export async function previewImport(file: File, options: ImportOptions): Promise<ImportPreview> {
   const resp = await httpClient.post<ImportPreview>('/products/import/preview', importForm(file, options), {

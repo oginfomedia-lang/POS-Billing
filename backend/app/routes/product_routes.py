@@ -17,7 +17,14 @@ from app.schemas.product_schemas import (
     PendingProductCreate
 )
 from app.schemas.product_import_schemas import ImportOptions
-from app.services import auth_service, inventory_service, product_import_service, product_service, sku_service
+from app.services import (
+    auth_service,
+    inventory_service,
+    product_export_service,
+    product_import_service,
+    product_service,
+    sku_service,
+)
 from app.utils.permissions import has_permission, require_permission
 from app.utils.store_scope import require_store_access, scoped_store_id
 
@@ -136,6 +143,25 @@ def import_template():
         as_attachment=True,
         download_name="product-import-template.xlsx",
     )
+
+
+@product_bp.get("/products/export")
+@require_permission("products.read")
+def export_products_file():
+    """?format=xlsx (default) or csv, with the Products page filters (?q= &status= &store_id=). Every matching
+    product, not one page. Branch users always get their own store (as in the list)."""
+    fmt = request.args.get("format", "xlsx").lower()
+    if fmt not in ("xlsx", "csv"):
+        raise BadRequestError("format must be xlsx or csv.")
+    q = PaginationQuery.model_validate(request.args)  # reads ?status= the same way the list does
+    data, mimetype, filename = product_export_service.export_products(
+        fmt=fmt,
+        store_id=scoped_store_id(auth_service.current_user(), request.args.get("store_id", type=int)),
+        search=request.args.get("q"),
+        is_active=q.is_active,
+        with_cost=_sees_cost(),
+    )
+    return send_file(io.BytesIO(data), mimetype=mimetype, as_attachment=True, download_name=filename)
 
 
 def _import_request():
