@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -9,8 +10,22 @@ logger = logging.getLogger(__name__)
 _scheduler = None
 
 
+def _is_reloader_watcher(app) -> bool:
+    """True in the extra process the dev server's auto-reloader keeps running to watch for code changes.
+
+    `python run.py` in debug mode runs create_app() twice: in a watcher process (no WERKZEUG_RUN_MAIN) and in
+    the worker it starts and restarts on every code change (WERKZEUG_RUN_MAIN=true), which serves the requests.
+    Only the worker may run the jobs, or every job (the 22:00 backup too) would run twice. Production (Waitress)
+    has DEBUG off, so this is always False there.
+    """
+    return bool(app.debug) and os.environ.get("WERKZEUG_RUN_MAIN") != "true"
+
+
 def init_scheduler(app) -> None:
     global _scheduler
+    if _is_reloader_watcher(app):
+        logger.debug("Dev reloader watcher process: the scheduler runs in the reloaded worker only.")
+        return
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
