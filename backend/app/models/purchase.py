@@ -48,6 +48,16 @@ class PurchaseOrder(TimestampMixin, db.Model):
     closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     closed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
+    # How the PO reached the supplier: the first confirmed send (email, or marked by staff).
+    sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    sent_via = db.Column(db.String(20), nullable=True)  # email / whatsapp / phone / in_person / other
+    sent_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # The latest automatic email: sending / sent / failed (NULL = never emailed).
+    email_status = db.Column(db.String(20), nullable=True)
+    email_to = db.Column(db.String(200), nullable=True)
+    email_error = db.Column(db.Text, nullable=True)
+    is_direct = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())  # goods arrived without a PO; entered from the supplier's bill
+
     supplier = db.relationship("Supplier", foreign_keys=[supplier_id])
     store = db.relationship("Store", foreign_keys=[store_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
@@ -55,6 +65,7 @@ class PurchaseOrder(TimestampMixin, db.Model):
     approved_by = db.relationship("User", foreign_keys=[approved_by_id])
     cancelled_by = db.relationship("User", foreign_keys=[cancelled_by_id])
     closed_by = db.relationship("User", foreign_keys=[closed_by_id])
+    sent_by = db.relationship("User", foreign_keys=[sent_by_id])
     items = db.relationship(
         "PurchaseOrderItem",
         back_populates="purchase_order",

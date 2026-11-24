@@ -27,6 +27,8 @@ class Sale(TimestampMixin, db.Model):
     total = db.Column(db.Numeric(12, 2), nullable=False, default=0)
     note = db.Column(db.String(255), nullable=True)  # hold note
     customer_mobile = db.Column(db.String(10), nullable=True, index=True)  # optional, 10-digit Indian mobile
+    # Optional; required with the mobile for a bill on udhari. Copied to customers.name when the bill is paid.
+    customer_name = db.Column(db.String(100), nullable=True)
     customer_id = db.Column(db.Integer, db.ForeignKey("customers.id"), nullable=True, index=True)  # set when paid
     points_redeemed = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     reward_discount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")

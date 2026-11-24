@@ -4,15 +4,31 @@ export interface StockLevelOut {
   product_id: number;
   product_name: string;
   barcode: string | null;
-  qty_on_hand: string;
+  qty_on_hand: string; // the whole stock: shop + godown
+  shop_qty: string; // on the shop shelf
+  godown_qty: string; // in the godown
+  shelf_min_qty: string | null; // refill the shelf at this level; null = no shelf alert
+  needs_refill: boolean; // shelf at / below shelf_min_qty and the godown has some
   uom: UOMType;
   low_stock_threshold: string | null; // this product's own level; null = Settings default
   effective_threshold: string;
-  is_low: boolean;
+  is_low: boolean; // the WHOLE stock is low: order from the supplier
   base_price: string; // head-office price
   store_price: string | null; // this branch's own price; null = sells at base_price
   price: string; // what this branch charges (before GST)
 }
+
+/** A shelf running low while the godown still has some (GET /inventory/refill). */
+export interface RefillOut {
+  product_id: number;
+  product_name: string;
+  uom: UOMType;
+  shop_qty: string;
+  godown_qty: string;
+  shelf_min_qty: string;
+}
+
+export type TransferDirection = 'to_shop' | 'to_godown';
 
 export type InventoryTxnType = 'purchase' | 'sale' | 'return' | 'adjustment';
 
@@ -39,9 +55,45 @@ export interface ExpiringBatchOut {
   batch_id: number | null;
   batch_number: string | null;
   batch_qty: string | null; // left in this batch
+  batch_source: BatchSource | null; // 'grn' = came from a supplier: can be sent back
 }
 
 export type BatchSource = 'grn' | 'stock_in' | 'opening' | 'return' | 'adjustment' | 'migration';
+
+/** Stocked goods sent back to the supplier; amount = what the supplier owes back (incl. GST). */
+export interface SupplierReturnOut {
+  id: number;
+  return_number: string;
+  supplier_id: number;
+  supplier_name: string;
+  product_id: number;
+  product_name: string;
+  batch_id: number;
+  goods_receipt_id: number;
+  receipt_number: string;
+  qty: string;
+  amount: string;
+  reason: string;
+  applied_to_invoice: string; // taken off the GRN's bill; the rest is credit with the supplier
+  created_at: string;
+  // For the debit note document (PO line's rate, discount and GST: the same maths as the supplier's bill).
+  purchase_order_id: number | null;
+  po_number: string;
+  batch_number: string | null;
+  uom: string;
+  unit_price: string;
+  discount_percent: string;
+  tax_rate: string;
+  gross: string;
+  discount: string;
+  taxable_value: string;
+  tax_amount: string;
+  invoice_numbers: string[];
+  store_name: string;
+  store_address: string | null;
+  store_gstin: string | null;
+  created_by_name: string;
+}
 
 export interface BatchOut {
   id: number;

@@ -379,7 +379,8 @@ def get_supplier_ledger(supplier_id: int, date_from: str | None = None, date_to:
             "date": str(pay.payment_date),
             "entry_type": pay.payment_type.value,
             "reference": pay.reference_number or f"PAY-{pay.id}",
-            "description": f"Payment {pay.payment_type.value}",
+            "description": pay.notes if pay.payment_type.value == "debit_note" and pay.notes
+            else f"Payment {pay.payment_type.value}",
             "debit": 0.0,
             "credit": float(pay.amount),
         })

@@ -20,6 +20,7 @@ from app.models.enums import SupplierInvoiceStatus, SupplierPaymentType
 from app.models.supplier import Supplier
 from app.models.supplier_invoice import SupplierInvoice
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation
+from app.models.supplier_return import SupplierReturn
 from app.models.user import User
 from app.schemas.supplier_payment_schemas import (
     PaymentAllocationIn,
@@ -74,13 +75,17 @@ def list_payments(
     return [_enrich(p) for p in items], total
 
 
+# Money the supplier holds for us until it is applied to an invoice: advances, and debit notes for returned goods.
+CREDIT_TYPES = (SupplierPaymentType.ADVANCE, SupplierPaymentType.DEBIT_NOTE)
+
+
 def advance_balance(supplier_id: int) -> Decimal:
-    """Advance money paid to the supplier and not yet applied to an invoice."""
+    """Advance money paid to the supplier, and debit notes for goods sent back, not yet applied to an invoice."""
     payments = db.session.scalars(
         select(SupplierPayment).where(
             SupplierPayment.supplier_id == supplier_id,
             SupplierPayment.is_voided.is_(False),
-            SupplierPayment.payment_type == SupplierPaymentType.ADVANCE,
+            SupplierPayment.payment_type.in_(CREDIT_TYPES),
         )
     ).all()
     return sum((unallocated(p) for p in payments), Decimal("0"))
@@ -173,8 +178,8 @@ def apply_advance(payment_id: int, allocations: list[PaymentAllocationIn], actor
     pay = get_payment(payment_id)
     if pay.is_voided:
         raise BadRequestError("This payment is voided.")
-    if pay.payment_type != SupplierPaymentType.ADVANCE:
-        raise BadRequestError("Only an advance can be applied to invoices later.")
+    if pay.payment_type not in CREDIT_TYPES:
+        raise BadRequestError("Only an advance or a debit note can be applied to invoices later.")
     if not allocations:
         raise BadRequestError("Choose the invoice(s) to apply the advance to.")
     total = sum((a.allocated_amount for a in allocations), Decimal("0"))
@@ -195,6 +200,9 @@ def void_payment(payment_id: int, actor: User | None) -> SupplierPaymentOut:
     pay = get_payment(payment_id)
     if pay.is_voided:
         raise BadRequestError("Payment is already voided.")
+    if db.session.scalar(select(SupplierReturn.id).where(SupplierReturn.debit_note_id == pay.id)) is not None:
+        # Voiding would bring the money back but not the goods: the stock and the supplier would disagree.
+        raise BadRequestError("This debit note is for goods sent back to the supplier and can't be voided.")
     with transaction():
         for alloc in pay.allocations:
             supplier_invoice_service.reverse_payment_from_invoice(alloc.invoice_id, Decimal(str(alloc.allocated_amount)))

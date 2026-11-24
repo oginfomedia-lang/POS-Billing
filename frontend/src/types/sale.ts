@@ -2,7 +2,7 @@
 // Money fields are decimal strings (e.g. "157.50") — never parse them into floats for maths.
 
 export type SaleStatus = 'open' | 'paid' | 'voided' | 'held';
-export type PaymentMethod = 'cash' | 'card' | 'upi' | 'split';
+export type PaymentMethod = 'cash' | 'card' | 'upi' | 'split' | 'credit';
 
 export interface PaymentOut {
   id: number;
@@ -65,6 +65,8 @@ export interface SaleOut {
   total_saving: string;
   note: string | null;
   customer_mobile: string | null;
+  /** Optional; required with the mobile for a bill on udhari. */
+  customer_name: string | null;
   /** Points reserved on this open bill / used on this paid bill. */
   points_redeemed: number;
   /** ₹ off for those points (before GST, already inside discount_amount). */
@@ -128,7 +130,7 @@ export interface EbillStatus {
 export type TenderMethod = Exclude<PaymentMethod, 'split'>;
 
 /** Card/UPI go through Razorpay; cash is completed directly. */
-export type DigitalMethod = Exclude<TenderMethod, 'cash'>;
+export type DigitalMethod = 'card' | 'upi';
 
 export type PaymentIntentStatus = 'pending' | 'paid' | 'failed' | 'cancelled';
 

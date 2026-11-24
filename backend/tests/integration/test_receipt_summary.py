@@ -66,3 +66,23 @@ def test_ebill_pdf_has_the_same_summary(client, cashier_headers, shift, store):
     receipt = receipt_service.build_receipt(sid)
     assert ebill_pdf.item_summary(receipt) == ("Total Items: 1", "Total Qty: 3")
     assert ebill_pdf.render(receipt).startswith(b"%PDF")
+
+
+def test_ebill_shows_rates_and_amounts_with_gst(client, cashier_headers, shift, store):
+    oil = make_product(store, name="Oil", price="150.00", tax_rate="5.00")
+    soap = make_product(store, name="Soap", price="24.58", tax_rate="18.00")
+    sid = client.post("/api/v1/sales", headers=cashier_headers).get_json()["id"]
+    _add(client, cashier_headers, sid, oil, 2)
+    _add(client, cashier_headers, sid, soap, 3)
+    client.post(f"/api/v1/sales/{sid}/complete", json={"method": "cash", "cash_tendered": "500"},
+                headers=cashier_headers)
+
+    receipt = receipt_service.build_receipt(sid)
+    gst = ebill_pdf.with_gst(receipt)
+    assert [(g.rate, g.amount) for g in gst.lines] == [
+        (Decimal("157.50"), Decimal("315.00")),  # 150 + 5 %
+        (Decimal("29.00"), Decimal("87.01")),  # 24.58 + 18 % = 29.0044; 73.74 + 13.27
+    ]
+    assert gst.subtotal == receipt.total == Decimal("402.01")  # no discounts: the lines add up to the total
+    assert (gst.item_savings, gst.bill_offer, gst.reward) == (0, 0, 0)
+    assert ebill_pdf.render(receipt).startswith(b"%PDF")

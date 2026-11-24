@@ -1,6 +1,7 @@
 """Registers all blueprints under /api/v1. Routes contain no business logic."""
 from flask import Flask
 
+from app.routes.accounting_routes import accounting_bp
 from app.routes.audit_routes import audit_bp
 from app.routes.backup_routes import backup_bp
 from app.routes.auth_routes import auth_bp
@@ -11,6 +12,7 @@ from app.routes.health_routes import health_bp
 from app.routes.inventory_routes import inventory_bp
 from app.routes.license_routes import license_bp
 from app.routes.offline_routes import offline_bp
+from app.routes.price_review_routes import price_review_bp
 from app.routes.product_routes import product_bp
 from app.routes.receipt_routes import receipt_bp
 from app.routes.report_routes import report_bp
@@ -43,6 +45,8 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(return_bp, url_prefix=prefix)
     app.register_blueprint(discount_bp, url_prefix=prefix)
     app.register_blueprint(report_bp, url_prefix=prefix)
+    app.register_blueprint(accounting_bp, url_prefix=prefix)
+    app.register_blueprint(price_review_bp, url_prefix=prefix)
     app.register_blueprint(settings_bp, url_prefix=prefix)
     app.register_blueprint(backup_bp, url_prefix=prefix)
     app.register_blueprint(supplier_bp, url_prefix=prefix)

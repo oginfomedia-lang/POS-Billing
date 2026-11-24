@@ -8,6 +8,7 @@ import { BackupPage } from '../pages/admin/BackupPage';
 import { SuppliersPage } from '../pages/admin/SuppliersPage';
 import { SupplierDetailPage } from '../pages/admin/SupplierDetailPage';
 import { PurchasesPage } from '../pages/admin/PurchasesPage';
+import { PriceReviewPage } from '../pages/admin/PriceReviewPage';
 import { CategoriesPage } from '../pages/admin/CategoriesPage';
 import { CountersPage } from '../pages/admin/CountersPage';
 import { CustomersPage } from '../pages/admin/CustomersPage';
@@ -17,6 +18,7 @@ import { InventoryPage } from '../pages/admin/InventoryPage';
 import { LabelPrintPage } from '../pages/admin/LabelPrintPage';
 import { ProductsPage } from '../pages/admin/ProductsPage';
 import { ReportsPage } from '../pages/admin/ReportsPage';
+import { AccountingPage } from '../pages/admin/AccountingPage';
 import { SettingsPage } from '../pages/admin/SettingsPage';
 import { UsersPage } from '../pages/admin/UsersPage';
 import { ChangePinPage } from '../pages/auth/ChangePinPage';
@@ -76,6 +78,7 @@ export const router = createHashRouter([
           { path: '/admin/labels', element: <LabelPrintPage /> },
           { path: '/admin/discounts', element: <DiscountsPage /> },
           { path: '/admin/reports', element: <ReportsPage /> },
+          { path: '/admin/accounting', element: <AccountingPage /> },
           { path: '/admin/bills', element: <BillsPage /> },
           { path: '/admin/customers', element: <CustomersPage /> },
           { path: '/admin/settings', element: <SettingsPage /> },
@@ -83,6 +86,7 @@ export const router = createHashRouter([
           { path: '/admin/suppliers', element: <SuppliersPage /> },
           { path: '/admin/suppliers/:id', element: <SupplierDetailPage /> },
           { path: '/admin/purchases', element: <PurchasesPage /> },
+          { path: '/admin/price-review', element: <PriceReviewPage /> },
         ],
       },
 

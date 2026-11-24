@@ -107,7 +107,7 @@ def complete_sale(sale_id: int):
 @require_permission("sales.create")
 def set_customer_mobile(sale_id: int):
     data = CustomerMobileRequest.model_validate(request.get_json(force=True))
-    sale = billing_service.set_customer_mobile(sale_id, data.mobile, auth_service.current_user())
+    sale = billing_service.set_customer_mobile(sale_id, data.mobile, auth_service.current_user(), name=data.name)
     return jsonify(_sale_json(sale)), 200
 
 

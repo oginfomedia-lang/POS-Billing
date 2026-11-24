@@ -2,6 +2,7 @@
 from app.extensions import db
 from app.models.enums import SaleStatus
 from app.models.sale import Sale, SaleItem
+from app.models.customer import Customer
 from app.repositories.base_repository import BaseRepository
 
 
@@ -36,6 +37,18 @@ class SaleRepository(BaseRepository):
         if store_id is not None:
             q = q.where(Sale.store_id == store_id)
         return list(db.session.scalars(q.order_by(Sale.completed_at.desc()).limit(limit)).all())
+
+    def paid_by_customer_name(self, text: str, store_id: int | None, limit: int = 20) -> list[Sale]:
+        """A customer's paid bills, newest first. store_id None = all stores."""
+        named = db.select(Customer.id).where(Customer.name.icontains(text, autoescape=True))
+        q = db.select(Sale).where(
+            Sale.status == SaleStatus.PAID, 
+            db.or_(Sale.customer_name.icontains(text, autoescape=True), Sale.customer_id.in_(named)),
+        )
+        if store_id is not None:
+            q = q.where(Sale.store_id == store_id)
+        return list(db.session.scalars(q.order_by(Sale.completed_at.desc()).limit(limit)).all())
+        
 
     def list_for_shift(self, shift_id: int) -> list[Sale]:
         """Every bill started on this shift (paid, held, voided, open), oldest first."""

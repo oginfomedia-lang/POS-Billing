@@ -9,6 +9,8 @@ interface Props {
   name: string;
   /** Price the customer pays per unit (tax-inclusive). */
   price: string | null;
+  /** Printed MRP (already includes GST); null = not set or switched off. */
+  mrp: string | null;
   code: string;
   pattern: BarPattern;
 }
@@ -30,12 +32,17 @@ export function BarcodeSvg({ pattern }: { pattern: BarPattern }) {
   );
 }
 
-export function BarcodeLabel({ name, price, code, pattern }: Props) {
+export function BarcodeLabel({ name, price, mrp, code, pattern }: Props) {
   const { t } = useTranslation();
   return (
     <div className="barcode-label">
       <div className="label-name">{name}</div>
-      {price !== null && <div className="label-price">{formatRupees(price)} <span>{t('labels.inclGst')}</span></div>}
+      {(mrp !== null || price !== null) && (
+        <div className="label-prices">
+          {mrp !== null && <div className="label-mrp">{t('labels.mrp')} {formatRupees(mrp)}</div>}
+          {price !== null && <div className="label-price">{formatRupees(price)} <span>{t('labels.inclGst')}</span></div>}
+        </div>
+      )}
       <BarcodeSvg pattern={pattern} />
       <div className="label-digits">{code}</div>
     </div>

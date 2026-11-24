@@ -5,6 +5,7 @@ import { loadCounterConfig } from './config/counterConfig';
 import { registerConfigHandlers } from './ipc/configHandlers';
 import { registerOfflineHandlers } from './ipc/offlineHandlers';
 import { registerPrinterHandlers } from './ipc/printerHandlers';
+import { registerShellHandlers } from './ipc/shellHandlers';
 import { initAutoUpdater } from './updater';
 
 function createWindow(): void {
@@ -84,6 +85,7 @@ if (!app.requestSingleInstanceLock()) {
     registerConfigHandlers();
     registerPrinterHandlers();
     registerOfflineHandlers();
+    registerShellHandlers();
     try {
       initAutoUpdater(loadCounterConfig());
     } catch (err) {

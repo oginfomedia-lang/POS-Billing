@@ -7,6 +7,7 @@ import type {
   SupplierProductOut,
   SupplierSummary,
 } from '../../types/api';
+import type { SupplierReturnOut } from '../../types/inventory';
 import { httpClient } from './httpClient';
 
 export interface SupplierCreatePayload {
@@ -79,6 +80,10 @@ export const supplierApi = {
   },
   getLedger(id: number, params?: { date_from?: string; date_to?: string }) {
     return httpClient.get<SupplierLedgerEntry[]>(`/suppliers/${id}/ledger`, { params });
+  },
+  /** Goods sent back to this supplier, newest first; each one has a debit note for its value. */
+  listReturns(id: number) {
+    return httpClient.get<SupplierReturnOut[]>(`/suppliers/${id}/returns`);
   },
   /** Goods received from the supplier, with value and invoice; uninvoiced = not billed yet. */
   listGrns(id: number, uninvoiced = false) {

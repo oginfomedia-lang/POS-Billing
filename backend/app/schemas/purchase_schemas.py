@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.enums import PurchaseStatus
+from app.schemas.product_schemas import _optional_hsn
 
 
 class PurchaseOrderItemCreate(BaseModel):
@@ -60,6 +62,11 @@ class PurchaseOrderItemOut(BaseModel):
     line_discount: Decimal
     tax_amount: Decimal
     line_total: Decimal
+    # For the goods receipt screen (filled in by _enrich_po).
+    product_details_pending: bool = False
+    product_mrp: Decimal | None = None
+    product_hsn_code: str | None = None
+
 
 
 class PurchaseOrderOut(BaseModel):
@@ -69,6 +76,8 @@ class PurchaseOrderOut(BaseModel):
     po_number: str
     supplier_id: int
     supplier_name: str = ""
+    supplier_phone: str | None = None
+    supplier_email: str | None = None
     store_id: int | None
     purchase_date: date
     expected_delivery_date: date | None
@@ -90,6 +99,14 @@ class PurchaseOrderOut(BaseModel):
     closed_at: datetime | None = None
     created_by_id: int | None
     created_by_name: str = ""
+    # Sent to the supplier (sent_via: email / whatsapp / phone / in_person / other) and the latest email attempt.
+    sent_at: datetime | None = None
+    sent_via: str | None = None
+    sent_by_name: str = ""
+    email_status: str | None = None  # sending / sent / failed
+    email_to: str | None = None
+    email_error: str | None = None
+    is_direct:bool = False  # goods arrived without a PO; entered from the supplier's bill
     items: list[PurchaseOrderItemOut] = []
     created_at: datetime
     updated_at: datetime
@@ -104,6 +121,26 @@ class PurchaseOrderOut(BaseModel):
     outstanding_amount: Decimal = Decimal("0")  # payable − paid
 
 
+# Email isn't here: an email is recorded by the app itself when it goes out.
+ManualSentVia = Literal["whatsapp", "phone", "in_person", "other"]
+
+
+class MarkSentRequest(BaseModel):
+    """Staff record how they sent the PO themselves."""
+
+    via: ManualSentVia
+
+
+class SupplierMessageOut(BaseModel):
+    """What the "Send to supplier" box needs: the order as text, and which ways of sending are possible."""
+
+    text: str
+    whatsapp_url: str | None  # wa.me link with the text; None when the supplier has no valid mobile
+    supplier_mobile: str | None
+    supplier_email: str | None
+    email_configured: bool  # Settings → Integrations → Email is filled in
+
+
 class GoodsReceiptItemCreate(BaseModel):
     purchase_order_item_id: int
     qty_received: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
@@ -114,6 +151,17 @@ class GoodsReceiptItemCreate(BaseModel):
     mfg_date: date | None = None
     expiry_date: date | None = None
     remarks: str | None = None
+    # With the godown switched on, goods go into the godown; True = put straight on the shop shelf (milk, bread).
+    to_shop: bool = False
+    # From the supplier's bill, all optional. A rate / GST different from the PO corrects the PO line itself
+    # (only before any goods of that line came in), so stock cost, supplier balance and Tally use the bill.
+    bill_unit_price: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)  # before discount & GST
+    bill_tax_rate: Decimal | None = Field(None, ge=0, le=100, max_digits=5, decimal_places=2)
+    mrp: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)  # printed on the goods, incl. GST
+    hsn_code: str | None = Field(None, max_length=8)
+
+    _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
+
 
 
 class GoodsReceiptCreate(BaseModel):
@@ -221,3 +269,129 @@ class POPaymentHistoryOut(BaseModel):
     invoice_number: str | None
     invoice_id: int | None
     entries: list[POPaymentEntry]
+
+class DirectPurchaseLine(BaseModel):
+    """One line of the supplier's bill."""
+    product_id: int
+    qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    unit_price: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)  # rate on the bill, before GST
+    discount_percent: Decimal = Field(Decimal("0"), ge=0, le=100, max_digits=5, decimal_places=2)
+    tax_rate: Decimal = Field(Decimal("0"), ge=0, le=100, max_digits=5, decimal_places=2)
+    mrp: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
+    hsn_code: str | None = Field(None, max_length=8)
+    batch_number: str | None = Field(None, max_length=100)
+    expiry_date: date | None = None
+    to_shop: bool = False  # False = into the godown (the default when the godown is on); True = straight on the shelf
+    # The line's text as printed on the bill, when it was read from the bill: remembered for this supplier.
+    bill_description: str | None = Field(None, max_length=300)
+
+    _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
+
+
+class DirectPurchaseCreate(BaseModel):
+    """Goods arrived without a PO: the supplier's bill, entered once. The bill's file comes separately."""
+    supplier_id: int
+    store_id: int  # the store the goods went to
+    invoice_number: str = Field(..., min_length=1, max_length=100)
+    invoice_date: date
+    due_date: date | None = None  # empty = from the supplier's payment terms
+    other_charges: Decimal = Field(Decimal("0"), ge=0, max_digits=12, decimal_places=2)
+    grand_total: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)  # as printed on the bill
+    difference_reason: str | None = Field(None, max_length=1000)  # when the bill total differs from the lines
+    notes: str | None = None
+    items: list[DirectPurchaseLine] = Field(..., min_length=1)
+
+    @model_validator(mode="after")
+    def one_line_per_product(self):
+        ids = [i.product_id for i in self.items]
+        if len(ids) != len(set(ids)):
+            raise ValueError("A product is listed twice. Put its total quantity on one line.")
+        return self
+
+
+# ── Reading the supplier's bill (POST /purchases/direct/extract) ───────────────
+
+class BillProductOut(BaseModel):
+    """A product for a bill line; same fields as a row of the product search on the Purchases page."""
+    id: int
+    name: str
+    sku: str | None
+    price: float | None  # last purchase cost
+    selling: float | None  # selling price, before GST
+    tax_rate: float
+    score: int | None = None  # how close the name is (0-100); None when matched another way
+
+
+class DirectPurchaseEditLine(BaseModel):
+    product: BillProductOut
+    qty: float
+    unit_price: float
+    discount_percent: float
+    tax_rate: float
+    mrp: float | None
+    hsn_code: str | None
+    batch_number: str | None
+    expiry_date: date | None
+
+
+class DirectPurchaseEditOut(BaseModel):
+    """A saved direct purchase, back in the form to correct it (GET /purchases/<id>/direct)."""
+    po_id: int
+    po_number: str
+    supplier_id: int
+    store_id: int
+    invoice_number: str
+    invoice_date: date
+    due_date: date | None
+    other_charges: float
+    grand_total: float
+    difference_reason: str | None
+    bill_file_name: str | None
+    items: list[DirectPurchaseEditLine]
+
+
+class BillLineOut(BaseModel):
+    description: str  # as printed on the bill
+    hsn_code: str | None
+    qty: float | None  # free units included
+    free_qty: float | None
+    # What goes in "Rate on bill" and "Disc %": qty × unit_price − discount_percent gives the bill's taxable value.
+    # The bill's own rate and %; a ₹ discount that no 2-decimal % gives exactly, or free units, are taken into the rate.
+    unit_price: float | None
+    bill_rate: float | None  # the rate printed on the bill
+    discount: float | None  # as printed: a % or a ₹ amount
+    discount_percent: float
+    tax_rate: float | None
+    mrp: float | None
+    batch_number: str | None
+    expiry_date: date | None
+    amount: float | None
+    status: Literal["matched", "check", "not_found"]
+    product: BillProductOut | None
+    match_source: str | None  # alias / supplier_code / barcode / name
+    candidates: list[BillProductOut]
+    # rate_from_amount, qty_from_amount, math_mismatch, amount_missing, bad_gst, hard_to_read, mrp_below_rate
+    problems: list[str]
+    confidence: int  # OCR confidence 0-100 (100 for a digital PDF)
+
+
+class BillExtractOut(BaseModel):
+    source: Literal["pdf_text", "ocr"]
+    supplier_id: int | None
+    supplier_name: str | None
+    gstin: str | None
+    # Who sent the bill, from its GSTIN: matched, different (another saved supplier than the one chosen),
+    # not_found (no saved supplier has that GSTIN), unverified (no GSTIN could be read).
+    supplier_check: Literal["matched", "different", "not_found", "unverified"]
+    invoice_number: str | None
+    invoice_date: date | None
+    taxable_total: float | None
+    cgst: float | None
+    sgst: float | None
+    igst: float | None
+    round_off: float | None
+    grand_total: float | None
+    lines_total: float | None  # the lines' amounts added up
+    lines: list[BillLineOut]
+    # no_lines, lines_total_mismatch, bill_totals_mismatch, pages_skipped, used_template
+    warnings: list[str]

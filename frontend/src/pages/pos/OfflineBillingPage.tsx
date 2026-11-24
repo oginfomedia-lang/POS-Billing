@@ -17,7 +17,7 @@ import { openDrawer } from '../../services/hardware/printerService';
 import { useCounterStore } from '../../store/counterStore';
 import { useOfflineStore } from '../../store/offlineStore';
 import { formatDateTime } from '../../utils/format';
-import { formatRupees } from '../../utils/money';
+import { formatRupees, paiseToString, toPaise, withGst } from '../../utils/money';
 
 const QUICK_CASH = [100, 200, 500, 2000];
 
@@ -177,7 +177,7 @@ export function OfflineBillingPage() {
                   <li key={p.id}>
                     <button type="button" onClick={() => addProduct(p)}>
                       <span>{p.name}</span>
-                      <span className="status-muted">{formatRupees(p.price)}{p.is_variable_weight ? '/kg' : ''}</span>
+                      <span className="status-muted">{formatRupees(withGst(p.price, p.tax_rate))}{p.is_variable_weight ? '/kg' : ''}</span>
                     </button>
                   </li>
                 ))}
@@ -226,12 +226,18 @@ export function OfflineBillingPage() {
                   {cart.map((line, i) => {
                     const item = priced.items[i];
                     const step = line.product.is_variable_weight ? '0.001' : '1';
+                    // Shown WITH GST, like the online counter (CartRow): after this line's own offer. A bill
+                    // offer shows once, in the summary on the right.
+                    const amount = withGst(
+                      paiseToString(toPaise(item.line_total) - toPaise(item.offer_discount)), item.tax_rate);
                     return (
                       <tr key={line.product.id}>
                         <td>
                           {line.product.name}
                           {Number(item.offer_discount) > 0 && (
-                            <div className="status-muted">{item.offer_name}: −{formatRupees(item.offer_discount)}</div>
+                            <div className="status-muted">
+                              {item.offer_name}: −{formatRupees(withGst(item.offer_discount, item.tax_rate))}
+                            </div>
                           )}
                         </td>
                         <td className="num">
@@ -244,8 +250,13 @@ export function OfflineBillingPage() {
                             onChange={(e) => Number(e.target.value) > 0 && setQty(line.product.id, e.target.value)}
                           />
                         </td>
-                        <td className="num">{formatRupees(item.unit_price)}</td>
-                        <td className="num">{formatRupees(item.line_total)}</td>
+                        <td className="num">
+                          {formatRupees(withGst(item.unit_price, item.tax_rate))}
+                          <div className="price-gst-note">
+                            {Number(item.tax_rate) > 0 ? t('pos.gstIncluded', { rate: Number(item.tax_rate) }) : t('pos.noGst')}
+                          </div>
+                        </td>
+                        <td className="num">{formatRupees(amount)}</td>
                         <td className="table-actions">
                           <button className="btn-sm" onClick={() => remove(line.product.id)} title={t('offline.remove')}>
                             <IconTrash size={14} />

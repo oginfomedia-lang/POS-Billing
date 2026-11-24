@@ -30,8 +30,13 @@ class Product(TimestampMixin, db.Model):
     description = db.Column(db.Text, nullable=True)
     category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=True)
     price = db.Column(db.Numeric(12, 2), nullable=False)  # selling price, before GST
-    # Default purchase cost, before GST (for the profit report). Each store's GRNs keep inventory.avg_cost.
+    # Latest purchase cost, before GST (updated on every goods receipt). Each store's GRNs keep inventory.avg_cost,
+    # which billing and the profit report use.
     cost_price = db.Column(db.Numeric(12, 4), nullable=True)
+    # The cost_price when the selling price was last applied or kept on "Review selling prices". The product is
+    # not listed there again until its cost changes.
+    price_reviewed_cost = db.Column(db.Numeric(12, 4), nullable=True)
+    details_pending = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())  # typed on a purchase order; no selling price / GST / MRP yet, billing refuses it
     tax_rate = db.Column(db.Numeric(5, 2), nullable=False, default=0)
     mrp = db.Column(db.Numeric(12, 2), nullable=True)  # printed MRP, incl. GST (per unit, or per kg if weighed)
     hsn_code = db.Column(db.String(8), nullable=True)  # GST HSN code, 4-8 digits

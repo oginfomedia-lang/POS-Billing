@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -13,14 +14,58 @@ class StockLevelOut(BaseModel):
     product_id: int
     product_name: str
     barcode: str | None
-    qty_on_hand: Decimal
+    qty_on_hand: Decimal  # the whole stock: shop + godown
+    shop_qty: Decimal = Decimal("0")  # on the shop shelf
+    godown_qty: Decimal = Decimal("0")  # in the godown
+    shelf_min_qty: Decimal | None = None  # refill the shelf at this level; None = no shelf alert
+    needs_refill: bool = False  # shelf at / below shelf_min_qty and the godown has some
     uom: UOMType = UOMType.PCS
     low_stock_threshold: Decimal | None  # this product's own level; None = use the Settings default
     effective_threshold: Decimal
-    is_low: bool
+    is_low: bool  # the WHOLE stock is low: time to order from the supplier
     base_price: Decimal  # head-office price (products.price)
     store_price: Decimal | None  # this store's own price; None = sells at base_price
     price: Decimal  # what this store actually charges (before GST)
+
+
+class TransferRequest(BaseModel):
+    """Move goods between the godown and the shop shelf."""
+
+    store_id: int
+    product_id: int
+    qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
+    direction: Literal["to_shop", "to_godown"] = "to_shop"
+    notes: str | None = Field(None, max_length=255)
+
+
+class ShelfMinRequest(BaseModel):
+    store_id: int
+    product_id: int
+    shelf_min_qty: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=3)
+
+
+class RefillOut(BaseModel):
+    """A product whose shelf is running low while the godown still has some."""
+
+    product_id: int
+    product_name: str
+    uom: UOMType
+    shop_qty: Decimal
+    godown_qty: Decimal
+    shelf_min_qty: Decimal
+
+
+class StockTransferOut(BaseModel):
+    id: int
+    product_id: int
+    product_name: str
+    qty: Decimal
+    direction: str
+    reason: str
+    reference_id: int | None
+    user_name: str | None
+    notes: str | None
+    created_at: datetime
 
 
 
@@ -45,15 +90,20 @@ class StockInRequest(BaseModel):
     notes: str | None = Field(None, max_length=500)
     expiry_date: date | None = None
     batch_number: str | None = Field(None, max_length=100)
+    to_godown: bool = False  # True = the goods went into the godown, not on the shelf
 
 
 class AdjustStockRequest(BaseModel):
-    """Set the counted quantity (stock-take, damage, theft). A reason is required."""
+    """Set the counted quantity (stock-take, damage, theft). A reason is required.
+
+    location: what was counted. None = the whole stock (as before); "shop" / "godown" = only that place,
+    the other place keeps its figure."""
 
     store_id: int
     product_id: int
     new_qty: Decimal = Field(..., ge=0, max_digits=12, decimal_places=3)
     notes: str = Field(..., min_length=1, max_length=500)
+    location: Literal["shop", "godown"] | None = None
 
 
 class InventoryTxnOut(BaseModel):
@@ -81,6 +131,7 @@ class ExpiringBatchOut(BaseModel):
     batch_id: int | None = None
     batch_number: str | None = None
     batch_qty: Decimal | None = None  # what is left of this batch
+    batch_source: str | None = None  # grn = came from a supplier, so it can be sent back
 
 
 class BatchOut(BaseModel):
@@ -99,3 +150,50 @@ class BatchWriteOffRequest(BaseModel):
     """Expired or damaged goods of one batch leave stock. qty omitted = everything left in the batch."""
     qty: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=3)
     reason: str = Field(..., min_length=1, max_length=200)
+    from_godown: bool = False  # True = the spoilt goods are in the godown (rats, leaking cartons)
+
+
+class BatchReturnRequest(BaseModel):
+    """Goods of one GRN batch go back to the supplier who sent them; the supplier owes us their value.
+    qty omitted = everything left in the batch."""
+    qty: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=3)
+    reason: str = Field(..., min_length=1, max_length=200)
+    from_godown: bool = False
+
+
+class SupplierReturnOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    return_number: str
+    supplier_id: int
+    supplier_name: str = ""
+    product_id: int
+    product_name: str = ""
+    batch_id: int
+    goods_receipt_id: int
+    receipt_number: str = ""
+    qty: Decimal
+    amount: Decimal
+    reason: str
+    # How much of the amount went against the GRN's invoice; the rest is credit with the supplier
+    applied_to_invoice: Decimal = Decimal("0")
+    created_at: datetime
+    # For the debit note document: where the goods came from and how the amount is worked out
+    # (the PO line's rate, discount and GST — the same maths as the supplier's bill).
+    purchase_order_id: int | None = None
+    po_number: str = ""
+    batch_number: str | None = None
+    uom: str = ""
+    unit_price: Decimal = Decimal("0")
+    discount_percent: Decimal = Decimal("0")
+    tax_rate: Decimal = Decimal("0")
+    gross: Decimal = Decimal("0")
+    discount: Decimal = Decimal("0")
+    taxable_value: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    invoice_numbers: list[str] = []  # the supplier bill(s) this debit note was taken off
+    store_name: str = ""
+    store_address: str | None = None
+    store_gstin: str | None = None
+    created_by_name: str = ""

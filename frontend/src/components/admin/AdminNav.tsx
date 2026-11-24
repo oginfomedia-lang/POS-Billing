@@ -57,6 +57,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
     links: [
       { to: '/admin', label: 'nav.dashboard', icon: IconDashboard },
       { to: '/admin/reports', label: 'nav.reports', icon: IconBarChart },
+      { to: '/admin/accounting', label: 'nav.accounting', icon: IconFileText },
       { to: '/admin/bills', label: 'nav.bills', icon: IconReceipt },
       { to: '/admin/customers', label: 'nav.customers', icon: IconUsers },
     ],
@@ -76,6 +77,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
     title: 'nav.purchasing',
     links: [
       { to: '/admin/purchases', label: 'nav.purchases', icon: IconClipboardList },
+      { to: '/admin/price-review', label: 'nav.priceReview', icon: IconTag },
     ],
   },
   {

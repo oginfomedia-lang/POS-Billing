@@ -1993,6 +1993,13 @@ select.field-input {
   white-space: nowrap;
 }
 
+.price-gst-note {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 /* Quantity stepper */
 .qty-stepper {
   display: inline-flex;
@@ -2041,6 +2048,7 @@ select.field-input {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
@@ -2867,6 +2875,13 @@ button.stat-tile:hover {
   white-space: nowrap;
 }
 
+.label-checkboxes-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 42px;
+}
+
 .product-picker {
   position: relative;
 }
@@ -2955,6 +2970,7 @@ button.stat-tile:hover {
 }
 
 .label-name {
+  flex-shrink: 0;
   overflow: hidden;
   max-height: 2.4em;
   font-size: 8pt;
@@ -2963,16 +2979,41 @@ button.stat-tile:hover {
   overflow-wrap: anywhere;
 }
 
-.label-price {
-  margin-top: 1mm;
-  font-size: 10pt;
-  font-weight: 700;
+.label-prices {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5mm;
+  margin-top: 0.5mm;
+}
+
+.label-mrp {
+  font-size: 6.5pt;
   line-height: 1.1;
+  white-space: nowrap;
+}
+
+.label-mrp::after {
+  content: ' (incl. GST)';
+  font-size: 5.5pt;
+  font-weight: 400;
+}
+
+html[lang="mr"] .label-mrp::after {
+  content: ' (GST सह)';
+}
+
+.label-price {
+  font-size: 10.5pt;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .label-price span {
-  font-size: 6pt;
-  font-weight: 400;
+  display: none;
 }
 
 .label-bars {
@@ -2984,6 +3025,7 @@ button.stat-tile:hover {
 }
 
 .label-digits {
+  flex-shrink: 0;
   font-family: 'Consolas', monospace;
   font-size: 7pt;
   letter-spacing: 0.08em;
@@ -3003,6 +3045,16 @@ button.stat-tile:hover {
   break-after: auto;
 }
 
+.label-print.size-roll-50x30 .label-page {
+  width: 50mm;
+  height: 30mm;
+}
+
+.size-roll-50x30 .barcode-label {
+  width: 50mm;
+  height: 30mm;
+}
+
 .label-print.size-roll-50x25 .label-page {
   width: 50mm;
   height: 25mm;
@@ -3018,6 +3070,25 @@ button.stat-tile:hover {
   height: 25mm;
   padding-right: 2mm;
   padding-left: 2mm;
+}
+
+.label-print.size-roll-38x25 .label-price span { display: none; }
+.label-print.size-roll-38x25 .label-mrp { font-size: 6.5pt; }
+
+.label-print.size-roll-preprinted .label-page {
+  width: 50mm;
+  height: 38mm;
+}
+
+.size-roll-preprinted .barcode-label {
+  width: 50mm;
+  height: 38mm;
+  padding: 10mm 3mm 2mm 3mm; /* Top padding leaves space for pre-printed logo */
+}
+
+.size-roll-preprinted .label-prices {
+  gap: 0.8mm;
+  margin-top: 1mm;
 }
 
 .label-print.size-a4-24 .label-page {
@@ -3036,6 +3107,7 @@ button.stat-tile:hover {
 
 .label-print.size-a4-24 .label-name { font-size: 10pt; }
 .label-print.size-a4-24 .label-price { font-size: 13pt; }
+.label-print.size-a4-24 .label-mrp { font-size: 9pt; }
 .label-print.size-a4-24 .label-bars { min-height: 15mm; }
 .label-print.size-a4-24 .label-digits { font-size: 9pt; }
 
@@ -3810,6 +3882,9 @@ button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring);
   .cart-item-row .unit-price-cell::after {
     content: ' each';
   }
+  .cart-item-row .price-gst-note {
+    display: none;
+  }
   .cart-item-row .qty-cell { grid-area: qty; }
   .cart-item-row .line-total-cell { grid-area: total; min-width: 76px; }
   .cart-item-row .actions-cell { grid-area: remove; justify-self: end; }
@@ -3873,6 +3948,22 @@ button.cashier-chip-link:focus-visible { outline: none; box-shadow: var(--ring);
 
 /* ───────────────────────── Print ───────────────────────── */
 @media print {
+  /* A document in a modal (e.g. a debit note): print only that box, full width, not the page behind it. */
+  body.printing-doc * { visibility: hidden; }
+  body.printing-doc .print-doc,
+  body.printing-doc .print-doc * { visibility: visible; }
+  body.printing-doc .print-doc {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none;
+    box-shadow: none;
+  }
+
   /* Printer test: print only the sample slip, not the Settings page. */
   body.printing-test * { visibility: hidden; }
   body.printing-test .print-test-receipt,

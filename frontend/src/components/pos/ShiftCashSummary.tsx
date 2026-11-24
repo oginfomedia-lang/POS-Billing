@@ -1,5 +1,6 @@
 // What the drawer should hold for a shift, from the server's figures (the same ones used to close it):
-// opening float + cash sales − cash refunds. Card and UPI are shown apart; they never go in the drawer.
+// opening float + cash sales + udhari paid back in cash − cash refunds. Card, UPI and bills sold on udhari are
+// shown apart; they never go in the drawer.
 import { useTranslation } from 'react-i18next';
 import type { ShiftSummary } from '../../types/shift';
 import { formatRupees } from '../../utils/money';
@@ -19,6 +20,12 @@ export function ShiftCashSummary({ summary }: { summary: ShiftSummary }) {
           <span>+ {t('shift.cashSales')}</span>
           <strong>{formatRupees(summary.cash_sales)}</strong>
         </div>
+        {Number(summary.udhari_cash) > 0 && (
+          <div className="shift-summary-row">
+            <span>+ {t('shift.udhariCash')}</span>
+            <strong>{formatRupees(summary.udhari_cash)}</strong>
+          </div>
+        )}
         <div className="shift-summary-row">
           <span>− {t('shift.cashRefunds')}</span>
           <strong>{formatRupees(summary.cash_refunds)}</strong>
@@ -44,6 +51,9 @@ export function ShiftCashSummary({ summary }: { summary: ShiftSummary }) {
           </div>
           <p className="hint-text">{t('shift.digitalNote')}</p>
         </div>
+      )}
+      {Number(summary.credit_sales) > 0 && (
+        <p className="hint-text">{t('shift.creditSales')}: {formatRupees(summary.credit_sales)}</p>
       )}
       {Number(summary.other_refunds) > 0 && (
         <p className="hint-text">{t('shift.otherRefunds')}: {formatRupees(summary.other_refunds)}</p>

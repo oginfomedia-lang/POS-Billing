@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from app.extensions import db
 from app.models.base import TimestampMixin
-from app.models.enums import RewardTxnType
+from app.models.enums import CreditTxnType, RewardTxnType
 
 
 class Customer(TimestampMixin, db.Model):
@@ -22,6 +22,12 @@ class Customer(TimestampMixin, db.Model):
     lifetime_earned = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     lifetime_redeemed = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     total_spent = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")  # paid bills, incl. GST
+    credit_balance = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default="0")  # money owed to store
+    credit_limit = db.Column(db.Numeric(12, 2), nullable=True)
+    credit_transactions = db.relationship(
+        "CreditTransaction", back_populates="customer",
+        order_by="CreditTransaction.id.desc()", lazy="dynamic"
+    )
     visit_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")  # number of paid bills
     first_visit_at = db.Column(db.DateTime(timezone=True), nullable=True)  # = registration (first paid bill)
     last_visit_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -63,3 +69,41 @@ class RewardTransaction(db.Model):
 
     def __repr__(self) -> str:
         return f"<RewardTransaction {self.txn_type.value} {self.points:+d} -> {self.balance_after}>"
+
+class CreditTransaction(db.Model):
+    """Customer credit passbook (Khata ledger).
+    amount: + for UDHARI/ADJUST up, − for PAYMENT/RETURN/ADJUST down.
+    """
+
+    __tablename__ = "credit_transactions"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id"), nullable=False, index=True)
+    store_id = db.Column(db.Integer, db.ForeignKey("stores.id"), nullable=False, index=True)
+    sale_id = db.Column(db.Integer, db.ForeignKey("sales.id"), nullable=True, index=True)
+    return_id = db.Column(db.Integer, db.ForeignKey("sale_returns.id"), nullable=True, index=True)
+    # A cash repayment taken by a cashier with an open shift: the money is in that drawer.
+    shift_id = db.Column(db.Integer, db.ForeignKey("cashier_shifts.id"), nullable=True, index=True)
+
+    txn_type = db.Column(db.Enum(CreditTxnType, name="credit_txn_type"), nullable=False)
+    amount = db.Column(db.Numeric(12, 2), nullable=False)
+    balance_after = db.Column(db.Numeric(12, 2), nullable=False)
+    payment_method = db.Column(db.String(20), nullable=True)  # cash / upi / card when paying dues
+    reference = db.Column(db.String(100), nullable=True)     # UTR / Cheque / note
+    note = db.Column(db.String(255), nullable=True)          # e.g. "Bill S01-C01-00042"
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    customer = db.relationship("Customer", back_populates="credit_transactions")
+    sale = db.relationship("Sale")
+    store = db.relationship("Store")
+    created_by = db.relationship("User")
+
+    __table_args__ = (
+        db.CheckConstraint("amount <> 0", name="ck_credit_txn_amount_not_zero"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<CreditTransaction {self.txn_type.value} {self.amount:+f} -> {self.balance_after}>"

@@ -32,7 +32,9 @@ hiddenimports = app_modules + [
 ]
 # Packages with native parts / data files that PyInstaller does not find on its own.
 for pkg in ("psycopg", "psycopg_binary", "uharfbuzz", "fpdf", "cryptography", "paramiko",
-            "indic_transliteration"):  # its scripts are .toml data files
+            "indic_transliteration",  # its scripts are .toml data files
+            "pdfminer", "pypdfium2", "pypdfium2_raw", "rapidfuzz",  # bill reading: cmap files, pdfium.dll
+            "rapidocr", "onnxruntime", "omegaconf", "pyclipper", "shapely"):  # RapidOCR: .onnx models, yaml, dlls
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b

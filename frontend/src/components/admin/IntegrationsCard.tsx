@@ -35,7 +35,17 @@ const SECTIONS: { provider: IntegrationProvider; fields: [string, Kind][]; testa
       ['WHATSAPP_EBILL_TEMPLATE_NAME', 'text'], ['WHATSAPP_TEMPLATE_LANG', 'text'], ['WHATSAPP_MOCK', 'bool'],
     ],
   },
+  {
+    provider: 'email',
+    testable: true,
+    fields: [
+      ['SMTP_HOST', 'text'], ['SMTP_PORT', 'int'], ['SMTP_USERNAME', 'text'], ['SMTP_PASSWORD', 'secret'],
+      ['SMTP_FROM', 'text'], ['EMAIL_MOCK', 'bool'],
+    ],
+  },
 ];
+
+type TestableProvider = Exclude<IntegrationProvider, 'paytm'>;
 
 /** What the box shows for a saved plain field ('' when nothing is set anywhere). */
 function shown(field: PlainField | undefined): string | boolean {
@@ -105,7 +115,7 @@ export function IntegrationsCard() {
     }
   }
 
-  async function test(provider: 'razorpay' | 'whatsapp') {
+  async function test(provider: TestableProvider) {
     setTesting(provider);
     setMessage(null);
     try {
@@ -194,7 +204,7 @@ export function IntegrationsCard() {
                 className="btn-secondary"
                 disabled={saving || testing !== null || dirty}
                 title={dirty ? t('settings.integrations.saveFirst') : undefined}
-                onClick={() => void test(provider as 'razorpay' | 'whatsapp')}
+                onClick={() => void test(provider as TestableProvider)}
               >
                 {testing === provider ? t('settings.integrations.testing') : t('settings.integrations.test')}
               </button>

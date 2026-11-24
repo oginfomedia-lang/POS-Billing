@@ -82,6 +82,8 @@ def settle_sale(sale: Sale, actor: User) -> None:
     s = settings_service.get_settings()
     repo = CustomerRepository()
     customer = repo.get_or_create_for_update(sale.customer_mobile)  # first paid bill = registration
+    if sale.customer_name:
+        customer.name = sale.customer_name  # the counter fills in the saved name, so a change here is a correction
     note = f"Bill {sale.bill_number}"
 
     if sale.points_redeemed:
@@ -110,10 +112,13 @@ def reverse_for_return(sale: Sale, ret: SaleReturn, actor: User) -> None:
     Worked out on the running total of refunds, so several partial returns never take back more than
     was earned. Redeemed points are not given back (usual shop policy). The balance never goes below 0.
     """
-    if not sale.customer_id or not sale.points_earned or not sale.total:
+    if not sale.customer_id:
         return
     repo = CustomerRepository()
     customer = repo.lock(sale.customer_id)
+    customer.total_spent = max(customer.total_spent - ret.refund_amount, ZERO)
+    if not sale.points_earned or not sale.total:
+        return
     refunded = to_decimal(repo.refunded_for_sale(sale.id))
     should_be_back = min(sale.points_earned, int(sale.points_earned * refunded / sale.total))
     take = min(should_be_back - repo.reversed_for_sale(sale.id), customer.points_balance)
@@ -124,8 +129,8 @@ def reverse_for_return(sale: Sale, ret: SaleReturn, actor: User) -> None:
         )
 
 
-def list_customers(search: str | None, page: int, per_page: int) -> tuple[list[Customer], int]:
-    return CustomerRepository().search(search, page, per_page)
+def list_customers(search: str | None, page: int, per_page: int, with_dues: bool = False) -> tuple[list[Customer], int]:
+    return CustomerRepository().search(search, page, per_page, with_dues=with_dues)
 
 
 def customer_ledger(customer_id: int, page: int, per_page: int):

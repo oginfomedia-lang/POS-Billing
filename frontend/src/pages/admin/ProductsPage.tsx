@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   createProduct,
   deleteBarcode,
+  downloadProductsExport,
   generateInhouseBarcode,
   generateNewInhouseBarcode,
   listCategories,
@@ -71,6 +72,7 @@ export function ProductsPage() {
   const [formSupplier, setFormSupplier] = useState('');
   const [suppliers, setSuppliers] = useState<SupplierOut[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [formUom, setFormUom] = useState<UOMType>('pcs');
   const [formVariableWeight, setFormVariableWeight] = useState(false);
   // Loose items: the item code set on the weighing scale.
@@ -132,6 +134,19 @@ export function ProductsPage() {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  /** Downloads the products this screen lists (same tab, search and branch), every page of them. */
+  async function exportProducts(format: 'xlsx' | 'csv') {
+    setExporting(true);
+    setError('');
+    try {
+      await downloadProductsExport(format, { status: view, store_id: branchId ?? undefined, q: query || undefined });
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -398,6 +413,14 @@ export function ProductsPage() {
           <button className="btn-secondary" onClick={() => setImportOpen(true)}>
             {t('import.open')}
           </button>
+          <button className="btn-secondary" disabled={exporting} onClick={() => exportProducts('xlsx')}
+            title={t('products.exportHint')}>
+            {t('products.exportExcel')}
+          </button>
+          <button className="btn-secondary" disabled={exporting} onClick={() => exportProducts('csv')}
+            title={t('products.exportHint')}>
+            {t('products.exportCsv')}
+          </button>
           <button className="btn-primary" onClick={openCreate}>
             {t('products.add')}
           </button>
@@ -469,7 +492,12 @@ export function ProductsPage() {
               return (
                 <tr key={p.id}>
                   <td><code>{p.sku}</code></td>
-                  <td>{p.name}</td>
+                  <td>
+                    {p.name}
+                    {p.details_pending && (
+                      <span className="status-badge badge-warning" style={{ marginLeft: 6 }}>{t('products.pricePending')}</span>
+                    )}
+                  </td>
                   <td title={p.store_price ? t('products.branchPriceTip') : undefined}>
                     {formatRupees(p.store_price ?? p.price)}
                     {p.store_price && <span className="status-muted price-hq">{t('products.hqPrice', { price: formatRupees(p.price) })}</span>}

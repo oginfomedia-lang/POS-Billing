@@ -18,6 +18,7 @@ from app.schemas.product_schemas import (
     CategoryUpdate,
     ProductCreate,
     ProductUpdate,
+    PendingProductCreate
 )
 from app.services import inventory_service, settings_service, sku_service
 from app.utils.barcode_utils import generate_inhouse_barcode, parse_scale_barcode
@@ -37,7 +38,7 @@ def create_category(data: CategoryCreate) -> Category:
     _check_category_name_free(data.name)
     if data.parent_id is not None:
         _get_category_or_404(data.parent_id)
-    cat = Category(name=data.name, parent_id=data.parent_id)
+    cat = Category(name=data.name, parent_id=data.parent_id, target_margin_percent=data.target_margin_percent)
     with transaction():
         repo.add(cat)
         db.session.flush()
@@ -55,6 +56,8 @@ def update_category(category_id: int, data: CategoryUpdate) -> Category:
         cat.parent_id = data.parent_id
     if data.is_active is not None:
         cat.is_active = data.is_active
+    if "target_margin_percent" in sent:
+        cat.target_margin_percent = data.target_margin_percent
     with transaction():
         pass
     return cat
@@ -117,7 +120,7 @@ def list_products(
     )
 
 
-def create_product(data: ProductCreate) -> Product:
+def create_product(data: ProductCreate, details_pending: bool = False) -> Product:
     """No SKU given: one is made from the category and the name (KIR-SAK-0001, app/services/sku_service.py)."""
     repo = ProductRepository()
 
@@ -130,6 +133,7 @@ def create_product(data: ProductCreate) -> Product:
 
     product = Product(
         sku=sku or sku_service.generate(data.category_id, data.name),
+        details_pending=details_pending,
         name=data.name,
         description=data.description,
         category_id=data.category_id,
@@ -166,6 +170,20 @@ def create_product(data: ProductCreate) -> Product:
 
     return product
 
+def create_pending_product(data: PendingProductCreate) -> Product:
+    """Typed on a purchase order (admin / manager). No selling price yet, so billing refuses it until one is set.
+    Refuses a name that already exists, so the same product isn't added twice."""
+    same = db.session.scalar(
+        db.select(Product).where(db.func.lower(Product.name) == data.name.lower(), Product.is_active.is_(True))
+    )
+    if same is not None:
+        raise ConflictError(f"'{same.name}' already exists (SKU {same.sku}). Pick it in the product search instead.")
+    return create_product(
+        ProductCreate(name=data.name, category_id=data.category_id, price=0, uom=data.uom,
+                      store_id=data.store_id, supplier_id=data.supplier_id),
+        details_pending=True,
+    )
+
 
 def update_product(product_id: int, data: ProductUpdate) -> Product:
     product = _get_product_or_404(product_id)
@@ -186,6 +204,8 @@ def update_product(product_id: int, data: ProductUpdate) -> Product:
         product.category_id = data.category_id
     if data.price is not None:
         product.price = data.price
+        if data.price > 0:
+            product.details_pending = False  # a selling price is now set, so billing can sell it
     if data.tax_rate is not None:
         product.tax_rate = data.tax_rate
     # mrp / hsn_code can be cleared, so "sent" (even as null) means "set it".

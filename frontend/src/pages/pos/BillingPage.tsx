@@ -278,6 +278,7 @@ export function BillingPage() {
           saleId={sale.id}
           total={sale.total}
           customerMobile={sale.customer_mobile}
+          customerName={sale.customer_name}
           onSaveMobile={setCustomerMobile}
           pointsRedeemed={sale.points_redeemed}
           roomForReward={Number(sale.subtotal) - Number(sale.discount_amount) + Number(sale.reward_discount)}

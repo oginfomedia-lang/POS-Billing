@@ -37,8 +37,8 @@ export async function setManualDiscount(saleId: number, itemId: number, data: Ma
 }
 
 /** Optional customer mobile on the open bill (null / '' clears it). Doesn't touch a live QR / card payment. */
-export async function setCustomerMobile(saleId: number, mobile: string | null): Promise<SaleOut> {
-  const resp = await httpClient.put<SaleOut>(`/sales/${saleId}/customer-mobile`, { mobile: mobile || null });
+export async function setCustomerMobile(saleId: number, mobile: string | null, name: string | null): Promise<SaleOut> {
+  const resp = await httpClient.put<SaleOut>(`/sales/${saleId}/customer-mobile`, { mobile: mobile || null, name: name || null });
   return resp.data;
 }
 

@@ -6,7 +6,7 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import { supplierApi } from '../../services/api/supplierApi';
 import { type GRNPreview, supplierInvoiceApi } from '../../services/api/supplierInvoiceApi';
 import type { SupplierGRNOut, SupplierInvoiceOut, SupplierOut } from '../../types/api';
-import { formatDate } from '../../utils/format';
+import { formatDate, isoDateIst } from '../../utils/format';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { IconX } from '../common/Icons';
 
@@ -21,16 +21,12 @@ interface Props {
   onSaved: (invoice: SupplierInvoiceOut) => void;
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function SupplierInvoiceDialog({ supplier, preselectGrnId, onClose, onSaved }: Props) {
   const [grns, setGrns] = useState<SupplierGRNOut[] | null>(null);
   const [selected, setSelected] = useState<number[]>(preselectGrnId ? [preselectGrnId] : []);
   const [preview, setPreview] = useState<GRNPreview | null>(null);
   const [number, setNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(today());
+  const [invoiceDate, setInvoiceDate] = useState(isoDateIst());
   const [dueDate, setDueDate] = useState('');
   const [subtotal, setSubtotal] = useState('');
   const [tax, setTax] = useState('');
@@ -89,6 +85,7 @@ export function SupplierInvoiceDialog({ supplier, preselectGrnId, onClose, onSav
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (invoiceDate > isoDateIst()) return setError('Invoice date cannot be in the future.');
     if (selected.length === 0) return setError('Tick the goods receipt(s) this bill is for.');
     if (!file) return setError("Attach the supplier's bill (PDF or photo).");
     if (mismatch && !reason.trim()) return setError('Write why the bill differs from the goods received.');
@@ -173,7 +170,7 @@ export function SupplierInvoiceDialog({ supplier, preselectGrnId, onClose, onSav
             </label>
             <label className="field-label">
               Invoice date
-              <input className="field-input" type="date" required value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} disabled={busy} />
+              <input className="field-input" type="date" required value={invoiceDate} max={isoDateIst()} onChange={(e) => setInvoiceDate(e.target.value)} disabled={busy} />
             </label>
             <label className="field-label">
               Due date

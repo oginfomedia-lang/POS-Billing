@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models.enums import PaymentTerms
 from app.models.supplier import Supplier
 from app.models.supplier_invoice import SupplierInvoice
+from app.models.supplier_return import SupplierReturn
 from tests.factories import make_product
 
 pytestmark = pytest.mark.integration
@@ -54,7 +55,7 @@ def _po(client, headers, supplier, store, product, qty=100, price="10", tax="5")
 def _receive(client, headers, po, qty, accepted=None):
     item = {"purchase_order_item_id": po["items"][0]["id"], "qty_received": qty}
     if accepted is not None:
-        item.update(qty_accepted=accepted, qty_rejected=qty - accepted)
+        item.update(qty_accepted=accepted, qty_rejected=qty - accepted, remarks="Poor quality")
     resp = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [item]}, headers=headers)
     assert resp.status_code == 201, resp.get_json()
     return resp.get_json()
@@ -258,7 +259,7 @@ def test_only_accepted_goods_go_into_stock(client, admin_headers, supplier, stor
     assert bad.status_code == 422 and "must equal" in bad.get_json()["error"]["message"]
 
     ok = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [
-        {"purchase_order_item_id": item, "qty_received": 50, "qty_rejected": 10},  # accepted = 40
+        {"purchase_order_item_id": item, "qty_received": 50, "qty_rejected": 10, "remarks": "Broken"},  # accepted = 40
     ]}, headers=admin_headers)
     assert ok.status_code == 201, ok.get_json()
     assert ok.get_json()["receipt_items"][0]["qty_accepted"] == "40.000"
@@ -270,6 +271,48 @@ def test_only_accepted_goods_go_into_stock(client, admin_headers, supplier, stor
     _receive(client, admin_headers, detail, 10)
     assert _stock(oil.id) == Decimal("50")
     assert client.get(f"/api/v1/purchases/{po['id']}", headers=admin_headers).get_json()["status"] == "received"
+
+
+def test_rejected_and_damaged_need_a_reason_and_are_kept_apart(client, admin_headers, supplier, store):
+    oil = make_product(store, name="Oil 5L", stock=0)
+    po = _po(client, admin_headers, supplier, store, oil, qty=20)
+    item = po["items"][0]["id"]
+
+    no_reason = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [
+        {"purchase_order_item_id": item, "qty_received": 20, "qty_damaged": 2},
+    ]}, headers=admin_headers)
+    assert no_reason.status_code == 422 and "reason" in no_reason.get_json()["error"]["message"]
+
+    ok = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [
+        {"purchase_order_item_id": item, "qty_received": 20, "qty_rejected": 3, "qty_damaged": 2,
+         "remarks": "Leaking cans"},
+    ]}, headers=admin_headers)
+    assert ok.status_code == 201, ok.get_json()
+    line = ok.get_json()["receipt_items"][0]
+    assert (line["qty_accepted"], line["qty_rejected"], line["qty_damaged"]) == ("15.000", "3.000", "2.000")
+    assert line["remarks"] == "Leaking cans"
+    assert _stock(oil.id) == Decimal("15")
+
+
+def test_expired_goods_cannot_go_into_stock(client, admin_headers, supplier, store):
+    from datetime import timedelta
+    milk = make_product(store, name="Milk 1L", stock=0)
+    po = _po(client, admin_headers, supplier, store, milk, qty=10)
+    item = po["items"][0]["id"]
+    yesterday = str(date.today() - timedelta(days=1))
+
+    stocked = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [
+        {"purchase_order_item_id": item, "qty_received": 10, "expiry_date": yesterday},
+    ]}, headers=admin_headers)
+    assert stocked.status_code == 422 and "already passed" in stocked.get_json()["error"]["message"]
+    assert not _stock(milk.id)
+
+    rejected = client.post(f"/api/v1/purchases/{po['id']}/receipts", json={"items": [
+        {"purchase_order_item_id": item, "qty_received": 10, "qty_rejected": 10, "remarks": "Expired",
+         "expiry_date": yesterday},
+    ]}, headers=admin_headers)
+    assert rejected.status_code == 201, rejected.get_json()
+    assert not _stock(milk.id)
 
 
 def _advance(client, headers, supplier, amount, allocations=()):
@@ -371,3 +414,90 @@ def test_edit_invoice_and_replace_bill(client, admin_headers, supplier, received
     assert new_file.status_code == 201
     now = client.get(f"/api/v1/supplier-invoices/{inv['id']}", headers=admin_headers).get_json()
     assert now["document_id"] == new_file.get_json()["id"]  # the latest bill is shown
+
+
+# ── Goods sent back to the supplier after they were stocked ─────────────────────
+
+def _grn_batch(grn_id):
+    from app.models.inventory import StockBatch
+    return db.session.scalar(db.select(StockBatch).where(StockBatch.source == "grn", StockBatch.reference_id == grn_id))
+
+
+def _send_back(client, headers, batch_id, qty, reason="Leaking"):
+    return client.post(f"/api/v1/inventory/batches/{batch_id}/return-to-supplier",
+                       json={"qty": str(qty), "reason": reason}, headers=headers)
+
+
+def test_return_to_supplier_cuts_the_unpaid_bill(client, admin_headers, supplier, store, received):
+    _, grn = received  # 80 × ₹10 + 5% GST = ₹840
+    inv = _invoice(client, admin_headers, supplier, [grn["id"]], "840").get_json()
+    batch = _grn_batch(grn["id"])
+
+    resp = _send_back(client, admin_headers, batch.id, 10)
+    assert resp.status_code == 201, resp.get_json()
+    ret = resp.get_json()
+    assert (ret["qty"], ret["amount"], ret["applied_to_invoice"]) == ("10.000", "105.00", "105.00")
+    assert ret["receipt_number"] == grn["receipt_number"] and ret["supplier_name"] == "Sharma Traders"
+    assert _stock(batch.product_id) == Decimal("170")  # 100 to start + 80 received − 10 sent back
+
+    after = client.get(f"/api/v1/supplier-invoices/{inv['id']}", headers=admin_headers).get_json()
+    assert after["outstanding"] == "735.00"
+    summary = client.get(f"/api/v1/suppliers/{supplier.id}/summary", headers=admin_headers).get_json()
+    assert (summary["outstanding_balance"], summary["advance_balance"]) == (735.0, 0.0)
+    ledger = client.get(f"/api/v1/suppliers/{supplier.id}/ledger", headers=admin_headers).get_json()
+    assert ledger[-1]["entry_type"] == "debit_note" and "Leaking" in ledger[-1]["description"]
+    assert ledger[-1]["balance"] == 735.0
+
+    listed = client.get(f"/api/v1/suppliers/{supplier.id}/returns", headers=admin_headers).get_json()
+    assert [r["return_number"] for r in listed] == [ret["return_number"]]
+    # Everything the debit note document shows: 10 × ₹10 = ₹100 taxable + 5% GST ₹5 = ₹105, off the bill.
+    dn = listed[0]
+    assert (dn["unit_price"], dn["tax_rate"], dn["gross"], dn["taxable_value"], dn["tax_amount"]) == (
+        "10.00", "5.00", "100.00", "100.00", "5.00")
+    assert dn["invoice_numbers"] == [inv["invoice_number"]] and dn["po_number"] and dn["store_name"]
+
+    # The debit note can't be voided: the goods won't come back into stock.
+    note = db.session.scalar(db.select(SupplierReturn.debit_note_id))
+    assert client.post(f"/api/v1/supplier-payments/{note}/void", headers=admin_headers).status_code == 400
+
+
+def test_return_after_paying_becomes_credit_with_the_supplier(client, admin_headers, supplier, store, received):
+    _, grn = received
+    inv = _invoice(client, admin_headers, supplier, [grn["id"]], "840").get_json()
+    assert _pay(client, admin_headers, supplier, [(inv["id"], "840")]).status_code == 201
+    batch = _grn_batch(grn["id"])
+
+    ret = _send_back(client, admin_headers, batch.id, 20, "Expired").get_json()
+    assert (ret["amount"], ret["applied_to_invoice"]) == ("210.00", "0")
+    summary = client.get(f"/api/v1/suppliers/{supplier.id}/summary", headers=admin_headers).get_json()
+    assert (summary["advance_balance"], summary["outstanding_balance"]) == (210.0, -210.0)
+
+    # The credit pays the next bill, like an advance.
+    po2 = _po(client, admin_headers, supplier, store, make_product(store, name="Sugar 1kg"), qty=30)
+    grn2 = _receive(client, admin_headers, po2, 30)  # 30 × ₹10 + 5% = ₹315
+    inv2 = _invoice(client, admin_headers, supplier, [grn2["id"]], "315", number="INV-2").get_json()
+    note = db.session.scalar(db.select(SupplierReturn.debit_note_id))
+    applied = client.post(f"/api/v1/supplier-payments/{note}/apply",
+                          json={"allocations": [{"invoice_id": inv2["id"], "allocated_amount": "210"}]},
+                          headers=admin_headers)
+    assert applied.status_code == 200, applied.get_json()
+    assert client.get(f"/api/v1/supplier-invoices/{inv2['id']}", headers=admin_headers).get_json()["outstanding"] == "105.00"
+
+
+def test_return_rules(client, admin_headers, supplier, store, received):
+    _, grn = received
+    batch = _grn_batch(grn["id"])
+    assert _send_back(client, admin_headers, batch.id, 81).status_code == 400  # only 80 in the batch
+    assert client.post(f"/api/v1/inventory/batches/{batch.id}/return-to-supplier", json={"qty": "1", "reason": ""},
+                       headers=admin_headers).status_code == 422
+
+    # Not billed yet: the whole amount waits as credit.
+    ret = _send_back(client, admin_headers, batch.id, 5).get_json()
+    assert (ret["amount"], ret["applied_to_invoice"]) == ("52.50", "0")
+
+    # Opening stock has no supplier: only a write-off is possible.
+    from app.models.inventory import StockBatch
+    soap = make_product(store, name="Soap", stock=5)
+    own = db.session.scalar(db.select(StockBatch).where(StockBatch.product_id == soap.id))
+    resp = _send_back(client, admin_headers, own.id, 1)
+    assert resp.status_code == 400 and "Write off" in resp.get_json()["error"]["message"]

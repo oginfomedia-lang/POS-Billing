@@ -7,6 +7,7 @@ from datetime import datetime
 
 from app.extensions import db
 from app.models.category import Category
+from app.models.customer import Customer
 from app.models.enums import PaymentMethod, SaleStatus, ShiftStatus
 from app.models.inventory import Inventory
 from app.models.payment import Payment
@@ -160,7 +161,7 @@ class ReportRepository:
         return db.session.execute(q).all()
 
     @staticmethod
-    def _profit_lines(item, store_col, conds, join):
+    def _profit_lines(item, store_col, conds, join, cost_back_when=None):
         """(product_id, name, category, qty, net, cogs, uncosted_qty, uncosted_net) per product.
 
         net = line_total - discount (before GST). Cost = the cost saved on the line, else (bills from before
@@ -171,6 +172,9 @@ class ReportRepository:
         cost = f.coalesce(item.unit_cost, Inventory.avg_cost, Product.cost_price)
         net = item.line_total - item.discount_amount
         no_cost = cost.is_(None)
+        line_cost = item.qty * cost
+        if cost_back_when is not None:
+            line_cost = db.case((cost_back_when, line_cost), else_=0)
         q = (
             db.select(
                 item.product_id,
@@ -178,7 +182,7 @@ class ReportRepository:
                 f.max(Category.name),
                 f.sum(item.qty),
                 f.sum(net),
-                f.coalesce(f.sum(item.qty * cost), 0),
+                f.coalesce(f.sum(line_cost), 0),
                 f.coalesce(f.sum(db.case((no_cost, item.qty), else_=0)), 0),
                 f.coalesce(f.sum(db.case((no_cost, net), else_=0)), 0),
             )
@@ -200,6 +204,7 @@ class ReportRepository:
         return self._profit_lines(
             SaleReturnItem, SaleReturn.store_id, self._returned(store_id, start, end),
             (SaleReturn, SaleReturn.id == SaleReturnItem.return_id),
+            cost_back_when=SaleReturnItem.restocked,  # damaged goods aren't back on the shelf: their cost is lost
         )
 
     def offer_usage(self, store_id: int | None, start: datetime, end: datetime):
@@ -368,7 +373,15 @@ class ReportRepository:
         if discounted:
             conds.append(Sale.discount_amount > 0)
         if text:
-            conds.append(Sale.bill_number.icontains(text, autoescape=True))
+            # Bill number, customer mobile (or part of it) or customer name: the name typed on the bill, or the
+            # customer's saved name (older bills linked to a named customer).
+            named = db.select(Customer.id).where(Customer.name.icontains(text, autoescape=True))
+            conds.append(db.or_(
+                Sale.bill_number.icontains(text, autoescape=True),
+                Sale.customer_mobile.contains(text, autoescape=True),
+                Sale.customer_name.icontains(text, autoescape=True),
+                Sale.customer_id.in_(named),
+            ))
         return conds
 
     def list_bills(self, store_id, start, end, status, method, discounted, text, page, per_page):

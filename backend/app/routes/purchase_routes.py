@@ -1,17 +1,24 @@
 """Purchase management API routes."""
-from flask import Blueprint, jsonify, request
+import io
+import json
+
+from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
+from app.errors.exceptions import BadRequestError, PermissionDeniedError
 from app.extensions import db
 from app.models.user import User
 from app.schemas.common import PagedResponse
 from app.schemas.purchase_schemas import (
+    DirectPurchaseCreate,
     GoodsReceiptCreate,
+    MarkSentRequest,
     PurchaseOrderCreate,
     PurchaseOrderUpdate,
 )
-from app.services import purchase_service
-from app.utils.permissions import require_permission
+from app.services import bill_ocr_service, direct_purchase_service, po_pdf, po_sending_service, purchase_service
+from app.utils.permissions import has_permission, require_permission
+from app.utils.store_scope import require_store_access
 
 purchase_bp = Blueprint("purchases", __name__)
 
@@ -58,6 +65,73 @@ def create_purchase():
     data = PurchaseOrderCreate.model_validate(request.get_json(force=True))
     po = purchase_service.create_purchase_order(data, _current_user())
     return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 201
+
+
+@purchase_bp.post("/purchases/direct")
+@require_permission("purchases.receive")
+def create_direct_purchase():
+    """Goods arrived without a PO. multipart/form-data: 'data' = the bill as JSON, 'file' = the bill (required)."""
+    actor = _current_user()
+    if not has_permission(actor.role, "invoices.create"):
+        raise PermissionDeniedError("You can't enter supplier invoices.")
+    try:
+        payload = json.loads(request.form.get("data") or "{}")
+    except ValueError:
+        raise BadRequestError("Invalid purchase data.") from None
+    data = DirectPurchaseCreate.model_validate(payload)
+    require_store_access(actor, data.store_id)
+    po, invoice = direct_purchase_service.create_direct_purchase(data, bill_ocr_service.one_bill_file(request.files.getlist("file")), actor)
+    return jsonify({
+        "purchase_order": purchase_service._enrich_po(po).model_dump(mode="json"),
+        "invoice": invoice.model_dump(mode="json"),
+    }), 201
+
+
+@purchase_bp.post("/purchases/direct/extract")
+@require_permission("purchases.receive")
+def extract_direct_purchase_bill():
+    """Reads the supplier's bill and returns a draft to check. Saves nothing.
+    multipart/form-data: 'file' = the bill (PDF or photo), 'store_id', 'supplier_id' (optional: found from the GSTIN)."""
+    actor = _current_user()
+    store_id = request.form.get("store_id", type=int)
+    if not store_id:
+        raise BadRequestError("Choose the store first.")
+    require_store_access(actor, store_id)
+    draft = bill_ocr_service.extract_bill(
+        request.files.getlist("file"), store_id, request.form.get("supplier_id", type=int)
+    )
+    return jsonify(draft.model_dump(mode="json")), 200
+
+
+@purchase_bp.get("/purchases/<int:po_id>/direct")
+@require_permission("purchases.receive")
+def get_direct_purchase(po_id: int):
+    """A saved direct purchase, to correct it in the same form."""
+    draft = direct_purchase_service.get_for_edit(po_id)
+    require_store_access(_current_user(), draft.store_id)
+    return jsonify(draft.model_dump(mode="json")), 200
+
+
+@purchase_bp.put("/purchases/<int:po_id>/direct")
+@require_permission("purchases.receive")
+def update_direct_purchase(po_id: int):
+    """Corrects a saved direct purchase. Same form data as POST /purchases/direct; no 'file' = keep the saved bill."""
+    actor = _current_user()
+    if not has_permission(actor.role, "invoices.create"):
+        raise PermissionDeniedError("You can't enter supplier invoices.")
+    try:
+        payload = json.loads(request.form.get("data") or "{}")
+    except ValueError:
+        raise BadRequestError("Invalid purchase data.") from None
+    data = DirectPurchaseCreate.model_validate(payload)
+    require_store_access(actor, purchase_service.get_purchase_order(po_id).store_id)
+    require_store_access(actor, data.store_id)
+    po, invoice = direct_purchase_service.update_direct_purchase(
+        po_id, data, bill_ocr_service.one_bill_file(request.files.getlist("file")), actor)
+    return jsonify({
+        "purchase_order": purchase_service._enrich_po(po).model_dump(mode="json"),
+        "invoice": invoice.model_dump(mode="json"),
+    }), 200
 
 
 @purchase_bp.get("/purchases/<int:po_id>")
@@ -107,6 +181,39 @@ def close_order(po_id: int):
 @require_permission("purchases.cancel")
 def cancel_order(po_id: int):
     po = purchase_service.cancel_order(po_id, _current_user())
+    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+
+
+@purchase_bp.get("/purchases/<int:po_id>/pdf")
+@require_permission("purchases.read")
+def purchase_pdf(po_id: int):
+    po = purchase_service.get_purchase_order(po_id)
+    return send_file(
+        io.BytesIO(po_pdf.render(po)),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=po_pdf.filename(po),
+    )
+
+
+@purchase_bp.get("/purchases/<int:po_id>/supplier-message")
+@require_permission("purchases.read")
+def supplier_message(po_id: int):
+    return jsonify(po_sending_service.supplier_message(po_id).model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/email")
+@require_permission("purchases.update")
+def email_purchase(po_id: int):
+    po = po_sending_service.send_email_now(po_id, _current_user())
+    return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
+
+
+@purchase_bp.post("/purchases/<int:po_id>/mark-sent")
+@require_permission("purchases.update")
+def mark_sent(po_id: int):
+    data = MarkSentRequest.model_validate(request.get_json(force=True))
+    po = po_sending_service.mark_sent(po_id, data.via, _current_user())
     return jsonify(purchase_service._enrich_po(po).model_dump(mode="json")), 200
 
 

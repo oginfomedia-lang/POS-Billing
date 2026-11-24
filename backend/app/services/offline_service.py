@@ -41,7 +41,8 @@ def catalog(store_id: int) -> OfflineCatalogOut:
         raise NotFoundError(f"Store {store_id} not found.")
     products = db.session.scalars(
         db.select(Product)
-        .where(Product.is_active.is_(True), (Product.store_id.is_(None)) | (Product.store_id == store_id))
+        .where(Product.is_active.is_(True), Product.details_pending.is_(False),
+               (Product.store_id.is_(None)) | (Product.store_id == store_id))
         .order_by(Product.id)
     ).all()
     prices = inventory_service.store_prices(store_id, [p.id for p in products])

@@ -23,6 +23,11 @@ class SettingsData(BaseModel):
     fssai_number: str = Field("", max_length=14)
     low_stock_threshold: Decimal = Field(Decimal("5"), ge=0, max_digits=12, decimal_places=3)
     return_window_days: int = Field(30, ge=0, le=365)  # bills older than this can't be returned
+    # Godown (back room) kept apart from the shop shelf: goods received go to the godown, staff move them to the
+    # shelf. Off = one stock figure per product, as before.
+    godown_enabled: bool = False
+    # Profit wanted on cost, in %, for categories that don't set their own (Review selling prices).
+    default_margin_percent: Decimal = Field(Decimal("10"), ge=0, le=1000, max_digits=6, decimal_places=2)
     # Nightly WhatsApp summary of each cashier's collection, sent to the owner's mobiles.
     daily_report_enabled: bool = False
     daily_report_time: str = Field("22:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")  # IST, HH:MM
@@ -88,6 +93,26 @@ class IntegrationsUpdate(BaseModel):
     WHATSAPP_EBILL_TEMPLATE_NAME: str | None = Field(None, max_length=100)
     WHATSAPP_TEMPLATE_LANG: str | None = Field(None, max_length=20)
     WHATSAPP_MOCK: bool | None = None
+    SMTP_HOST: str | None = Field(None, max_length=200)
+    SMTP_PORT: int | Literal[""] | None = None
+    SMTP_USERNAME: str | None = Field(None, max_length=200)
+    SMTP_PASSWORD: str | None = Field(None, max_length=200)
+    SMTP_FROM: str | None = Field(None, max_length=200)
+    EMAIL_MOCK: bool | None = None
+
+    @field_validator("SMTP_PORT")
+    @classmethod
+    def smtp_port_range(cls, value):
+        if isinstance(value, int) and not 1 <= value <= 65535:
+            raise ValueError("Enter a port between 1 and 65535 (usually 587 or 465).")
+        return value
+
+    @field_validator("SMTP_FROM")
+    @classmethod
+    def from_is_email(cls, value: str | None) -> str | None:
+        if value and "@" not in value:
+            raise ValueError("Enter an email address, e.g. orders@yourstore.in")
+        return value
 
     @field_validator("RAZORPAY_POS_BASE_URL", "PAYTM_BASE_URL")
     @classmethod

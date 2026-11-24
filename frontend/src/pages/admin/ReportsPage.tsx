@@ -137,7 +137,7 @@ export function ReportsPage() {
       </div>
 
       <div className="filter-bar no-print">
-        <input className="field-input filter-input" type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)} />
+        <input className="field-input filter-input" type="date" value={dateFrom} max={dateTo || isoDateIst()} onChange={(e) => setDateFrom(e.target.value)} />
         <span className="filter-sep">{t('reports.to')}</span>
         <input className="field-input filter-input" type="date" value={dateTo} min={dateFrom} max={isoDateIst()} onChange={(e) => setDateTo(e.target.value)} />
         {QUICK_RANGES.map((r) => (

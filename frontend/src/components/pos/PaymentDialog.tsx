@@ -9,15 +9,18 @@ import { getErrorMessage } from '../../services/api/httpClient';
 import type { SaleOut, TenderMethod } from '../../types/sale';
 import { formatRupees, paiseToString, toPaise } from '../../utils/money';
 import { normalizeMobile } from '../../utils/phone';
-import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX } from '../common/Icons';
+import { IconCash, IconCheck, IconCreditCard, IconQrCode, IconX, IconUsers } from '../common/Icons';
 import { DigitalPaymentPanel } from './DigitalPaymentPanel';
 import { ManualPaymentPanel } from './ManualPaymentPanel';
+import { getCustomerCredit } from '../../services/api/customerApi';
+import type { CustomerCreditInfo } from '../../types/customer';
 import { RewardsStrip } from './RewardsStrip';
 
 const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
   { value: 'cash', label: 'methods.cash', icon: IconCash },
   { value: 'card', label: 'methods.card', icon: IconCreditCard },
   { value: 'upi', label: 'pay.upiQr', icon: IconQrCode },
+  { value: 'credit', label: 'methods.credit', icon: IconUsers },
 ];
 
 const QUICK_CASH_PRESETS = [100, 200, 500, 2000];
@@ -27,8 +30,10 @@ interface Props {
   total: string;
   /** Saved on the bill already (full number), or null. */
   customerMobile: string | null;
-  /** Saves the optional mobile on the open bill; throws with the server's message on failure. */
-  onSaveMobile: (mobile: string | null) => Promise<void>;
+  /** Saved on the bill already, or null. Optional, but Udhari needs it (with the mobile). */
+  customerName: string | null;
+  /** Saves the optional mobile and name on the open bill; throws with the server's message on failure. */
+  onSaveMobile: (mobile: string | null, name: string | null) => Promise<void>;
   /** Reward points reserved on the bill. */
   pointsRedeemed: number;
   /** Bill amount before GST that a reward can still come off. */
@@ -43,16 +48,24 @@ interface Props {
 }
 
 export function PaymentDialog({
-  saleId, total, customerMobile, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
+  saleId, total, customerMobile, customerName, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
 }: Props) {
   const { t } = useTranslation();
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
   const [mobile, setMobile] = useState(customerMobile ?? '');
+  const [name, setName] = useState(customerName ?? '');
+  // Until the cashier types a name, the saved name of the customer with this mobile is filled in.
+  const [nameEdited, setNameEdited] = useState(Boolean(customerName));
   const [mobileError, setMobileError] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
   const [cardUpiMode, setCardUpiMode] = useState<CardUpiMode | null>(null);
   const [reference, setReference] = useState('');
+  const [creditInfo, setCreditInfo] = useState<CustomerCreditInfo | null>(null);
+  const [loadingCredit, setLoadingCredit] = useState(false);
+  const normalizedMobile = normalizeMobile(mobile); // '' = none, null = invalid
+  const mobileInvalid = normalizedMobile === null;
+  const trimmedName = name.trim().replace(/\s+/g, ' ');
   useKeyboardShortcuts({ Escape: onClose });
   useEffect(() => {
     let cancelled = false;
@@ -64,22 +77,50 @@ export function PaymentDialog({
   // Redeeming points changes the total: keep the cash box in step.
   useEffect(() => { setTendered(total); }, [total]);
 
+   // Fetch live credit info whenever a valid 10-digit mobile is typed
+  useEffect(() => {
+    if (!normalizedMobile || normalizedMobile.length !== 10) {
+      setCreditInfo(null);
+      return;
+    }
+    let cancelled = false;
+    setLoadingCredit(true);
+    getCustomerCredit(normalizedMobile)
+      .then((info) => {
+        if (cancelled) return;
+        setCreditInfo(info);
+        if (!nameEdited && info.name) setName(info.name);
+      })
+      .catch(() => { if (!cancelled) setCreditInfo(null); })
+      .finally(() => { if (!cancelled) setLoadingCredit(false); });
+    return () => { cancelled = true; };
+  }, [normalizedMobile]);
+
   const totalPaise = toPaise(total);
   const tenderedPaise = toPaise(tendered);
   const cashValid = Number.isFinite(tenderedPaise) && tenderedPaise >= totalPaise;
-  const normalizedMobile = normalizeMobile(mobile); // '' = none, null = invalid
-  const mobileInvalid = normalizedMobile === null;
-  const manualDigital = method !== 'cash' && cardUpiMode === 'manual';
-  const canConfirm = !busy && !savingMobile && !mobileInvalid && (method === 'cash' ? cashValid : manualDigital);
+  const manualDigital = (method === 'card' || method === 'upi') && cardUpiMode === 'manual';
+  const creditTotal = Number(total) || 0;
+  const currentCreditBalance = Number(creditInfo?.credit_balance || '0');
+  const creditLimit = creditInfo?.credit_limit !== null && creditInfo?.credit_limit !== undefined ? Number(creditInfo.credit_limit) : null;
+  const creditLimitExceeded = creditLimit !== null && (currentCreditBalance + creditTotal) > creditLimit;
+  const creditValid = method === 'credit' && Boolean(normalizedMobile) && !mobileInvalid && Boolean(trimmedName)
+    && !creditLimitExceeded;
 
-  /** Saves the mobile on the bill if it changed. Returns false when it couldn't be saved. */
+  const canConfirm = !busy && !savingMobile && !mobileInvalid && (
+    method === 'cash' ? cashValid :
+    method === 'credit' ? creditValid :
+    manualDigital
+  );
+
+  /** Saves the mobile and name on the bill if either changed. Returns false when they couldn't be saved. */
   async function saveMobile(): Promise<boolean> {
     if (normalizedMobile === null) return false;
-    if (normalizedMobile === (customerMobile ?? '')) return true;
+    if (normalizedMobile === (customerMobile ?? '') && trimmedName === (customerName ?? '')) return true;
     setSavingMobile(true);
     setMobileError('');
     try {
-      await onSaveMobile(normalizedMobile || null);
+      await onSaveMobile(normalizedMobile || null, trimmedName || null);
       return true;
     } catch (err) {
       setMobileError(getErrorMessage(err));
@@ -94,6 +135,7 @@ export function PaymentDialog({
     if (!(await saveMobile())) return;
     if (!canConfirm) return;
     if (method === 'cash') onConfirm('cash', paiseToString(tenderedPaise));
+    else if (method === 'credit') onConfirm('credit', undefined, reference.trim() || undefined);
     else onConfirm(method, undefined, reference.trim() || undefined);
   }
 
@@ -161,6 +203,19 @@ export function PaymentDialog({
           )}
           {mobileError && <span className="mobile-bad">{mobileError}</span>}
         </label>
+        <label className="field-label mobile-field">
+          <span>{t(method === 'credit' ? 'pay.customerNameRequired' : 'pay.customerName')}</span>
+          <input
+            className={`field-input${method === 'credit' && !trimmedName ? ' input-invalid' : ''}`}
+            type="text"
+            autoComplete="off"
+            maxLength={100}
+            placeholder={t('pay.namePlaceholder')}
+            value={name}
+            onChange={(e) => { setName(e.target.value); setNameEdited(true); setMobileError(''); }}
+            onBlur={() => { saveMobile(); }}
+          />
+        </label>
         <RewardsStrip
           mobile={customerMobile}
           pointsRedeemed={pointsRedeemed}
@@ -209,13 +264,70 @@ export function PaymentDialog({
                 )}
               </div>
             </div>
+                   ) : method === 'credit' ? (
+            <div className="manual-pay-panel" style={{ padding: '16px 0' }}>
+              {!normalizedMobile ? (
+                <div className="page-error" style={{ background: 'var(--warn-bg)', color: 'var(--warn-text)', borderColor: 'var(--warn-text)', display: 'block' }}>
+                  {t('pay.creditMobileRequired')}
+                </div>
+              ) : loadingCredit ? (
+                <p className="digital-wait">{t('common.loading')}</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {!trimmedName && (
+                    <div className="page-error" style={{ background: 'var(--warn-bg)', color: 'var(--warn-text)', borderColor: 'var(--warn-text)', display: 'block' }}>
+                      {t('pay.creditNameRequired')}
+                    </div>
+                  )}
+                  {creditLimitExceeded && (
+                    <div className="page-error" style={{ display: 'block' }}>
+                      {t('pay.creditLimitExceeded')}
+                    </div>
+                  )}
+
+                  <div className="table-card" style={{ padding: 12, background: 'var(--surface-2, #f8fafc)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span>{t('pay.creditCurrentDues')}:</span>
+                      <strong>{formatRupees(creditInfo?.credit_balance ?? '0')}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, color: 'var(--primary, #2563eb)' }}>
+                      <span>{t('pay.creditThisBill')}:</span>
+                      <strong>+ {formatRupees(total)}</strong>
+                    </div>
+                    <hr style={{ margin: '8px 0', border: 'none', borderTop: '1px solid var(--border, #e2e8f0)' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1em' }}>
+                      <span style={{ fontWeight: 600 }}>{t('pay.creditAfterBill')}:</span>
+                      <strong style={{ color: creditLimitExceeded ? 'var(--error, #dc2626)' : 'inherit' }}>
+                        {formatRupees((currentCreditBalance + creditTotal).toFixed(2))}
+                      </strong>
+                    </div>
+                    {creditLimit !== null && (
+                      <div style={{ fontSize: '0.85em', color: 'var(--text-muted, #64748b)', marginTop: 6 }}>
+                        {t('pay.creditLimit')}: {formatRupees(creditLimit.toFixed(2))}
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="field-label" style={{ marginTop: 4 }}>
+                    {t('common.note')} ({t('common.optional' as ParseKeys)})
+                    <input
+                      className="field-input"
+                      placeholder="e.g. will pay on Friday"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      maxLength={100}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
           ) : cardUpiMode === null ? (
             <p className="digital-wait">{t('common.loading')}</p>
           ) : manualDigital ? (
             <ManualPaymentPanel method={method} total={total} reference={reference} onReferenceChange={setReference} />
           ) : (
             <DigitalPaymentPanel
-              key={method} // switching Card <-> UPI cancels the old request and starts a new one
+              key={method}
               saleId={saleId}
               method={method}
               total={total}
@@ -227,10 +339,16 @@ export function PaymentDialog({
             <button type="button" className="btn-secondary" onClick={onClose}>
               {t('common.cancel')}
             </button>
-            {(method === 'cash' || manualDigital) && (
+                        {(method === 'cash' || method === 'credit' || manualDigital) && (
               <button type="submit" className="btn-primary btn-confirm-pay" disabled={!canConfirm}>
                 <IconCheck size={18} />
-                <span>{busy ? t('pay.processing') : t(method === 'cash' ? 'pay.complete' : 'pay.manualReceived')}</span>
+                <span>
+                  {busy
+                    ? t('pay.processing')
+                    : method === 'credit'
+                    ? t('pay.confirmCredit')
+                    : t(method === 'cash' ? 'pay.complete' : 'pay.manualReceived')}
+                </span>
               </button>
             )}
           </div>

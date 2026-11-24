@@ -26,6 +26,11 @@ const posBridge = {
   },
   /** Closes the app, installs the update silently and starts the new version. */
   installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.installUpdate),
+  /** Opens WhatsApp with a ready message (https://wa.me/... links only). False = the link was refused. */
+  openWhatsApp: (url: string): Promise<boolean> => ipcRenderer.invoke(IPC.openWhatsApp, url),
+  /** Opens a stored document (PDF / image) in Windows' viewer. Resolves to '' when opened, else the reason. */
+  openDocument: (data: Uint8Array, mimeType: string): Promise<string> =>
+    ipcRenderer.invoke(IPC.openDocument, data, mimeType),
 
   // Offline billing files (src/offline). Catalogue and bills are plain JSON the renderer defines.
   offline: {

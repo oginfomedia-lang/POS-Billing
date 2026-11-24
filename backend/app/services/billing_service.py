@@ -27,6 +27,7 @@ from app.schemas.sale_schemas import (
 from app.services import (
     audit_service,
     bill_number_service,
+    customer_credit_service,
     discount_service,
     ebill_service,
     inventory_service,
@@ -66,6 +67,8 @@ def add_item(sale_id: int, data: AddItemRequest, actor: User) -> Sale:
         # store_id NULL = product sold in every store.
         if product is None or not product.is_active or product.store_id not in (None, sale.store_id):
             raise NotFoundError(f"Product {data.product_id} not found.")
+        if product.details_pending:
+            raise AppError(f"{product.name} is pending a selling price and cannot be billed yet.")
         _check_whole_qty(product, data.qty)
 
         item = SaleRepository().find_item(sale.id, product.id)
@@ -166,10 +169,12 @@ def _verify_approver(username: str, pin: str, what: str = "a discount", store_id
     return user
 
 
-def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
-    """Optional customer mobile on an OPEN bill. The amount doesn't change, so a live QR / card payment is kept —
-    unless points were redeemed for the old number: they belong to that customer, so the redemption is dropped."""
+def set_customer_mobile(sale_id: int, mobile: str | None, actor: User, name: str | None = None) -> Sale:
+    """Optional customer mobile and name on an OPEN bill. The amount doesn't change, so a live QR / card payment is
+    kept — unless points were redeemed for the old number: they belong to that customer, so the redemption is
+    dropped. Udhari needs both (checked when the bill is paid)."""
     number = normalize_mobile(mobile)
+    name = " ".join((name or "").split()) or None  # trim and collapse spaces; blank = no name
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
@@ -178,6 +183,7 @@ def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
             sale.points_redeemed = 0
             _recalculate(sale)
         sale.customer_mobile = number
+        sale.customer_name = name
     return sale
 
 
@@ -282,6 +288,7 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
         sale.status = SaleStatus.PAID
         sale.completed_at = now_ist()
         loyalty_service.settle_sale(sale, actor)  # same transaction: points and sale commit or fail together
+        customer_credit_service.settle_sale_credit(sale, actor) #updates khata if paid on udhari
         ebill_queued = ebill_service.queue(sale)  # same transaction: a paid bill always has its e-bill on record
         audit_service.log(
             actor, "sale.complete", "sale", sale.id, None,

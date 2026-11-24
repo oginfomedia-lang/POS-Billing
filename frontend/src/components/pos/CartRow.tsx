@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SaleItemOut } from '../../types/sale';
-import { formatRupees } from '../../utils/money';
+import { formatRupees, paiseToString, toPaise, withGst } from '../../utils/money';
 import { IconMinus, IconPercent, IconPlus, IconTrash } from '../common/Icons';
 
 /** +/− on a loose item changes the weight by this much (kg). */
@@ -26,9 +26,19 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
   const { t } = useTranslation();
   const loose = item.is_variable_weight;
   const [qty, setQty] = useState(String(item.qty));
+  // The counter shows prices WITH GST, like the shelf and the printed bill. The server keeps prices before GST
+  // (unit_price) and adds GST on top, so GST is added here for display only. Maths in paise: no float errors.
+  const unitWithGst = withGst(item.unit_price, item.tax_rate);
+  const offerWithGst = withGst(item.offer_discount, item.tax_rate);
+  const manualWithGst = withGst(item.manual_discount, item.tax_rate);
+  // What the customer pays for this line: after its own offer and manual discount, plus GST. The bill offer and
+  // reward points are not taken off here: they show once, in the Bill Summary.
+  const amountWithGst = withGst(
+    paiseToString(toPaise(item.line_total) - toPaise(item.offer_discount) - toPaise(item.manual_discount)),
+    item.tax_rate,
+  );
   // Show the MRP only when it is above our price incl. GST (i.e. the customer actually saves).
-  const priceWithGst = Number(item.unit_price) * (1 + Number(item.tax_rate) / 100);
-  const showMrp = item.mrp !== null && Number(item.mrp) > priceWithGst + 0.005;
+  const showMrp = item.mrp !== null && Number(item.mrp) > Number(unitWithGst) + 0.005;
 
   // Re-sync when the server changes the qty (e.g. the same product is scanned again).
   useEffect(() => setQty(String(item.qty)), [item.qty]);
@@ -70,8 +80,11 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
         {showMrp && <span className="mrp-tag">{t('pos.mrp', { mrp: formatRupees(item.mrp!) })}</span>}
       </td>
       <td className="num unit-price-cell">
-        {formatRupees(item.unit_price)}
+        {formatRupees(unitWithGst)}
         {loose && <span className="qty-unit">/{item.uom}</span>}
+        <div className="price-gst-note">
+          {Number(item.tax_rate) > 0 ? t('pos.gstIncluded', { rate: Number(item.tax_rate) }) : t('pos.noGst')}
+        </div>
       </td>
       <td className="num qty-cell">
         <div className="qty-stepper">
@@ -111,15 +124,15 @@ export function CartRow({ item, index, disabled, onQtyChange, onRemove, onManual
         {loose && <span className="qty-unit">{item.uom}</span>}
       </td>
       <td className="num line-total-cell">
-        <div className="line-total-val">{formatRupees(item.line_total)}</div>
+        <div className="line-total-val">{formatRupees(amountWithGst)}</div>
         {Number(item.offer_discount) > 0 && (
           <div className="line-discount-badge" title={item.offer_name ?? undefined}>
-            {item.offer_name} − {formatRupees(item.offer_discount)}
+            {item.offer_name} − {formatRupees(offerWithGst)}
           </div>
         )}
         {Number(item.manual_discount) > 0 && (
           <div className="line-discount-badge line-discount-manual" title={item.manual_discount_reason ?? undefined}>
-            {t('pos.manual')} − {formatRupees(item.manual_discount)}
+            {t('pos.manual')} − {formatRupees(manualWithGst)}
           </div>
         )}
       </td>

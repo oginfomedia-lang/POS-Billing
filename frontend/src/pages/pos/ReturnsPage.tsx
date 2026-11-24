@@ -1,11 +1,12 @@
-// Return items against a bill number. Refund is always cash; a manager approves with their PIN.
+// Return items against a bill number. Refund is in cash (a bill sold on udhari: off the customer's khata);
+// a manager approves with their PIN.
 import { type FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { IconArrowLeft, IconSearch, IconX } from '../../components/common/Icons';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { createReturn, getBillsForMobile, getReturnableBill } from '../../services/api/returnApi';
+import { createReturn, getBillsForCustomer, getReturnableBill } from '../../services/api/returnApi';
 import { openDrawer } from '../../services/hardware/printerService';
 import type { BillForMobile, ReturnableBill, ReturnableLine } from '../../types/returns';
 import { formatDateTime } from '../../utils/format';
@@ -14,6 +15,8 @@ import { isMobile, looksLikeMobile, normalizeMobile } from '../../utils/phone';
 
 const REASONS = ['damaged', 'expired', 'wrongItem', 'changedMind', 'other'] as const;
 type Reason = (typeof REASONS)[number];
+// Goods returned for these reasons can't be sold again, so they start as "not back on the shelf".
+const NOT_SELLABLE: readonly Reason[] = ['damaged', 'expired'];
 
 interface LineState {
   qty: string;
@@ -26,7 +29,7 @@ function parseQty(line: ReturnableLine, text: string): number {
   const n = Number(text);
   if (!Number.isFinite(n) || n < 0) return NaN;
   if (!line.is_variable_weight && !Number.isInteger(n)) return NaN;
-  if (Math.round(n * 1000) !== n * 1000 || n > line.qty_returnable + 1e-9) return NaN;
+  if (Math.abs(n * 1000 - Math.round(n * 1000)) > 1e-6 || n > line.qty_returnable + 1e-9) return NaN;
   return n;
 }
 
@@ -50,7 +53,7 @@ export function ReturnsPage() {
   const [billNumber, setBillNumber] = useState('');
   const [bill, setBill] = useState<ReturnableBill | null>(null);
   // Customer's bills when a mobile number was typed instead of a bill number.
-  const [mobileBills, setMobileBills] = useState<{ mobile: string; bills: BillForMobile[] } | null>(null);
+  const [mobileBills, setMobileBills] = useState<{ label: string; bills: BillForMobile[] } | null>(null);
   const [lines, setLines] = useState<Record<number, LineState>>({});
   const [reason, setReason] = useState<Reason>('damaged');
   const [note, setNote] = useState('');
@@ -72,13 +75,15 @@ export function ReturnsPage() {
       return;
     }
     setMobileError('');
-    if (isMobile(text)) {
+    const byName = !/\d/.test(text);
+    if (isMobile(text) || byName) {
+      if( byName && text.length < 2) return;
       setLoading(true);
       setError('');
       setBill(null);
       try {
-        const mobile = normalizeMobile(text) as string;
-        setMobileBills({ mobile, bills: await getBillsForMobile(mobile) });
+        const label = isMobile(text) ? (normalizeMobile(text) as string) : text;
+        setMobileBills({ label, bills: await getBillsForCustomer(label) });
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -98,7 +103,7 @@ export function ReturnsPage() {
       const found = await getReturnableBill(number);
       setBill(found);
       setBillNumber(found.bill_number);
-      setLines(Object.fromEntries(found.lines.map((l) => [l.sale_item_id, { qty: '', restock: true }])));
+      setLines(Object.fromEntries(found.lines.map((l) => [l.sale_item_id, { qty: '', restock: !NOT_SELLABLE.includes(reason) }])));
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -108,6 +113,14 @@ export function ReturnsPage() {
 
   function updateLine(id: number, change: Partial<LineState>) {
     setLines((current) => ({ ...current, [id]: { ...current[id], ...change } }));
+  }
+
+  function changeReason(next: Reason) {
+    setReason(next);
+    const restock = !NOT_SELLABLE.includes(next);
+    setLines((current) => Object.fromEntries(
+      Object.entries(current).map(([id, line]) => [id, { ...line, restock }]),
+    ));
   }
 
   function returnAll() {
@@ -125,6 +138,8 @@ export function ReturnsPage() {
   const totalPaise = chosen.reduce((sum, p) => sum + refundPaise(p.line, p.qty), 0);
   const reasonText = `${t(`returns.reasons.${reason}`)}${note.trim() ? ` — ${note.trim()}` : ''}`;
   const canRefund = Boolean(bill?.can_return) && chosen.length > 0 && !invalid && (reason !== 'other' || note.trim() !== '');
+  // A bill sold on udhari: the server takes the refund off the customer's khata instead of paying cash.
+  const onUdhari = Boolean(bill?.payment_methods.includes('credit'));
 
   async function submit(approverUsername: string, approverPin: string) {
     if (!bill) return;
@@ -139,7 +154,7 @@ export function ReturnsPage() {
         restock: lines[p.line.sale_item_id]?.restock ?? true,
       })),
     });
-    openDrawer(); // cash goes out of this drawer; don't wait for it
+    if (!onUdhari) openDrawer(); // cash goes out of this drawer; don't wait for it (udhari: no cash moves)
     navigate(`/pos/return-receipt/${created.id}?print=1`);
   }
 
@@ -181,12 +196,12 @@ export function ReturnsPage() {
             <p className="hint-text">{t('returns.noBillsForMobile')}</p>
           ) : (
             <>
-              <h3 className="section-title">{t('returns.billsForMobile', { mobile: mobileBills.mobile })}</h3>
+              <h3 className="section-title">{t('returns.billsForMobile', { mobile: mobileBills.label })}</h3>
               <div className="table-card">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>{t('returns.colBill')}</th><th>{t('returns.colDate')}</th>
+                      <th>{t('returns.colBill')}</th><th>{t('returns.colDate')}</th><th>{t('returns.colCustomer')}</th>
                       <th className="num">{t('returns.colItems')}</th><th className="num">{t('returns.colTotal')}</th><th />
                     </tr>
                   </thead>
@@ -195,6 +210,10 @@ export function ReturnsPage() {
                       <tr key={b.bill_number} className="clickable-row" onClick={() => loadBill(b.bill_number)}>
                         <td><strong>{b.bill_number}</strong></td>
                         <td>{formatDateTime(b.completed_at)}</td>
+                        <td>
+                          {b.customer_name || '-'}
+                          {b.customer_mobile && <div className="hint-text">{b.customer_mobile}</div>}
+                        </td>
                         <td className="num">{b.items_count}</td>
                         <td className="num">{formatRupees(b.total)}</td>
                         <td className="table-actions"><button type="button" className="btn-sm">{t('returns.find')}</button></td>
@@ -219,6 +238,7 @@ export function ReturnsPage() {
             {bill.can_return && <span className="status-muted">{t('returns.daysLeft', { count: bill.days_left })}</span>}
           </div>
           {!bill.can_return && bill.blocked_reason && <div className="page-error">{bill.blocked_reason}</div>}
+          {bill.can_return && onUdhari && <p className="hint-text">{t('returns.udhariNote')}</p>}
 
           <div className="table-card">
             <table className="data-table">
@@ -281,7 +301,7 @@ export function ReturnsPage() {
               <div className="form-row">
                 <label className="field-label">
                   {t('returns.reason')}
-                  <select className="field-input" value={reason} onChange={(e) => setReason(e.target.value as Reason)}>
+                  <select className="field-input" value={reason} onChange={(e) => changeReason(e.target.value as Reason)}>
                     {REASONS.map((r) => <option key={r} value={r}>{t(`returns.reasons.${r}`)}</option>)}
                   </select>
                 </label>
@@ -299,7 +319,7 @@ export function ReturnsPage() {
               <div className="returns-actions">
                 <button type="button" className="btn-secondary" onClick={returnAll}>{t('returns.returnAll')}</button>
                 <button type="button" className="btn-primary btn-refund" disabled={!canRefund} onClick={() => setApproving(true)}>
-                  {t('returns.refundCash', { amount: formatRupees(paiseToString(totalPaise)) })}
+                  {t(onUdhari ? 'returns.refundUdhari' : 'returns.refundCash', { amount: formatRupees(paiseToString(totalPaise)) })}
                 </button>
               </div>
             </div>
@@ -310,6 +330,7 @@ export function ReturnsPage() {
       {approving && bill && (
         <ReturnApprovalDialog
           amount={formatRupees(paiseToString(totalPaise))}
+          udhari={onUdhari}
           onConfirm={submit}
           onClose={() => setApproving(false)}
         />
@@ -320,12 +341,14 @@ export function ReturnsPage() {
 
 interface ApprovalProps {
   amount: string;
+  /** The bill was sold on udhari: the refund comes off the khata, no cash. */
+  udhari: boolean;
   /** Throws on failure (wrong PIN, stock, …); the dialog shows the message. */
   onConfirm: (username: string, pin: string) => Promise<void>;
   onClose: () => void;
 }
 
-function ReturnApprovalDialog({ amount, onConfirm, onClose }: ApprovalProps) {
+function ReturnApprovalDialog({ amount, udhari, onConfirm, onClose }: ApprovalProps) {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
@@ -354,13 +377,13 @@ function ReturnApprovalDialog({ amount, onConfirm, onClose }: ApprovalProps) {
         <div className="modal-header">
           <div>
             <span className="modal-subtitle">{t('returns.approvalSubtitle')}</span>
-            <h3 className="modal-title">{t('returns.approvalTitle', { amount })}</h3>
+            <h3 className="modal-title">{t(udhari ? 'returns.approvalTitleUdhari' : 'returns.approvalTitle', { amount })}</h3>
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose} disabled={busy}>
             <IconX size={18} />
           </button>
         </div>
-        <p className="hint-text">{t('returns.approvalHint')}</p>
+        <p className="hint-text">{t(udhari ? 'returns.udhariNote' : 'returns.approvalHint')}</p>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="form-row">
