@@ -25,6 +25,7 @@ import {
   IconStore,
   IconUsers,
   IconHistory,
+  IconPrinter,
 } from '../../components/common/Icons';
 import { supplierApi } from '../../services/api/supplierApi';
 import { supplierInvoiceApi } from '../../services/api/supplierInvoiceApi';
@@ -44,9 +45,10 @@ import type {
   SupplierPaymentOut,
   SupplierDocumentOut,
 } from '../../types/api';
+import type { SupplierReturnOut } from '../../types/inventory';
 import { formatDate, formatCurrency } from '../../utils/format';
 
-type Tab = 'overview' | 'products' | 'pos' | 'grns' | 'invoices' | 'payments' | 'ledger';
+type Tab = 'overview' | 'products' | 'pos' | 'grns' | 'invoices' | 'payments' | 'returns' | 'ledger';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -55,6 +57,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'grns', label: 'GRNs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'payments', label: 'Payments' },
+  { key: 'returns', label: 'Returns / Debit notes' },
   { key: 'ledger', label: 'Ledger' },
 ];
 
@@ -119,6 +122,8 @@ export function SupplierDetailPage() {
   const [invoices, setInvoices] = useState<SupplierInvoiceOut[]>([]);
   const [payments, setPayments] = useState<SupplierPaymentOut[]>([]);
   const [ledger, setLedger] = useState<SupplierLedgerEntry[]>([]);
+  const [returns, setReturns] = useState<SupplierReturnOut[]>([]);
+  const [debitNote, setDebitNote] = useState<SupplierReturnOut | null>(null);
   const [docs, setDocs] = useState<SupplierDocumentOut[]>([]);
 
   const [tabLoading, setTabLoading] = useState(false);
@@ -162,6 +167,49 @@ export function SupplierDetailPage() {
     }
   }
 
+  /** Opens a GRN by its id (from the Returns tab), loading the supplier's GRN list if it isn't loaded yet. */
+  async function openGrnById(grnId: number) {
+    try {
+      let list = grns;
+      if (!list.some((g) => g.id === grnId)) {
+        list = (await supplierApi.listGrns(supplierId)).data;
+        setGrns(list);
+      }
+      const g = list.find((x) => x.id === grnId);
+      if (g) await openGrnReceipt(g);
+      else setTabError('This goods receipt was not found.');
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    }
+  }
+
+  /** Opens the debit note with this number (RTN-…), e.g. from a row on the Payments tab. */
+  async function openDebitNoteByNumber(number: string) {
+    try {
+      let list = returns;
+      if (!list.some((r) => r.return_number === number)) {
+        list = (await supplierApi.listReturns(supplierId)).data;
+        setReturns(list);
+      }
+      const found = list.find((r) => r.return_number === number);
+      if (found) setDebitNote(found);
+      else setTabError(`Debit note ${number} was not found.`);
+    } catch (err) {
+      setTabError(getErrorMessage(err));
+    }
+  }
+
+  /** Prints only the debit note (print CSS hides the rest of the page while body has .printing-doc). */
+  function printDebitNote() {
+    const done = () => {
+      document.body.classList.remove('printing-doc');
+      window.removeEventListener('afterprint', done);
+    };
+    document.body.classList.add('printing-doc');
+    window.addEventListener('afterprint', done);
+    window.print();
+  }
+
   useEffect(() => {
     async function loadBase() {
       setLoading(true);
@@ -184,7 +232,7 @@ export function SupplierDetailPage() {
 
   /** After an invoice or payment is saved: fresh totals, and the money tabs reload when opened. */
   async function refreshMoney() {
-    for (const t of ['grns', 'invoices', 'payments', 'ledger', 'pos'] as Tab[]) loadedTabs.current.delete(t);
+    for (const t of ['grns', 'invoices', 'payments', 'returns', 'ledger', 'pos'] as Tab[]) loadedTabs.current.delete(t);
     loadTab(tab);
     try {
       setSummary((await supplierApi.getSummary(supplierId)).data);
@@ -261,6 +309,11 @@ export function SupplierDetailPage() {
         case 'payments': {
           const r = await supplierPaymentApi.list({ supplier_id: supplierId, per_page: 50 });
           setPayments(r.data.items);
+          break;
+        }
+        case 'returns': {
+          const r = await supplierApi.listReturns(supplierId);
+          setReturns(r.data);
           break;
         }
         case 'ledger': {
@@ -849,10 +902,18 @@ export function SupplierDetailPage() {
                           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
                           Active
                         </span>
-                        <button type="button" onClick={() => voidPayment(p)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.78em', fontWeight: 600, color: '#b91c1c', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 20, padding: '4px 10px', cursor: 'pointer' }}>
-                          ✕ Void
-                        </button>
+                        {/* A debit note is for goods already sent back: the server refuses to void it. */}
+                        {p.payment_type === 'debit_note' ? (
+                          <button type="button" className="link-button" style={{ fontSize: '0.82em' }}
+                            onClick={() => openDebitNoteByNumber(p.reference_number ?? '')}>
+                            View debit note
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => voidPayment(p)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.78em', fontWeight: 600, color: '#b91c1c', background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 20, padding: '4px 10px', cursor: 'pointer' }}>
+                            ✕ Void
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>
@@ -863,6 +924,62 @@ export function SupplierDetailPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Tab: Returns / Debit notes ────────────────────────────────────── */}
+      {tab === 'returns' && (
+        <div className="table-card">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Debit note</th>
+                <th>Product</th>
+                <th>GRN</th>
+                <th style={{ textAlign: 'right' }}>Qty</th>
+                <th>Reason</th>
+                <th style={{ textAlign: 'right' }}>Value</th>
+                <th style={{ textAlign: 'right' }}>Off their bill</th>
+                <th style={{ textAlign: 'right' }}>Credit with supplier</th>
+              </tr>
+            </thead>
+            <tbody>
+              {returns.map((r) => {
+                const credit = Number(r.amount) - Number(r.applied_to_invoice);
+                return (
+                  <tr key={r.id}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{formatDate(r.created_at)}</td>
+                    <td>
+                      <button type="button" className="link-button" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}
+                        title="View debit note" onClick={() => setDebitNote(r)}>
+                        {r.return_number}
+                      </button>
+                    </td>
+                    <td>{r.product_name}</td>
+                    <td>
+                      <button type="button" className="link-button" style={{ fontFamily: 'monospace', fontSize: '0.85em' }}
+                        title="View goods receipt" onClick={() => openGrnById(r.goods_receipt_id)}>
+                        {r.receipt_number}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{Number(r.qty)}</td>
+                    <td>{r.reason}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatCurrency(Number(r.amount))}</td>
+                    <td style={{ textAlign: 'right' }}>{formatCurrency(Number(r.applied_to_invoice))}</td>
+                    <td style={{ textAlign: 'right' }}>{credit > 0 ? formatCurrency(credit) : '—'}</td>
+                  </tr>
+                );
+              })}
+              {returns.length === 0 && !tabLoading && (
+                <tr><td colSpan={9} className="empty-row">No goods sent back to this supplier.</td></tr>
+              )}
+            </tbody>
+          </table>
+          <p className="hint-text" style={{ padding: '8px 12px', margin: 0 }}>
+            Goods are sent back from Inventory → a product's batch → Return to supplier. "Credit with supplier" can be
+            applied to their next bill from the Payments tab (Apply).
+          </p>
         </div>
       )}
 
@@ -1087,6 +1204,120 @@ export function SupplierDetailPage() {
                     <strong>Dispute note:</strong> {invReceipt.difference_reason}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Debit note modal (goods sent back to the supplier) */}
+      {debitNote && (() => {
+        const dn = debitNote;
+        const credit = Number(dn.amount) - Number(dn.applied_to_invoice);
+        const cgst = Number(dn.tax_amount) / 2;
+        const row = (label: string, value: React.ReactNode, bold = false) => (
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontWeight: bold ? 700 : 400 }}>
+            <span style={{ color: bold ? 'inherit' : '#475569' }}>{label}</span><span>{value}</span>
+          </div>
+        );
+        return (
+          <div className="modal-overlay" style={{ zIndex: 60 }}>
+            <div className="modal-box print-doc" style={{ maxWidth: 640, width: '95%', maxHeight: '90vh', overflowY: 'auto', padding: 0, borderRadius: 16 }}>
+              <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderBottom: '1px solid var(--color-border)' }}>
+                <div style={{ flex: 1, fontWeight: 700 }}>Debit Note</div>
+                <button type="button" className="btn-secondary btn-icon" onClick={printDebitNote}>
+                  <IconPrinter size={15} /><span>Print</span>
+                </button>
+                <button type="button" onClick={() => setDebitNote(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.3em', lineHeight: 1 }}>✕</button>
+              </div>
+
+              <div style={{ padding: '18px 24px', color: '#1e293b' }}>
+                {/* From (our store) / title */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: '1.1em' }}>{dn.store_name}</div>
+                    {dn.store_address && <div style={{ fontSize: '0.85em', color: '#475569', whiteSpace: 'pre-line' }}>{dn.store_address}</div>}
+                    {dn.store_gstin && <div style={{ fontSize: '0.85em' }}>GSTIN: {dn.store_gstin}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '1.3em', fontWeight: 800, letterSpacing: '0.5px' }}>DEBIT NOTE</div>
+                    <div style={{ fontFamily: 'monospace', fontWeight: 700 }}>{dn.return_number}</div>
+                    <div style={{ fontSize: '0.85em', color: '#475569' }}>Date: {formatDate(dn.created_at)}</div>
+                  </div>
+                </div>
+
+                {/* To (supplier) and references */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16, padding: 12, border: '1px solid var(--color-border)', borderRadius: 10 }}>
+                  <div>
+                    <div style={{ fontSize: '0.72em', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>To (supplier)</div>
+                    <div style={{ fontWeight: 700 }}>{supplier.company_name}</div>
+                    {supplier.billing_address && <div style={{ fontSize: '0.85em', color: '#475569', whiteSpace: 'pre-line' }}>{supplier.billing_address}</div>}
+                    {supplier.gstin && <div style={{ fontSize: '0.85em' }}>GSTIN: {supplier.gstin}</div>}
+                    {supplier.phone && <div style={{ fontSize: '0.85em' }}>Phone: {supplier.phone}</div>}
+                  </div>
+                  <div style={{ fontSize: '0.85em' }}>
+                    <div style={{ fontSize: '0.85em', color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Against</div>
+                    <div>Purchase order: <strong style={{ fontFamily: 'monospace' }}>{dn.po_number || '—'}</strong></div>
+                    <div>Goods receipt: <strong style={{ fontFamily: 'monospace' }}>{dn.receipt_number}</strong></div>
+                    <div>Supplier bill: <strong style={{ fontFamily: 'monospace' }}>{dn.invoice_numbers.length ? dn.invoice_numbers.join(', ') : '—'}</strong></div>
+                    {dn.batch_number && <div>Batch: <strong>{dn.batch_number}</strong></div>}
+                  </div>
+                </div>
+
+                {/* The goods */}
+                <table className="data-table" style={{ marginTop: 16 }}>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th style={{ textAlign: 'right' }}>Qty</th>
+                      <th style={{ textAlign: 'right' }}>Rate</th>
+                      <th style={{ textAlign: 'right' }}>Disc %</th>
+                      <th style={{ textAlign: 'right' }}>GST %</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{dn.product_name}</td>
+                      <td style={{ textAlign: 'right' }}>{Number(dn.qty)} {dn.uom}</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(Number(dn.unit_price))}</td>
+                      <td style={{ textAlign: 'right' }}>{Number(dn.discount_percent)}</td>
+                      <td style={{ textAlign: 'right' }}>{Number(dn.tax_rate)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatCurrency(Number(dn.gross))}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                  <div style={{ width: 280, fontSize: '0.9em' }}>
+                    {row('Gross', formatCurrency(Number(dn.gross)))}
+                    {Number(dn.discount) > 0 && row('Discount', `− ${formatCurrency(Number(dn.discount))}`)}
+                    {row('Taxable value', formatCurrency(Number(dn.taxable_value)))}
+                    {Number(dn.tax_amount) > 0 && (supplier.gstin && dn.store_gstin && supplier.gstin.slice(0, 2) !== dn.store_gstin.slice(0, 2)
+                      ? row(`IGST @ ${Number(dn.tax_rate)}%`, formatCurrency(Number(dn.tax_amount)))
+                      : <>
+                          {row(`CGST @ ${Number(dn.tax_rate) / 2}%`, formatCurrency(cgst))}
+                          {row(`SGST @ ${Number(dn.tax_rate) / 2}%`, formatCurrency(Number(dn.tax_amount) - cgst))}
+                        </>)}
+                    <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 4 }} />
+                    {row('Debit note total', formatCurrency(Number(dn.amount)), true)}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 14, fontSize: '0.88em' }}>
+                  <div><strong>Reason:</strong> {dn.reason}</div>
+                  <div style={{ marginTop: 6 }}>
+                    {Number(dn.applied_to_invoice) > 0 && <>{formatCurrency(Number(dn.applied_to_invoice))} taken off bill {dn.invoice_numbers.join(', ')}. </>}
+                    {credit > 0 && <>{formatCurrency(credit)} kept as credit with the supplier (apply it to their next bill).</>}
+                  </div>
+                  {dn.created_by_name && <div style={{ marginTop: 6, color: '#64748b' }}>Entered by {dn.created_by_name}</div>}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 40, fontSize: '0.85em', color: '#475569' }}>
+                  <div>Received by (supplier) ____________________</div>
+                  <div>For {dn.store_name} ____________________</div>
+                </div>
               </div>
             </div>
           </div>

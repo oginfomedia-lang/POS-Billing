@@ -450,6 +450,11 @@ def test_return_to_supplier_cuts_the_unpaid_bill(client, admin_headers, supplier
 
     listed = client.get(f"/api/v1/suppliers/{supplier.id}/returns", headers=admin_headers).get_json()
     assert [r["return_number"] for r in listed] == [ret["return_number"]]
+    # Everything the debit note document shows: 10 × ₹10 = ₹100 taxable + 5% GST ₹5 = ₹105, off the bill.
+    dn = listed[0]
+    assert (dn["unit_price"], dn["tax_rate"], dn["gross"], dn["taxable_value"], dn["tax_amount"]) == (
+        "10.00", "5.00", "100.00", "100.00", "5.00")
+    assert dn["invoice_numbers"] == [inv["invoice_number"]] and dn["po_number"] and dn["store_name"]
 
     # The debit note can't be voided: the goods won't come back into stock.
     note = db.session.scalar(db.select(SupplierReturn.debit_note_id))

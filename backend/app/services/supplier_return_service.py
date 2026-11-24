@@ -16,7 +16,9 @@ from sqlalchemy import func, select
 from app.errors.exceptions import BadRequestError, ConflictError
 from app.extensions import db
 from app.models.enums import SupplierInvoiceStatus, SupplierPaymentMethod, SupplierPaymentType
+from app.models.inventory import StockBatch
 from app.models.purchase import GoodsReceipt
+from app.models.store import Store
 from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation
 from app.models.supplier_return import SupplierReturn
@@ -51,9 +53,32 @@ def enrich(ret: SupplierReturn) -> SupplierReturnOut:
     out.supplier_name = ret.supplier.company_name if ret.supplier else ""
     out.product_name = ret.product.name if ret.product else ""
     out.receipt_number = ret.goods_receipt.receipt_number if ret.goods_receipt else ""
-    out.applied_to_invoice = sum(
-        (Decimal(str(a.allocated_amount)) for a in ret.debit_note.allocations), Decimal("0")
-    ) if ret.debit_note else Decimal("0")
+    allocations = list(ret.debit_note.allocations) if ret.debit_note else []
+    out.applied_to_invoice = sum((Decimal(str(a.allocated_amount)) for a in allocations), Decimal("0"))
+    out.invoice_numbers = [a.invoice.invoice_number for a in allocations if a.invoice is not None]
+
+    grn = ret.goods_receipt
+    if grn is not None:
+        po = grn.purchase_order
+        out.purchase_order_id = po.id if po else None
+        out.po_number = po.po_number if po else ""
+        gri = next((i for i in grn.receipt_items if i.product_id == ret.product_id), None)
+        poi = gri.purchase_order_item if gri else None
+        if poi is not None:
+            gross, disc, tax = purchase_service._calc_line(ret.qty, poi.unit_price, poi.discount_percent, poi.tax_rate)
+            out.unit_price = Decimal(str(poi.unit_price))
+            out.discount_percent = Decimal(str(poi.discount_percent))
+            out.tax_rate = Decimal(str(poi.tax_rate))
+            out.gross, out.discount, out.tax_amount = gross, disc, tax
+            out.taxable_value = gross - disc
+    batch = db.session.get(StockBatch, ret.batch_id)
+    out.batch_number = batch.batch_number if batch else None
+    if ret.product is not None and ret.product.uom is not None:
+        out.uom = getattr(ret.product.uom, "value", str(ret.product.uom))
+    store = db.session.get(Store, ret.store_id)
+    if store is not None:
+        out.store_name, out.store_address, out.store_gstin = store.name, store.address, store.gstin
+    out.created_by_name = ret.created_by.full_name if ret.created_by else ""
     return out
 
 

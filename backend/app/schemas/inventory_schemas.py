@@ -179,3 +179,21 @@ class SupplierReturnOut(BaseModel):
     # How much of the amount went against the GRN's invoice; the rest is credit with the supplier
     applied_to_invoice: Decimal = Decimal("0")
     created_at: datetime
+    # For the debit note document: where the goods came from and how the amount is worked out
+    # (the PO line's rate, discount and GST — the same maths as the supplier's bill).
+    purchase_order_id: int | None = None
+    po_number: str = ""
+    batch_number: str | None = None
+    uom: str = ""
+    unit_price: Decimal = Decimal("0")
+    discount_percent: Decimal = Decimal("0")
+    tax_rate: Decimal = Decimal("0")
+    gross: Decimal = Decimal("0")
+    discount: Decimal = Decimal("0")
+    taxable_value: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    invoice_numbers: list[str] = []  # the supplier bill(s) this debit note was taken off
+    store_name: str = ""
+    store_address: str | None = None
+    store_gstin: str | None = None
+    created_by_name: str = ""

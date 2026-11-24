@@ -76,6 +76,23 @@ export interface SupplierReturnOut {
   reason: string;
   applied_to_invoice: string; // taken off the GRN's bill; the rest is credit with the supplier
   created_at: string;
+  // For the debit note document (PO line's rate, discount and GST: the same maths as the supplier's bill).
+  purchase_order_id: number | null;
+  po_number: string;
+  batch_number: string | null;
+  uom: string;
+  unit_price: string;
+  discount_percent: string;
+  tax_rate: string;
+  gross: string;
+  discount: string;
+  taxable_value: string;
+  tax_amount: string;
+  invoice_numbers: string[];
+  store_name: string;
+  store_address: string | null;
+  store_gstin: string | null;
+  created_by_name: string;
 }
 
 export interface BatchOut {
