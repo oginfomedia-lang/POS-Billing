@@ -2048,6 +2048,7 @@ select.field-input {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--text);
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
