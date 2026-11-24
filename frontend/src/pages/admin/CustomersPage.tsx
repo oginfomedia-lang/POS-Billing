@@ -8,6 +8,7 @@ import {
   getCustomerCreditTransactions,
   getCustomerTransactions,
   listCustomers,
+  updateCustomerName,
 } from '../../services/api/customerApi';
 import { getErrorMessage } from '../../services/api/httpClient';
 import type { PagedResponse } from '../../types/api';
@@ -32,6 +33,29 @@ export function CustomersPage() {
   const [showLimitDialog, setShowLimitDialog] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // Name editing for the selected customer (null = not editing).
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => { setNameDraft(null); }, [selected?.id]);
+
+  async function saveName(e: FormEvent) {
+    e.preventDefault();
+    if (!selected || nameDraft === null) return;
+    setSavingName(true);
+    setError('');
+    try {
+      const updated = await updateCustomerName(selected.id, nameDraft);
+      setNameDraft(null);
+      setNotice(t('customers.nameUpdated'));
+      setSelected(updated);
+      setData((prev) => prev ? { ...prev, items: prev.items.map((c) => (c.id === updated.id ? updated : c)) } : prev);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   function load(p: number, dues: boolean = withDues) {
     setError('');
@@ -206,9 +230,23 @@ export function CustomersPage() {
           {/* Customer Detail Header & Action Buttons */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
             <div>
-              <h3 style={{ margin: 0 }}>
-                {selected.name ? `${selected.name} (${selected.mobile})` : selected.mobile}
-              </h3>
+              {nameDraft === null ? (
+                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {selected.name ? `${selected.name} (${selected.mobile})` : selected.mobile}
+                  <button type="button" className="link-button" style={{ fontSize: '0.6em', fontWeight: 500 }}
+                    onClick={() => setNameDraft(selected.name ?? '')}>
+                    {t(selected.name ? 'customers.editName' : 'customers.addName')}
+                  </button>
+                </h3>
+              ) : (
+                <form onSubmit={saveName} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input className="field-input" autoFocus maxLength={100} value={nameDraft}
+                    placeholder={t('pay.namePlaceholder')} onChange={(e) => setNameDraft(e.target.value)} />
+                  <span style={{ color: 'var(--text-muted, #64748b)' }}>{selected.mobile}</span>
+                  <button type="submit" className="btn-sm btn-primary" disabled={savingName}>{t('common.save')}</button>
+                  <button type="button" className="btn-sm btn-secondary" onClick={() => setNameDraft(null)}>{t('common.cancel')}</button>
+                </form>
+              )}
               <div style={{ fontSize: '0.9em', color: 'var(--text-muted, #64748b)', marginTop: 4 }}>
                 {t('customers.colCredit', 'Udhari Balance')}:{' '}
                 <strong style={{ color: Number(selected.credit_balance) > 0 ? 'var(--error, #dc2626)' : 'inherit' }}>

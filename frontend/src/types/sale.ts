@@ -65,6 +65,8 @@ export interface SaleOut {
   total_saving: string;
   note: string | null;
   customer_mobile: string | null;
+  /** Optional; required with the mobile for a bill on udhari. */
+  customer_name: string | null;
   /** Points reserved on this open bill / used on this paid bill. */
   points_redeemed: number;
   /** ₹ off for those points (before GST, already inside discount_amount). */

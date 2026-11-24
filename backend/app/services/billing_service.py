@@ -169,10 +169,12 @@ def _verify_approver(username: str, pin: str, what: str = "a discount", store_id
     return user
 
 
-def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
-    """Optional customer mobile on an OPEN bill. The amount doesn't change, so a live QR / card payment is kept —
-    unless points were redeemed for the old number: they belong to that customer, so the redemption is dropped."""
+def set_customer_mobile(sale_id: int, mobile: str | None, actor: User, name: str | None = None) -> Sale:
+    """Optional customer mobile and name on an OPEN bill. The amount doesn't change, so a live QR / card payment is
+    kept — unless points were redeemed for the old number: they belong to that customer, so the redemption is
+    dropped. Udhari needs both (checked when the bill is paid)."""
     number = normalize_mobile(mobile)
+    name = " ".join((name or "").split()) or None  # trim and collapse spaces; blank = no name
     with transaction():
         sale = _lock_owned_sale(sale_id, actor)
         _require_status(sale, SaleStatus.OPEN)
@@ -181,6 +183,7 @@ def set_customer_mobile(sale_id: int, mobile: str | None, actor: User) -> Sale:
             sale.points_redeemed = 0
             _recalculate(sale)
         sale.customer_mobile = number
+        sale.customer_name = name
     return sale
 
 

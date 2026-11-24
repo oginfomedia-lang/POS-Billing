@@ -30,12 +30,15 @@ def product(store):
     return make_product(store, name="Sugar 1kg", price="50.00", tax_rate="5.00")
 
 
-def _cart(client, headers, product, qty=1, mobile=MOBILE):
+NAME = "Ramesh Patil"
+
+
+def _cart(client, headers, product, qty=1, mobile=MOBILE, name=NAME):
     sid = client.post("/api/v1/sales", headers=headers).get_json()["id"]
     resp = client.post(f"/api/v1/sales/{sid}/items", json={"product_id": product.id, "qty": qty}, headers=headers)
     assert resp.status_code in (200, 201), resp.get_json()
-    if mobile:
-        assert client.put(f"/api/v1/sales/{sid}/customer-mobile", json={"mobile": mobile},
+    if mobile or name:
+        assert client.put(f"/api/v1/sales/{sid}/customer-mobile", json={"mobile": mobile, "name": name},
                           headers=headers).status_code == 200
     return sid
 
@@ -117,6 +120,68 @@ def test_credit_sale_needs_a_mobile(client, cashier_headers, shift, product):
     sid = _cart(client, cashier_headers, product, mobile=None)
     resp = _complete(client, cashier_headers, sid)
     assert resp.status_code == 400 and "mobile" in resp.get_json()["error"]["message"]
+
+
+def test_credit_sale_needs_a_name(client, cashier_headers, shift, product):
+    sid = _cart(client, cashier_headers, product, name=None)
+    resp = _complete(client, cashier_headers, sid)
+    assert resp.status_code == 400 and "name" in resp.get_json()["error"]["message"]
+    assert _customer() is None  # nothing saved: the bill is still open
+
+
+def test_credit_sale_saves_the_name_on_the_customer(client, cashier_headers, shift, product):
+    bill = _credit_sale(client, cashier_headers, product)
+    assert bill["customer_name"] == NAME
+    assert _customer().name == NAME
+
+
+def test_known_customer_name_is_enough_for_udhari(client, cashier_headers, shift, product):
+    _credit_sale(client, cashier_headers, product)  # first bill saves the name
+    sid = _cart(client, cashier_headers, product, name=None)
+    resp = _complete(client, cashier_headers, sid)
+    assert resp.status_code == 200, resp.get_json()
+    assert _customer().name == NAME
+
+
+def test_name_is_optional_for_cash_and_is_saved(client, cashier_headers, shift, product):
+    sid = _cart(client, cashier_headers, product, name=None)
+    assert _complete(client, cashier_headers, sid, method="cash").status_code == 200
+    assert _customer().name is None
+
+    sid = _cart(client, cashier_headers, product, name="  Sita   More ")
+    bill = _complete(client, cashier_headers, sid, method="cash").get_json()
+    assert bill["customer_name"] == "Sita More"
+    assert _customer().name == "Sita More"
+
+
+def test_find_bills_by_customer_name(client, cashier_headers, admin_headers, shift, product):
+    bill = _credit_sale(client, cashier_headers, product)
+    # An older-style bill: no name typed on it, but the customer (same mobile) has a saved name.
+    old = _complete(client, cashier_headers, _cart(client, cashier_headers, product, name=None), method="cash")
+    old = old.get_json()
+
+    found = client.get("/api/v1/returns/bills/search", query_string={"q": "ramesh"}, headers=cashier_headers)
+    assert found.status_code == 200, found.get_json()
+    assert {b["bill_number"] for b in found.get_json()} == {bill["bill_number"], old["bill_number"]}
+    assert all(b["customer_name"] == NAME for b in found.get_json())
+    by_mobile = client.get("/api/v1/returns/bills/search", query_string={"q": MOBILE}, headers=cashier_headers)
+    assert len(by_mobile.get_json()) == 2
+    assert client.get("/api/v1/returns/bills/search", query_string={"q": "zzz"},
+                      headers=cashier_headers).get_json() == []
+
+    bills = client.get("/api/v1/reports/bills", query_string={"q": "PATIL"}, headers=admin_headers).get_json()
+    assert bills["totals"]["count"] == 2  # Admin → Bills searches names too (any case)
+
+
+def test_staff_edit_the_name_but_cannot_remove_it_while_dues_are_open(
+        client, cashier_headers, admin_headers, shift, product):
+    _credit_sale(client, cashier_headers, product)
+    cid = _customer().id
+    resp = client.put(f"/api/v1/customers/{cid}/name", json={"name": "Ramesh S. Patil"}, headers=admin_headers)
+    assert resp.status_code == 200 and resp.get_json()["name"] == "Ramesh S. Patil"
+    resp = client.put(f"/api/v1/customers/{cid}/name", json={"name": "  "}, headers=admin_headers)
+    assert resp.status_code == 400
+    assert _customer().name == "Ramesh S. Patil"
 
 
 def test_credit_limit_stops_the_bill(client, cashier_headers, admin_headers, shift, product):

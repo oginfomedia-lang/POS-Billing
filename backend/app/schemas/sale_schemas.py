@@ -64,6 +64,7 @@ class SaleOut(BaseModel):
     total_saving: Decimal = Decimal("0")
     note: str | None
     customer_mobile: str | None = None
+    customer_name: str | None = None
     points_redeemed: int = 0  # reserved while the bill is open, used once it's paid
     reward_discount: Decimal = Decimal("0")  # ₹ off for those points (before GST, inside discount_amount)
     points_earned: int = 0
@@ -123,6 +124,7 @@ class HoldSaleRequest(BaseModel):
 
 class CustomerMobileRequest(BaseModel):
     mobile: str | None = Field(None, max_length=20)  # null / "" clears it
+    name: str | None = Field(None, max_length=100)  # optional customer name; null / "" clears it
 
 
 class CompleteSaleRequest(BaseModel):

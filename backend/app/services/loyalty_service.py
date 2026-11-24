@@ -82,6 +82,8 @@ def settle_sale(sale: Sale, actor: User) -> None:
     s = settings_service.get_settings()
     repo = CustomerRepository()
     customer = repo.get_or_create_for_update(sale.customer_mobile)  # first paid bill = registration
+    if sale.customer_name:
+        customer.name = sale.customer_name  # the counter fills in the saved name, so a change here is a correction
     note = f"Bill {sale.bill_number}"
 
     if sale.points_redeemed:

@@ -74,6 +74,11 @@ class CreditRepaymentRequest(BaseModel):
     store_id: int | None = None  # head office only; everyone else repays at their own store
 
 
+class CustomerNameUpdateRequest(BaseModel):
+    """Staff correct or add a customer's name (Customers page). Blank removes it."""
+    name: str | None = Field(None, max_length=100)
+
+
 class CreditLimitUpdateRequest(BaseModel):
     """Admin updates customer credit limit."""
     credit_limit: Decimal | None = Field(None, ge=0, max_digits=12, decimal_places=2)

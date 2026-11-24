@@ -7,6 +7,7 @@ from app.schemas.customer_schemas import (
     CreditRepaymentRequest,
     CreditTxnOut,
     CustomerCreditInfoOut,
+    CustomerNameUpdateRequest,
     CustomerOut,
     RewardTxnOut,
 )
@@ -76,6 +77,15 @@ def repay_credit(customer_id: int):
         actor=actor,
     )
     return jsonify(CreditTxnOut.model_validate(txn).model_dump(mode="json")), 201
+
+
+@customer_bp.put("/customers/<int:customer_id>/name")
+@require_permission("sales.create")
+def set_name(customer_id: int):
+    """Staff add or correct a customer's name."""
+    data = CustomerNameUpdateRequest.model_validate(request.get_json(force=True))
+    customer = customer_credit_service.update_name(customer_id, data.name, auth_service.current_user())
+    return jsonify(CustomerOut.model_validate(customer).model_dump(mode="json")), 200
 
 
 @customer_bp.put("/customers/<int:customer_id>/credit-limit")

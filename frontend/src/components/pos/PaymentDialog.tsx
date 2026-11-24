@@ -30,8 +30,10 @@ interface Props {
   total: string;
   /** Saved on the bill already (full number), or null. */
   customerMobile: string | null;
-  /** Saves the optional mobile on the open bill; throws with the server's message on failure. */
-  onSaveMobile: (mobile: string | null) => Promise<void>;
+  /** Saved on the bill already, or null. Optional, but Udhari needs it (with the mobile). */
+  customerName: string | null;
+  /** Saves the optional mobile and name on the open bill; throws with the server's message on failure. */
+  onSaveMobile: (mobile: string | null, name: string | null) => Promise<void>;
   /** Reward points reserved on the bill. */
   pointsRedeemed: number;
   /** Bill amount before GST that a reward can still come off. */
@@ -46,12 +48,15 @@ interface Props {
 }
 
 export function PaymentDialog({
-  saleId, total, customerMobile, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
+  saleId, total, customerMobile, customerName, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
 }: Props) {
   const { t } = useTranslation();
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
   const [mobile, setMobile] = useState(customerMobile ?? '');
+  const [name, setName] = useState(customerName ?? '');
+  // Until the cashier types a name, the saved name of the customer with this mobile is filled in.
+  const [nameEdited, setNameEdited] = useState(Boolean(customerName));
   const [mobileError, setMobileError] = useState('');
   const [savingMobile, setSavingMobile] = useState(false);
   const [cardUpiMode, setCardUpiMode] = useState<CardUpiMode | null>(null);
@@ -60,6 +65,7 @@ export function PaymentDialog({
   const [loadingCredit, setLoadingCredit] = useState(false);
   const normalizedMobile = normalizeMobile(mobile); // '' = none, null = invalid
   const mobileInvalid = normalizedMobile === null;
+  const trimmedName = name.trim().replace(/\s+/g, ' ');
   useKeyboardShortcuts({ Escape: onClose });
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +86,11 @@ export function PaymentDialog({
     let cancelled = false;
     setLoadingCredit(true);
     getCustomerCredit(normalizedMobile)
-      .then((info) => { if (!cancelled) setCreditInfo(info); })
+      .then((info) => {
+        if (cancelled) return;
+        setCreditInfo(info);
+        if (!nameEdited && info.name) setName(info.name);
+      })
       .catch(() => { if (!cancelled) setCreditInfo(null); })
       .finally(() => { if (!cancelled) setLoadingCredit(false); });
     return () => { cancelled = true; };
@@ -94,7 +104,8 @@ export function PaymentDialog({
   const currentCreditBalance = Number(creditInfo?.credit_balance || '0');
   const creditLimit = creditInfo?.credit_limit !== null && creditInfo?.credit_limit !== undefined ? Number(creditInfo.credit_limit) : null;
   const creditLimitExceeded = creditLimit !== null && (currentCreditBalance + creditTotal) > creditLimit;
-  const creditValid = method === 'credit' && Boolean(normalizedMobile) && !mobileInvalid && !creditLimitExceeded;
+  const creditValid = method === 'credit' && Boolean(normalizedMobile) && !mobileInvalid && Boolean(trimmedName)
+    && !creditLimitExceeded;
 
   const canConfirm = !busy && !savingMobile && !mobileInvalid && (
     method === 'cash' ? cashValid :
@@ -102,14 +113,14 @@ export function PaymentDialog({
     manualDigital
   );
 
-  /** Saves the mobile on the bill if it changed. Returns false when it couldn't be saved. */
+  /** Saves the mobile and name on the bill if either changed. Returns false when they couldn't be saved. */
   async function saveMobile(): Promise<boolean> {
     if (normalizedMobile === null) return false;
-    if (normalizedMobile === (customerMobile ?? '')) return true;
+    if (normalizedMobile === (customerMobile ?? '') && trimmedName === (customerName ?? '')) return true;
     setSavingMobile(true);
     setMobileError('');
     try {
-      await onSaveMobile(normalizedMobile || null);
+      await onSaveMobile(normalizedMobile || null, trimmedName || null);
       return true;
     } catch (err) {
       setMobileError(getErrorMessage(err));
@@ -192,6 +203,19 @@ export function PaymentDialog({
           )}
           {mobileError && <span className="mobile-bad">{mobileError}</span>}
         </label>
+        <label className="field-label mobile-field">
+          <span>{t(method === 'credit' ? 'pay.customerNameRequired' : 'pay.customerName')}</span>
+          <input
+            className={`field-input${method === 'credit' && !trimmedName ? ' input-invalid' : ''}`}
+            type="text"
+            autoComplete="off"
+            maxLength={100}
+            placeholder={t('pay.namePlaceholder')}
+            value={name}
+            onChange={(e) => { setName(e.target.value); setNameEdited(true); setMobileError(''); }}
+            onBlur={() => { saveMobile(); }}
+          />
+        </label>
         <RewardsStrip
           mobile={customerMobile}
           pointsRedeemed={pointsRedeemed}
@@ -250,6 +274,11 @@ export function PaymentDialog({
                 <p className="digital-wait">{t('common.loading')}</p>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {!trimmedName && (
+                    <div className="page-error" style={{ background: 'var(--warn-bg)', color: 'var(--warn-text)', borderColor: 'var(--warn-text)', display: 'block' }}>
+                      {t('pay.creditNameRequired')}
+                    </div>
+                  )}
                   {creditLimitExceeded && (
                     <div className="page-error" style={{ display: 'block' }}>
                       {t('pay.creditLimitExceeded')}

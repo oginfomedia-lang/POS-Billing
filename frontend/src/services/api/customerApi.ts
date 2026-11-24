@@ -17,6 +17,12 @@ export async function listCustomers(search: string, page: number, withDues?: boo
   return resp.data;
 }
 
+/** Add or correct a customer's name ('' removes it; refused while the customer owes udhari). */
+export async function updateCustomerName(customerId: number, name: string): Promise<CustomerOut> {
+  const resp = await httpClient.put<CustomerOut>(`/customers/${customerId}/name`, { name: name.trim() || null });
+  return resp.data;
+}
+
 /** Update customer's maximum allowable credit limit. */
 export async function updateCustomerCreditLimit(customerId: number, creditLimit: string | null): Promise<CustomerOut> {
   const resp = await httpClient.put<CustomerOut>(`/customers/${customerId}/credit-limit`, {

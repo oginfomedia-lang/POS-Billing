@@ -72,12 +72,16 @@ def settle_sale_credit(sale: Sale, actor: User) -> None:
     if credit_amount <= ZERO:
         return
 
-    # Udhari requires a mobile number to attach the debt to.
+    # Udhari requires a mobile number to attach the debt to, and a name to know who owes it.
     if not sale.customer_mobile:
         raise AppError("A customer mobile number is required to make a sale on Udhari (credit).")
 
     repo = CustomerRepository()
     customer = repo.get_or_create_for_update(sale.customer_mobile)
+    if sale.customer_name:
+        customer.name = sale.customer_name
+    if not customer.name:
+        raise AppError("Enter the customer's name to make a sale on Udhari (credit).")
     sale.customer_id = customer.id
 
     # Check credit limit rule
@@ -208,6 +212,21 @@ def cash_repayments_for_shift(shift_id: int) -> Decimal:
         )
     )
     return Decimal(total)
+
+
+def update_name(customer_id: int, name: str | None, actor: User) -> Customer:
+    """Add or correct a customer's name. A customer who owes money (udhari) must keep a name."""
+    name = " ".join((name or "").split()) or None
+    with transaction():
+        customer = db.session.get(Customer, customer_id, with_for_update=True)
+        if customer is None:
+            raise NotFoundError(f"Customer {customer_id} not found.")
+        if name is None and round_money(customer.credit_balance) > ZERO:
+            raise AppError("This customer owes money on udhari, so the name can't be removed.")
+        old = customer.name
+        customer.name = name
+        audit_service.log(actor, "customer.name", "customer", customer.id, {"name": old}, {"name": name})
+    return customer
 
 
 def update_credit_limit(customer_id: int, credit_limit: Decimal | None, actor: User) -> Customer:

@@ -7,6 +7,7 @@ from datetime import datetime
 
 from app.extensions import db
 from app.models.category import Category
+from app.models.customer import Customer
 from app.models.enums import PaymentMethod, SaleStatus, ShiftStatus
 from app.models.inventory import Inventory
 from app.models.payment import Payment
@@ -372,7 +373,15 @@ class ReportRepository:
         if discounted:
             conds.append(Sale.discount_amount > 0)
         if text:
-            conds.append(Sale.bill_number.icontains(text, autoescape=True))
+            # Bill number, customer mobile (or part of it) or customer name: the name typed on the bill, or the
+            # customer's saved name (older bills linked to a named customer).
+            named = db.select(Customer.id).where(Customer.name.icontains(text, autoescape=True))
+            conds.append(db.or_(
+                Sale.bill_number.icontains(text, autoescape=True),
+                Sale.customer_mobile.contains(text, autoescape=True),
+                Sale.customer_name.icontains(text, autoescape=True),
+                Sale.customer_id.in_(named),
+            ))
         return conds
 
     def list_bills(self, store_id, start, end, status, method, discounted, text, page, per_page):
