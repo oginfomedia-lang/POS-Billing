@@ -25,3 +25,5 @@ from app.models.supplier_invoice import SupplierInvoice, SupplierInvoiceGRN  # n
 from app.models.supplier_payment import SupplierPayment, SupplierPaymentAllocation  # noqa: F401
 from app.models.supplier_document import SupplierDocument  # noqa: F401
 from app.models.supplier_return import SupplierReturn  # noqa: F401
+from app.models.supplier_item_alias import SupplierItemAlias  # noqa: F401
+from app.models.supplier_bill_template import SupplierBillTemplate  # noqa: F401

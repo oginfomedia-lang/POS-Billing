@@ -126,3 +126,103 @@ def test_cashier_cannot(client, cashier_headers, store, supplier):
     oil = make_product(store, name="Oil", price="150.00", stock=0)
     resp = _post(client, cashier_headers, _bill(supplier, store, {"product_id": oil.id, "qty": "1", "unit_price": "1"}))
     assert resp.status_code == 403
+
+
+def test_discount_on_the_bill(client, admin_headers, store, supplier):
+    """Taxable = qty × rate − discount %, total = taxable + GST: the bill's total matches to the paisa, the
+    invoice needs no reason, and stock is costed after the discount (before GST)."""
+    sugar = make_product(store, name="Sugar", price="45.00", stock=0)
+    # 10 × 100 = 1000.00, 2 % off = 980.00, 5 % GST = 49.00 → 1029.00
+    resp = _post(client, admin_headers, _bill(
+        supplier, store,
+        {"product_id": sugar.id, "qty": "10", "unit_price": "100", "discount_percent": "2", "tax_rate": "5"},
+        total="1029.00",
+    ))
+    assert resp.status_code == 201, resp.get_json()
+    po = resp.get_json()["purchase_order"]
+    assert (Decimal(po["subtotal"]), Decimal(po["discount_amount"]), Decimal(po["tax_amount"]), Decimal(po["grand_total"])) \
+        == (Decimal("1000.00"), Decimal("20.00"), Decimal("49.00"), Decimal("1029.00"))
+    invoice = resp.get_json()["invoice"]
+    assert invoice["verification_status"] == "verified" and Decimal(invoice["difference"]) == 0
+
+    db.session.expire_all()
+    assert db.session.get(Product, sugar.id).cost_price == Decimal("98.0000")  # 100 − 2 %, before GST
+
+
+# ── Several photos of one bill ────────────────────────────────────────────────
+
+def _photo(color) -> io.BytesIO:
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40), color).save(buf, "PNG")
+    buf.seek(0)
+    return buf
+
+
+def test_several_photos_are_saved_as_one_pdf(client, admin_headers, store, supplier):
+    from app.models.supplier_document import SupplierDocument
+    oil = make_product(store, name="Oil", price="150.00", stock=0)
+    form = {"data": json.dumps(_bill(supplier, store, {"product_id": oil.id, "qty": "5", "unit_price": "120"})),
+            "file": [(_photo("white"), "top.png", "image/png"), (_photo("gray"), "bottom.png", "image/png")]}
+    resp = client.post("/api/v1/purchases/direct", data=form, headers=admin_headers, content_type="multipart/form-data")
+    assert resp.status_code == 201, resp.get_json()
+    docs = list(db.session.scalars(db.select(SupplierDocument)))
+    assert len(docs) == 1 and docs[0].mime_type == "application/pdf"
+
+
+def test_a_pdf_and_a_photo_together_are_refused(client, admin_headers, store, supplier):
+    oil = make_product(store, name="Oil", price="150.00", stock=0)
+    form = {"data": json.dumps(_bill(supplier, store, {"product_id": oil.id, "qty": "5", "unit_price": "120"})),
+            "file": [(io.BytesIO(b"%PDF-1.4"), "bill.pdf", "application/pdf"), (_photo("white"), "p.png", "image/png")]}
+    resp = client.post("/api/v1/purchases/direct", data=form, headers=admin_headers, content_type="multipart/form-data")
+    assert resp.status_code == 400 and _counts() == (0, 0, 0)
+
+
+# ── Correcting a saved direct purchase ───────────────────────────────────────
+
+def _put(client, headers, po_id, body):
+    return client.put(f"/api/v1/purchases/{po_id}/direct", data={"data": json.dumps(body)}, headers=headers,
+                      content_type="multipart/form-data")
+
+
+def test_correcting_a_saved_bill(client, admin_headers, store, supplier):
+    sugar = make_product(store, name="Sugar", price="45.00", stock=0)
+    po_id = _post(client, admin_headers, _bill(
+        supplier, store, {"product_id": sugar.id, "qty": "20", "unit_price": "42", "batch_number": "B1"})
+    ).get_json()["purchase_order"]["id"]
+
+    draft = client.get(f"/api/v1/purchases/{po_id}/direct", headers=admin_headers).get_json()
+    assert draft["invoice_number"] == "INV-889" and draft["bill_file_name"] == "bill.pdf"
+    assert draft["items"][0]["qty"] == 20 and draft["items"][0]["batch_number"] == "B1"
+    assert draft["items"][0]["product"]["id"] == sugar.id
+
+    # The bill really said 15 at ₹40; no new file = the saved bill is kept.
+    resp = _put(client, admin_headers, po_id, _bill(
+        supplier, store, {"product_id": sugar.id, "qty": "15", "unit_price": "40"}))
+    assert resp.status_code == 200, resp.get_json()
+    new_po = resp.get_json()["purchase_order"]
+    assert new_po["id"] != po_id and new_po["status"] == "received"
+
+    db.session.expire_all()
+    stock = db.session.scalar(db.select(Inventory).filter_by(store_id=store.id, product_id=sugar.id))
+    assert stock.qty_on_hand == Decimal("15") and stock.avg_cost == Decimal("40.0000")
+    assert db.session.get(PurchaseOrder, po_id).status.value == "cancelled"
+    invoices = {i.invoice_number: i.payment_status.value for i in db.session.scalars(db.select(SupplierInvoice))}
+    assert invoices["INV-889"] != "cancelled"  # the corrected bill keeps the number
+    assert any(n.startswith("INV-889~") and s == "cancelled" for n, s in invoices.items())
+
+
+def test_correcting_refused_once_goods_are_sold(client, admin_headers, store, supplier):
+    from app.models.inventory import StockBatch
+    sugar = make_product(store, name="Sugar", price="45.00", stock=0)
+    po_id = _post(client, admin_headers, _bill(
+        supplier, store, {"product_id": sugar.id, "qty": "20", "unit_price": "42"})).get_json()["purchase_order"]["id"]
+    batch = db.session.scalar(db.select(StockBatch).filter_by(product_id=sugar.id, source="grn"))
+    batch.qty_remaining = Decimal("18")  # 2 sold
+    db.session.commit()
+
+    assert client.get(f"/api/v1/purchases/{po_id}/direct", headers=admin_headers).status_code == 400
+    before = _counts()
+    resp = _put(client, admin_headers, po_id, _bill(
+        supplier, store, {"product_id": sugar.id, "qty": "15", "unit_price": "40"}))
+    assert resp.status_code == 400 and _counts() == before

@@ -100,6 +100,19 @@ class BaseConfig:
     UPLOAD_DIR = os.environ.get("UPLOAD_DIR") or None
     UPLOAD_MAX_BYTES = int(os.environ.get("UPLOAD_MAX_BYTES") or str(20 * 1024 * 1024))  # 20 MB
 
+    # --- Reading supplier bills (app/ocr, Direct purchase → "Read from bill") ---
+    # "rapidocr" (offline neural OCR, best on photos; Tesseract if it can't load) or "tesseract".
+    OCR_ENGINE = (os.environ.get("OCR_ENGINE") or "rapidocr").strip().lower()
+    # Tesseract only. Full path to tesseract.exe. Empty = the copy bundled with the installer, else "tesseract" on PATH.
+    TESSERACT_CMD = os.environ.get("TESSERACT_CMD", "")
+    # Tesseract languages: "eng", or "eng+mar" for bills with Marathi item names (slower).
+    OCR_LANGUAGES = os.environ.get("OCR_LANGUAGES") or "eng"
+    # Page layout mode: 6 = one block of text (most bills); try 4 or 11 if a supplier's bill reads badly.
+    OCR_PSM = int(os.environ.get("OCR_PSM") or "6")
+    OCR_MAX_PAGES = int(os.environ.get("OCR_MAX_PAGES") or "5")
+    # For the whole bill. RapidOCR takes ~10-20 s a page on an ordinary office PC. Keep below the screen's 200 s.
+    OCR_TIMEOUT_SECONDS = int(os.environ.get("OCR_TIMEOUT_SECONDS") or "150")
+
     # --- App updates (services/update_mirror_service.py) ---
     # HTTPS folder holding latest.yml + LiteRetail-Setup-<version>.exe. The Main PC copies new versions from it
     # and serves them to every PC's app at /api/v1/updates. Blank = no automatic updates.

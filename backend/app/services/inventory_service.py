@@ -84,6 +84,17 @@ def add_purchase_cost(row: Inventory, product: Product, qty: Decimal, unit_cost:
         row.avg_cost = ((on_hand * old + qty * unit_cost) / (on_hand + qty)).quantize(COST_PLACES)
 
 
+def remove_purchase_cost(row: Inventory, qty: Decimal, unit_cost: Decimal | None) -> None:
+    """Undoes add_purchase_cost when goods that came in go out again unsold (a corrected bill).
+    Call before qty_on_hand goes down."""
+    on_hand = Decimal(str(row.qty_on_hand))
+    left = on_hand - qty
+    if unit_cost is None or row.avg_cost is None or left <= 0:
+        return  # nothing left to average: the next purchase sets the cost
+    avg = Decimal(str(row.avg_cost))
+    row.avg_cost = max((on_hand * avg - qty * Decimal(str(unit_cost))) / left, Decimal("0")).quantize(COST_PLACES)
+
+
 def store_avg_costs(store_id: int, product_ids: list[int]) -> dict[int, Decimal]:
     """{product_id: weighted-average cost} for this store (one query)."""
     return InventoryRepository().avg_costs(store_id, product_ids)

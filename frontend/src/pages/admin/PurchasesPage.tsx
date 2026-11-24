@@ -15,6 +15,10 @@ import {
 import { getBlobErrorMessage, getErrorMessage } from '../../services/api/httpClient';
 import { openWhatsApp, purchaseApi } from '../../services/api/purchaseApi';
 import type {
+  BillLine,
+  BillProblem,
+  BillProduct,
+  BillWarning,
   GoodsReceiptItemPayload,
   PurchaseOrderCreatePayload,
   PurchaseOrderItemPayload,
@@ -41,6 +45,7 @@ import type {
   StoreOut,
 } from '../../types/api';
 import { formatDate, formatDateTime, isoDateIst, isoDateTimeLocalIst } from '../../utils/format';
+import { type LineAmounts, lineAmounts } from '../../utils/purchaseLine';
 
 const PER_PAGE = 20;
 
@@ -227,7 +232,41 @@ function NewProductModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [name, setName] = useState('');
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box" style={{ maxWidth: 460 }}>
+        <button type="button" className="modal-close-btn modal-close-corner" onClick={onClose} aria-label={t('common.close')}>
+          <IconX size={18} />
+        </button>
+        <h3>{t('purchases.newProductTitle')}</h3>
+        <p className="hint-text">{t('purchases.newProductHint')}</p>
+        <NewProductForm supplierId={supplierId} storeId={storeId} onCreated={onCreated} onCancel={onClose} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The new-product fields (name, category, unit) and the create call: in the "+ New product" box, and inline under a
+ * bill line that has no product yet (inline: one compact row, name from the bill). What was typed stays on an error.
+ */
+function NewProductForm({
+  supplierId,
+  storeId,
+  initialName = '',
+  inline = false,
+  onCreated,
+  onCancel,
+}: {
+  supplierId?: number;
+  storeId?: number | '';
+  initialName?: string;
+  inline?: boolean;
+  onCreated: (p: ProductRow) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(initialName);
   const [categoryId, setCategoryId] = useState('');
   const [uom, setUom] = useState<UOMType>('pcs');
   const [categories, setCategories] = useState<CategoryOut[]>([]);
@@ -257,42 +296,34 @@ function NewProductModal({
     }
   }
 
+  const row = { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' } as const;
   return (
-    <div className="modal-overlay">
-      <div className="modal-box" style={{ maxWidth: 460 }}>
-        <button type="button" className="modal-close-btn modal-close-corner" onClick={onClose} aria-label={t('common.close')}>
-          <IconX size={18} />
+    <form onSubmit={save} className={inline ? undefined : 'modal-form'} style={inline ? row : undefined}>
+      {err && <div className="form-error" style={inline ? { flexBasis: '100%' } : undefined}>{err}</div>}
+      <label className="field-label" style={inline ? { flex: '2 1 220px', margin: 0 } : undefined}>
+        {t('common.name')}
+        <MarathiInput className="field-input" value={name} maxLength={200} onChange={setName} required autoFocus />
+      </label>
+      <label className="field-label" style={inline ? { flex: '1 1 150px', margin: 0 } : undefined}>
+        {t('products.category')}
+        <select className="field-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">—</option>
+          {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </label>
+      <label className="field-label" style={inline ? { flex: '0 1 110px', margin: 0 } : undefined}>
+        {t('products.uom')}
+        <select className="field-input" value={uom} onChange={(e) => setUom(e.target.value as UOMType)}>
+          {UOMS.map((u) => <option key={u} value={u}>{t(`products.uoms.${u}`)}</option>)}
+        </select>
+      </label>
+      <div className={inline ? undefined : 'modal-buttons'} style={inline ? { display: 'flex', gap: 8 } : undefined}>
+        <button type="button" className="btn-secondary" onClick={onCancel}>{t('common.cancel')}</button>
+        <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
+          {busy ? t('common.saving') : inline ? t('purchases.direct.saveProduct') : t('common.create')}
         </button>
-        <h3>{t('purchases.newProductTitle')}</h3>
-        <p className="hint-text">{t('purchases.newProductHint')}</p>
-        {err && <div className="form-error">{err}</div>}
-        <form onSubmit={save} className="modal-form">
-          <label className="field-label">
-            {t('common.name')}
-            <MarathiInput className="field-input" value={name} maxLength={200} onChange={setName} required autoFocus />
-          </label>
-          <label className="field-label">
-            {t('products.category')}
-            <select className="field-input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">—</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
-          <label className="field-label">
-            {t('products.uom')}
-            <select className="field-input" value={uom} onChange={(e) => setUom(e.target.value as UOMType)}>
-              {UOMS.map((u) => <option key={u} value={u}>{t(`products.uoms.${u}`)}</option>)}
-            </select>
-          </label>
-          <div className="modal-buttons">
-            <button type="button" className="btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
-            <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
-              {busy ? t('common.saving') : t('common.create')}
-            </button>
-          </div>
-        </form>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -307,16 +338,18 @@ function ProductSearch({
   onSelect,
   storeId,
   supplierId,
+  autoFocus = false,
 }: {
   onSelect: (p: ProductRow) => void;
   storeId?: number | '';
   supplierId?: number;
+  autoFocus?: boolean; // inline under a bill line: the list is open straight away
 }) {
   const { t } = useTranslation();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoFocus);
   const [supplierProducts, setSupplierProducts] = useState<ProductRow[]>([]);
 
   // Fetch all products linked to the chosen supplier once (not per-keystroke).
@@ -413,6 +446,7 @@ function ProductSearch({
               className="field-input"
               placeholder={t('purchases.productSearchHint', 'Type name, SKU or scan barcode')}
               value={q}
+              autoFocus={autoFocus}
               onFocus={() => setOpen(true)}
               onChange={(e) => {
                 setQ(e.target.value);
@@ -2193,22 +2227,49 @@ function PaymentHistoryModal({
 
 // ── Goods arrived without a PO ────────────────────────────────────────────────
 
+/** What "Read from bill" found out about who sent the bill (from its GSTIN). */
+type SupplierIssue =
+  | { kind: 'not_found'; gstin: string }
+  | { kind: 'different'; chosen: string; bill: string }
+  | { kind: 'unverified' };
+
 interface DirectLine {
   _id: number;
   product: ProductRow;
   qty: string; rate: string; gst: string; mrp: string; hsn: string; batch: string; expiry: string;
   toShop: boolean; // false = godown (default)
+  billText?: string; // the line as printed on the bill, when it was read from the bill
+  check?: boolean; // read from the bill but not certain: shown yellow
+  problems?: BillProblem[];
+  disc: string; // discount % on the bill ('' = none)
 }
 
-/** Line value the same way the server works it out (_calc_line): qty × rate, + GST, each to the paisa. */
-function directLineValue(l: DirectLine): number {
-  const r2 = (n: number) => Math.round(n * 100) / 100;
-  const gross = r2((parseFloat(l.qty) || 0) * (parseFloat(l.rate) || 0));
-  return gross + r2((gross * (parseFloat(l.gst) || 0)) / 100);
+/** Taxable = qty × rate − discount, GST ₹, total: exactly as the server works them out (utils/purchaseLine). */
+function directLineAmounts(l: DirectLine): LineAmounts {
+  return lineAmounts(l.qty, l.rate, l.disc, l.gst);
+}
+
+function billProductRow(p: BillProduct): ProductRow {
+  return { id: p.id, name: p.name, sku: p.sku, price: p.price, selling: p.selling, tax_rate: p.tax_rate };
+}
+
+/** A form line filled from a line read from the bill; the bill's values win over the product's. */
+function lineFromBill(p: ProductRow, b: BillLine): DirectLine {
+  const text = (v: number | string | null) => (v == null ? '' : String(v));
+  return {
+    _id: Date.now() + Math.random(), product: p,
+    qty: text(b.qty) || '1',
+    rate: b.unit_price != null ? String(b.unit_price) : text(p.price),
+    disc: b.discount_percent ? String(b.discount_percent) : '',
+    gst: b.tax_rate != null ? String(b.tax_rate) : String(p.tax_rate ?? 0),
+    mrp: text(b.mrp), hsn: b.hsn_code ?? '', batch: b.batch_number ?? '', expiry: b.expiry_date ?? '',
+    toShop: false, billText: b.description, check: b.status !== 'matched', problems: b.problems,
+  };
 }
 
 /** The supplier's bill, entered once: PO + goods receipt + invoice are made together on the server. */
-function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
+function DirectPurchaseModal({ editing, suppliers, stores, onClose, onSaved }: {
+  editing?: PurchaseOrderOut | null; // a saved direct purchase to correct
   suppliers: SupplierOut[];
   stores: StoreOut[];
   onClose: () => void;
@@ -2224,15 +2285,49 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
   const [other, setOther] = useState('');
   const [billTotal, setBillTotal] = useState('');
   const [reason, setReason] = useState('');
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]); // one PDF, or photos of the bill top to bottom
+  const [oldFileName, setOldFileName] = useState<string | null>(null); // correcting: the bill already saved
   const [lines, setLines] = useState<DirectLine[]>([]);
   const [godownOn, setGodownOn] = useState(false);
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [toReview, setToReview] = useState<number[] | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readWarnings, setReadWarnings] = useState<BillWarning[]>([]);
+  const [readTotals, setReadTotals] = useState<{ lines: string; bill: string }>({ lines: '', bill: '' });
+  const [unmatched, setUnmatched] = useState<BillLine[]>([]); // bill lines still waiting for a product
+  // The unmatched bill line whose inline "add new product" form or product search is open (one at a time).
+  const [rowOpen, setRowOpen] = useState<{ line: BillLine; mode: 'add' | 'search' } | null>(null);
+  const [notice, setNotice] = useState(''); // "added / matched": green, until the next action
+  const [changeFor, setChangeFor] = useState<number | null>(null); // "Change product": the next pick replaces this line's product
+  const [supplierIssue, setSupplierIssue] = useState<SupplierIssue | null>(null); // what "Read from bill" found about the supplier
+  const [billSupplier, setBillSupplier] = useState<{ id: number; name: string } | null>(null); // the saved supplier the bill's GSTIN belongs to
 
   useEffect(() => { getSettings().then((s) => setGodownOn(s.godown_enabled)).catch(() => {}); }, []);
+
+  // Correcting a saved bill: its values back in the form.
+  useEffect(() => {
+    if (!editing) return;
+    purchaseApi.getDirect(editing.id).then(({ data }) => {
+      setSupplierId(data.supplier_id);
+      setStoreId(data.store_id);
+      setInvoiceNo(data.invoice_number);
+      setInvoiceDate(data.invoice_date);
+      setDueDate(data.due_date ?? '');
+      setOther(data.other_charges ? String(data.other_charges) : '');
+      setBillTotal(String(data.grand_total));
+      setReason(data.difference_reason ?? '');
+      setOldFileName(data.bill_file_name);
+      setLines(data.items.map((it) => ({
+        _id: Date.now() + Math.random(), product: billProductRow(it.product),
+        qty: String(it.qty), rate: String(it.unit_price),
+        disc: it.discount_percent ? String(it.discount_percent) : '', gst: String(it.tax_rate),
+        mrp: it.mrp != null ? String(it.mrp) : '', hsn: it.hsn_code ?? '',
+        batch: it.batch_number ?? '', expiry: it.expiry_date ?? '', toShop: false,
+      })));
+    }).catch((e) => setErr(getErrorMessage(e)));
+  }, [editing]);
 
   function addLine(p: ProductRow) {
     if (lines.some((l) => l.product.id === p.id)) {
@@ -2242,7 +2337,7 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
     setErr('');
     setLines((cur) => [...cur, {
       _id: Date.now() + Math.random(), product: p, qty: '1',
-      rate: p.price != null ? String(p.price) : '', gst: String(p.tax_rate ?? 0),
+      rate: p.price != null ? String(p.price) : '', disc: '', gst: String(p.tax_rate ?? 0),
       mrp: '', hsn: '', batch: '', expiry: '', toShop: false,
     }]);
   }
@@ -2251,31 +2346,129 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
     setLines((cur) => cur.map((l) => (l._id === id ? { ...l, ...patch } : l)));
   }
 
-  const goods = lines.reduce((sum, l) => sum + directLineValue(l), 0);
-  const expected = goods + (parseFloat(other) || 0);
+  /** "Read from bill": the Main PC reads the chosen file and the form is filled. Nothing is saved yet. */
+  async function readBill() {
+    if (files.length === 0 || storeId === '') return;
+    setReading(true);
+    setErr('');
+    try {
+      const { data } = await purchaseApi.extractBill(files, storeId, supplierId || undefined);
+
+      // Who sent the bill: from the GSTIN printed on it.
+      if (data.supplier_check === 'not_found') {
+        setBillSupplier(null);
+        setSupplierIssue({ kind: 'not_found', gstin: data.gstin ?? '' });
+        return; // nothing is filled: the supplier must be added first
+      }
+      const otherSupplier = data.supplier_check === 'different';
+      if (otherSupplier) {
+        const chosen = suppliers.find((s) => s.id === supplierId)?.company_name ?? '';
+        setSupplierIssue({ kind: 'different', chosen, bill: data.supplier_name ?? '' });
+        setLines([]); // lines already entered were for the other supplier
+        setUnmatched([]);
+        setRowOpen(null);
+        setChangeFor(null);
+      } else {
+        setSupplierIssue(data.supplier_check === 'unverified' ? { kind: 'unverified' } : null);
+      }
+      if (data.supplier_id && data.supplier_check !== 'unverified') {
+        setSupplierId(data.supplier_id);
+        setBillSupplier({ id: data.supplier_id, name: data.supplier_name ?? '' });
+      } else {
+        setBillSupplier(null);
+      }
+
+      if (data.invoice_number) setInvoiceNo(data.invoice_number);
+      if (data.invoice_date) setInvoiceDate(data.invoice_date);
+      if (data.grand_total != null) setBillTotal(String(data.grand_total));
+      const taken = new Set(otherSupplier ? [] : lines.map((l) => l.product.id));
+      const added: DirectLine[] = [];
+      const waiting: BillLine[] = [];
+      for (const b of data.lines) {
+        if (b.product && b.status !== 'not_found' && !taken.has(b.product.id)) {
+          taken.add(b.product.id);
+          added.push(lineFromBill(billProductRow(b.product), b));
+        } else {
+          waiting.push(b);
+        }
+      }
+      setLines((cur) => [...cur, ...added]);
+      setUnmatched(waiting);
+      setReadWarnings(data.warnings);
+      setReadTotals({ lines: (data.lines_total ?? 0).toFixed(2), bill: (data.grand_total ?? 0).toFixed(2) });
+    } catch (e) {
+      setErr(getErrorMessage(e));
+    } finally {
+      setReading(false);
+    }
+  }
+
+  /** The product for a bill line that wasn't matched: a suggestion clicked, picked in its search, or just created.
+   * The line keeps the bill's qty, rate, GST…; saving the bill remembers the bill's name for this product. */
+  function takeBillLine(b: BillLine, p: ProductRow, created = false) {
+    if (lines.some((l) => l.product.id === p.id)) {
+      setErr(t('purchases.direct.twice', { name: p.name }));
+      setNotice('');
+      return;
+    }
+    setErr('');
+    setLines((cur) => [...cur, lineFromBill(p, b)]);
+    setUnmatched((cur) => cur.filter((x) => x !== b));
+    setRowOpen(null);
+    setNotice(t(created ? 'purchases.direct.productCreated' : 'purchases.direct.productMatched',
+      { name: p.name, bill: b.description }));
+  }
+
+  function pickProduct(p: ProductRow) {
+    if (changeFor != null) { // "Change product" on a line: the product picked replaces that line's product
+      if (lines.some((l) => l.product.id === p.id && l._id !== changeFor)) {
+        setErr(t('purchases.direct.twice', { name: p.name }));
+        return;
+      }
+      setErr('');
+      setLine(changeFor, { product: p, check: false });
+      setChangeFor(null);
+      return;
+    }
+    addLine(p);
+  }
+
+  // Bill totals, added up in paise so they don't drift (0.1 + 0.2 ≠ 0.3 in floats).
+  const amounts = lines.map(directLineAmounts);
+  const sumPaise = (pick: (a: LineAmounts) => number) => amounts.reduce((s, a) => s + Math.round(pick(a) * 100), 0) / 100;
+  const totalTaxable = sumPaise((a) => a.taxable);
+  const totalGst = sumPaise((a) => a.gst);
+  const goods = sumPaise((a) => a.total);
+  const expected = Math.round((goods + (parseFloat(other) || 0)) * 100) / 100;
   const total = parseFloat(billTotal);
   const differs = Number.isFinite(total) && Math.abs(total - expected) > 1; // server allows ₹1 round-off
-  const ready = supplierId > 0 && storeId !== '' && invoiceNo.trim() !== '' && file !== null && lines.length > 0
+  const wrongSupplier = billSupplier != null && supplierId !== billSupplier.id; // the bill says another supplier
+  const ready = supplierId > 0 && storeId !== '' && invoiceNo.trim() !== '' && (files.length > 0 || editing != null)
+    && lines.length > 0 && !wrongSupplier && supplierIssue?.kind !== 'not_found'
     && lines.every((l) => parseFloat(l.qty) > 0 && l.rate.trim() !== '')
     && Number.isFinite(total) && total > 0 && (!differs || reason.trim() !== '');
 
   async function save() {
     // `ready` already checked storeId !== '', so TypeScript knows storeId is a number past this line.
-    if (!ready || !file) return;
+    if (!ready) return;
     setSaving(true);
     setErr('');
     try {
-      await purchaseApi.createDirect({
+      const payload = {
         supplier_id: supplierId, store_id: storeId, invoice_number: invoiceNo.trim(), invoice_date: invoiceDate,
         due_date: dueDate || null, other_charges: parseFloat(other) || 0, grand_total: total,
         difference_reason: differs ? reason.trim() : null,
         items: lines.map((l) => ({
           product_id: l.product.id, qty: parseFloat(l.qty), unit_price: parseFloat(l.rate),
+          discount_percent: parseFloat(l.disc) || 0,
           tax_rate: parseFloat(l.gst) || 0, mrp: l.mrp ? parseFloat(l.mrp) : null,
           hsn_code: l.hsn.trim() || null, batch_number: l.batch.trim() || null,
           expiry_date: l.expiry || null, to_shop: godownOn && l.toShop,
+          bill_description: l.billText ?? null,
         })),
-      }, file);
+      };
+      if (editing) await purchaseApi.updateDirect(editing.id, payload, files);
+      else await purchaseApi.createDirect(payload, files);
       // New costs: offer to fix selling prices that no longer give the profit wanted.
       const review = await getPriceReview(lines.map((l) => l.product.id)).catch(() => null);
       if (review && review.items.length > 0) {
@@ -2313,18 +2506,25 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
     <div className="modal-overlay">
       <div className="modal-box" style={{ maxWidth: 1100, width: '96%', maxHeight: '92vh', overflowY: 'auto' }}>
         <div className="modal-header">
-          <h3 className="modal-title" style={{ margin: 0 }}>{t('purchases.direct.title')}</h3>
+          <h3 className="modal-title" style={{ margin: 0 }}>
+            {editing ? t('purchases.direct.editTitle', { po: editing.po_number }) : t('purchases.direct.title')}
+          </h3>
           <button className="modal-close-btn" onClick={onClose}><IconX size={18} /></button>
         </div>
-        <p className="hint-text">{t('purchases.direct.hint')}</p>
+        <p className="hint-text">{t(editing ? 'purchases.direct.editHint' : 'purchases.direct.hint')}</p>
         {err && <div className="page-error">{err}</div>}
 
         <div className="form-row form-row-3">
           <label className="field-label">{t('purchases.fieldSupplier')}
-            <select className="field-input" value={supplierId} onChange={(e) => { setSupplierId(Number(e.target.value)); setLines([]); }}>
+            <select className="field-input" value={supplierId} onChange={(e) => { setSupplierId(Number(e.target.value)); setLines([]); setUnmatched([]); setRowOpen(null); }}>
               <option value={0}>—</option>
               {suppliers.map((s) => <option key={s.id} value={s.id}>{s.company_name}</option>)}
             </select>
+            {wrongSupplier && (
+              <span className="hint-text" style={{ color: 'var(--danger)' }}>
+                {t('purchases.direct.billIsFrom', { name: billSupplier?.name })}
+              </span>
+            )}
           </label>
           <label className="field-label">{t('purchases.fieldStore')}
             <select className="field-input" value={storeId} onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : '')}>
@@ -2333,10 +2533,65 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
             </select>
           </label>
           <label className="field-label">{t('purchases.direct.billFile')}
-            <input className="field-input" type="file" accept="application/pdf,image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <input className="field-input" type="file" accept="application/pdf,image/*" multiple
+              onChange={(e) => {
+                // Copy the chosen files NOW: clearing the input below empties e.target.files, and the
+                // setFiles updater runs later.
+                const picked = Array.from(e.target.files ?? []);
+                setFiles((cur) => [...cur, ...picked]);
+                e.target.value = ''; // so the same file can be chosen again
+              }} />
+            {editing && files.length === 0 && oldFileName && (
+              <span className="hint-text">{t('purchases.direct.keepOldFile', { name: oldFileName })}</span>
+            )}
           </label>
         </div>
+        {files.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+            {files.map((f, i) => (
+              <span key={`${i}-${f.name}`} className="status-badge badge-info">
+                {i + 1}. {f.name}
+                <button type="button" className="btn-icon" title={t('purchases.direct.removeFile')}
+                  onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))}>
+                  <IconX size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {files.length > 0 && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+            <button type="button" className="btn-secondary" disabled={reading || storeId === ''} onClick={readBill}>
+              {reading ? t('purchases.direct.reading') : t('purchases.direct.readBill')}
+            </button>
+            <span className="hint-text">
+              {storeId === '' ? t('purchases.direct.readNeedsStore') : t('purchases.direct.readHint')}
+            </span>
+          </div>
+        )}
+        {supplierIssue?.kind === 'not_found' && (
+          <div className="page-error">
+            <strong>{t('purchases.direct.supplierNotFound', { gstin: supplierIssue.gstin })}</strong>{' '}
+            <button type="button" className="btn-sm" onClick={() => navigate('/admin/suppliers')}>
+              + {t('purchases.direct.addSupplier')}
+            </button>
+          </div>
+        )}
+        {supplierIssue?.kind === 'different' && (
+          <div className="page-error" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn-text)' }}>
+            {t('purchases.direct.supplierDifferent', { chosen: supplierIssue.chosen, bill: supplierIssue.bill })}
+          </div>
+        )}
+        {supplierIssue?.kind === 'unverified' && (
+          <div className="page-error" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn-text)' }}>
+            {t('purchases.direct.supplierUnverified')}
+          </div>
+        )}
+        {readWarnings.length > 0 && (
+          <div className="page-error" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-border)', color: 'var(--warn-text)' }}>
+            {readWarnings.map((w) => <div key={w}>{t(`purchases.direct.warning.${w}`, readTotals)}</div>)}
+          </div>
+        )}
         <div className="form-row form-row-3">
           <label className="field-label">{t('purchases.direct.invoiceNo')}
             <input className="field-input" value={invoiceNo} maxLength={100} onChange={(e) => setInvoiceNo(e.target.value)} />
@@ -2349,7 +2604,78 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
           </label>
         </div>
 
-        <ProductSearch onSelect={addLine} storeId={storeId} supplierId={supplierId || undefined} />
+        {notice && (
+          <div className="page-error" role="status"
+            style={{ background: 'var(--ok-bg)', border: '1px solid var(--ok-border)', color: 'var(--ok-text)' }}>
+            ✓ {notice}
+          </div>
+        )}
+        {unmatched.length > 0 && (
+          <div style={{ marginBottom: 12, padding: 12, borderRadius: 8, background: 'var(--danger-bg)', border: '1px solid var(--danger-border)' }}>
+            <strong>{t('purchases.direct.unmatchedTitle', { count: unmatched.length })}</strong>
+            <div className="hint-text">{t('purchases.direct.unmatchedHint')}</div>
+            {unmatched.map((b, i) => {
+              const open = rowOpen?.line === b ? rowOpen.mode : null;
+              const toggle = (mode: 'add' | 'search') => {
+                setRowOpen(open === mode ? null : { line: b, mode });
+                setChangeFor(null);
+                setNotice('');
+              };
+              return (
+                <div key={`${i}-${b.description}`}
+                  style={{ padding: '10px 0', borderTop: i > 0 ? '1px solid var(--danger-border)' : undefined, marginTop: i > 0 ? 0 : 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                    <span style={{ minWidth: 240, flex: '1 1 240px' }}>
+                      <span className="status-badge badge-error" style={{ marginRight: 6 }}>{t('purchases.direct.notMatched')}</span>
+                      <strong>{b.description}</strong>
+                      {b.qty != null && <> · {b.qty} × ₹{b.unit_price ?? '?'}</>}
+                    </span>
+                    <button type="button" className={open === 'add' ? 'btn-sm btn-primary' : 'btn-sm'} onClick={() => toggle('add')}>
+                      <IconPlus size={12} /> {t('purchases.direct.addNewProduct')}
+                    </button>
+                    <button type="button" className={open === 'search' ? 'btn-sm btn-primary' : 'btn-sm'} onClick={() => toggle('search')}>
+                      {t('purchases.direct.searchExisting')}
+                    </button>
+                    <button type="button" className="btn-icon" title={t('purchases.direct.skipLine')}
+                      onClick={() => { setUnmatched((cur) => cur.filter((x) => x !== b)); if (open) setRowOpen(null); }}>
+                      <IconTrash size={14} />
+                    </button>
+                  </div>
+                  {b.candidates.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                      <span className="hint-text">{t('purchases.direct.suggested')}:</span>
+                      {b.candidates.map((c) => (
+                        <button key={c.id} type="button" className="btn-sm" onClick={() => takeBillLine(b, billProductRow(c))}>
+                          {c.name}{c.score != null ? ` (${c.score}%)` : ''}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {open && (
+                    <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: 'var(--surface)', border: '1px solid var(--border-strong)' }}>
+                      {open === 'add' ? (
+                        <NewProductForm inline initialName={b.description} supplierId={supplierId || undefined} storeId={storeId}
+                          onCreated={(p) => takeBillLine(b, p, true)} onCancel={() => setRowOpen(null)} />
+                      ) : (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <ProductSearch autoFocus storeId={storeId} supplierId={supplierId || undefined}
+                              onSelect={(p) => takeBillLine(b, p)} />
+                          </div>
+                          <button type="button" className="btn-secondary" style={{ marginTop: 22 }} onClick={() => setRowOpen(null)}>
+                            {t('common.cancel')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <ProductSearch onSelect={pickProduct} storeId={storeId} supplierId={supplierId || undefined} />
         {supplierId > 0 && (
           <button type="button" className="btn-sm" style={{ marginTop: -8, marginBottom: 12 }} onClick={() => setNewProductOpen(true)}>
             + {t('purchases.newProduct')}
@@ -2358,7 +2684,7 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
         {newProductOpen && (
           <NewProductModal supplierId={supplierId || undefined} storeId={storeId}
             onClose={() => setNewProductOpen(false)}
-            onCreated={(p) => { addLine(p); setNewProductOpen(false); }} />
+            onCreated={(p) => { pickProduct(p); setNewProductOpen(false); }} />
         )}
 
         {lines.length > 0 && (
@@ -2369,22 +2695,42 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
                   <th>{t('purchases.colProduct')}</th>
                   <th className="num">{t('purchases.receiveQty')}</th>
                   <th className="num">{t('purchases.billRate')}</th>
+                  <th className="num">{t('purchases.direct.colDisc')}</th>
                   <th className="num">{t('purchases.billGst')}</th>
                   <th className="num">MRP</th>
                   <th>HSN</th>
                   <th>Batch No.</th>
                   <th>{t('purchases.expiryDate')}</th>
                   {godownOn && <th>{t('purchases.direct.location')}</th>}
-                  <th className="num">{t('purchases.direct.value')}</th>
+                  <th className="num">{t('purchases.direct.colTaxable')}</th>
+                  <th className="num">{t('purchases.direct.colGstAmount')}</th>
+                  <th className="num">{t('purchases.direct.colAmount')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => (
-                  <tr key={l._id}>
-                    <td><strong>{l.product.name}</strong></td>
+                {lines.map((l, i) => (
+                  <tr key={l._id} style={l.check ? { background: 'var(--warn-bg)' } : undefined}>
+                    <td>
+                      <strong>{l.product.name}</strong>{' '}
+                      <button type="button" className="btn-sm"
+                        style={changeFor === l._id ? { outline: '2px solid var(--warn)' } : undefined}
+                        onClick={() => { setChangeFor(changeFor === l._id ? null : l._id); setRowOpen(null); }}>
+                        <IconEdit size={12} /> {changeFor === l._id ? t('purchases.direct.changingNow') : t('purchases.direct.changeProduct')}
+                      </button>
+                      {l.billText && <div className="hint-text">{t('purchases.direct.onBill')}: {l.billText}</div>}
+                      {l.problems?.map((p) => (
+                        <div key={p} className="hint-text" style={{ color: 'var(--warn-text)' }}>⚠ {t(`purchases.direct.problem.${p}`)}</div>
+                      ))}
+                      {l.check && (
+                        <button type="button" className="btn-sm" onClick={() => setLine(l._id, { check: false, problems: [] })}>
+                          ✓ {t('purchases.direct.looksRight')}
+                        </button>
+                      )}
+                    </td>
                     <td><input className="field-input" type="number" min="0" step="0.001" style={small} value={l.qty} onChange={(e) => setLine(l._id, { qty: e.target.value })} /></td>
                     <td><input className="field-input" type="number" min="0" step="0.01" style={small} value={l.rate} onChange={(e) => setLine(l._id, { rate: e.target.value })} /></td>
+                    <td><input className="field-input" type="number" min="0" max="100" step="0.01" style={{ ...small, width: 70 }} value={l.disc} placeholder="0" onChange={(e) => setLine(l._id, { disc: e.target.value })} /></td>
                     <td><input className="field-input" type="number" min="0" max="100" step="0.01" style={{ ...small, width: 70 }} value={l.gst} onChange={(e) => setLine(l._id, { gst: e.target.value })} /></td>
                     <td><input className="field-input" type="number" min="0" step="0.01" style={small} value={l.mrp} placeholder="—" onChange={(e) => setLine(l._id, { mrp: e.target.value })} /></td>
                     <td><input className="field-input" inputMode="numeric" maxLength={8} style={small} value={l.hsn} placeholder="—" onChange={(e) => setLine(l._id, { hsn: e.target.value.replace(/\D/g, '') })} /></td>
@@ -2399,7 +2745,9 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
                         </select>
                       </td>
                     )}
-                    <td className="num">₹{directLineValue(l).toFixed(2)}</td>
+                    <td className="num">₹{amounts[i].taxable.toFixed(2)}</td>
+                    <td className="num">₹{amounts[i].gst.toFixed(2)}</td>
+                    <td className="num"><strong>₹{amounts[i].total.toFixed(2)}</strong></td>
                     <td>
                       <button type="button" className="btn-icon" title={t('purchases.direct.removeLine')}
                         onClick={() => setLines((cur) => cur.filter((x) => x._id !== l._id))}>
@@ -2410,6 +2758,14 @@ function DirectPurchaseModal({ suppliers, stores, onClose, onSaved }: {
                 ))}
               </tbody>
             </table>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 24, padding: '10px 12px' }}>
+              <span>{t('purchases.direct.totalTaxable')}: <strong>₹{totalTaxable.toFixed(2)}</strong></span>
+              <span>
+                {t('purchases.direct.totalGst')}: <strong>₹{totalGst.toFixed(2)}</strong>
+                <span className="hint-text"> ({t('purchases.direct.gstSplit', { half: (totalGst / 2).toFixed(2) })})</span>
+              </span>
+              <span>{t('purchases.direct.totalAmount')}: <strong>₹{goods.toFixed(2)}</strong></span>
+            </div>
           </div>
         )}
 
@@ -2780,6 +3136,15 @@ export function PurchasesPage() {
                   className="table-actions"
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {po.is_direct && po.status === 'received' && (
+                    <button
+                      className="btn-sm"
+                      title={t('purchases.direct.editButton')}
+                      onClick={() => { setSelected(po); setModal('direct'); }}
+                    >
+                      <IconEdit size={14} />
+                    </button>
+                  )}
                   {po.status === 'draft' && (
                     <button
                       className="btn-sm"
@@ -2863,10 +3228,11 @@ export function PurchasesPage() {
 
       {modal === 'direct' && (
         <DirectPurchaseModal
+          editing={selected}
           suppliers={suppliers}
           stores={stores}
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); load(page, search, statusFilter, paymentFilter); loadDash(); }}
+          onClose={() => { setModal(null); setSelected(null); }}
+          onSaved={() => { setModal(null); setSelected(null); load(page, search, statusFilter, paymentFilter); loadDash(); }}
         />
       )}
 

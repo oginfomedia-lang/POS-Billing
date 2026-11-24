@@ -23,3 +23,16 @@ paramiko>=3.4,<4
 indic-transliteration>=2.3,<3
 # Encrypts payment / WhatsApp secrets saved in the app (Settings → Integrations).
 cryptography>=42,<47
+# Reading supplier bills on Direct purchase (app/ocr). RapidOCR = offline neural OCR for photos and scans (its
+# models ship inside the package). Tesseract is the fallback: a separate program (tesseract.exe), bundled with the
+# installer. pdfplumber = text of digital PDFs, pypdfium2 = scanned PDF pages to images,
+# OpenCV = cleaning photos, rapidfuzz = matching bill names to products and misread GSTINs to suppliers.
+rapidocr>=3.10,<4
+onnxruntime>=1.20,<2
+pytesseract>=0.3.13,<0.4
+pdfplumber>=0.11,<0.12
+pypdfium2>=4.30,<6
+opencv-python-headless>=4.10,<6
+numpy>=1.26,<3
+Pillow>=10,<14
+rapidfuzz>=3.9,<4

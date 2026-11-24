@@ -16,7 +16,7 @@ from app.schemas.purchase_schemas import (
     PurchaseOrderCreate,
     PurchaseOrderUpdate,
 )
-from app.services import direct_purchase_service, po_pdf, po_sending_service, purchase_service
+from app.services import bill_ocr_service, direct_purchase_service, po_pdf, po_sending_service, purchase_service
 from app.utils.permissions import has_permission, require_permission
 from app.utils.store_scope import require_store_access
 
@@ -80,11 +80,58 @@ def create_direct_purchase():
         raise BadRequestError("Invalid purchase data.") from None
     data = DirectPurchaseCreate.model_validate(payload)
     require_store_access(actor, data.store_id)
-    po, invoice = direct_purchase_service.create_direct_purchase(data, request.files.get("file"), actor)
+    po, invoice = direct_purchase_service.create_direct_purchase(data, bill_ocr_service.one_bill_file(request.files.getlist("file")), actor)
     return jsonify({
         "purchase_order": purchase_service._enrich_po(po).model_dump(mode="json"),
         "invoice": invoice.model_dump(mode="json"),
     }), 201
+
+
+@purchase_bp.post("/purchases/direct/extract")
+@require_permission("purchases.receive")
+def extract_direct_purchase_bill():
+    """Reads the supplier's bill and returns a draft to check. Saves nothing.
+    multipart/form-data: 'file' = the bill (PDF or photo), 'store_id', 'supplier_id' (optional: found from the GSTIN)."""
+    actor = _current_user()
+    store_id = request.form.get("store_id", type=int)
+    if not store_id:
+        raise BadRequestError("Choose the store first.")
+    require_store_access(actor, store_id)
+    draft = bill_ocr_service.extract_bill(
+        request.files.getlist("file"), store_id, request.form.get("supplier_id", type=int)
+    )
+    return jsonify(draft.model_dump(mode="json")), 200
+
+
+@purchase_bp.get("/purchases/<int:po_id>/direct")
+@require_permission("purchases.receive")
+def get_direct_purchase(po_id: int):
+    """A saved direct purchase, to correct it in the same form."""
+    draft = direct_purchase_service.get_for_edit(po_id)
+    require_store_access(_current_user(), draft.store_id)
+    return jsonify(draft.model_dump(mode="json")), 200
+
+
+@purchase_bp.put("/purchases/<int:po_id>/direct")
+@require_permission("purchases.receive")
+def update_direct_purchase(po_id: int):
+    """Corrects a saved direct purchase. Same form data as POST /purchases/direct; no 'file' = keep the saved bill."""
+    actor = _current_user()
+    if not has_permission(actor.role, "invoices.create"):
+        raise PermissionDeniedError("You can't enter supplier invoices.")
+    try:
+        payload = json.loads(request.form.get("data") or "{}")
+    except ValueError:
+        raise BadRequestError("Invalid purchase data.") from None
+    data = DirectPurchaseCreate.model_validate(payload)
+    require_store_access(actor, purchase_service.get_purchase_order(po_id).store_id)
+    require_store_access(actor, data.store_id)
+    po, invoice = direct_purchase_service.update_direct_purchase(
+        po_id, data, bill_ocr_service.one_bill_file(request.files.getlist("file")), actor)
+    return jsonify({
+        "purchase_order": purchase_service._enrich_po(po).model_dump(mode="json"),
+        "invoice": invoice.model_dump(mode="json"),
+    }), 200
 
 
 @purchase_bp.get("/purchases/<int:po_id>")

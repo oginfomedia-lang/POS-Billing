@@ -20,6 +20,10 @@ extraResources:
     to: backend/winsw/LiteRetailerServer.exe
   - from: build/winsw/LiteRetailerServer.xml
     to: backend/winsw/LiteRetailerServer.xml
+  # Tesseract OCR (reads supplier bills on Direct purchase) -> resources\tesseract\tesseract.exe + tessdata\
+  # Copied from C:\Program Files\Tesseract-OCR on the build PC (see the bill-reading guide).
+  - from: build/vendor/tesseract
+    to: tesseract
 # Auto-update (documentation/auto-update.md): makes release\latest.yml (upload it with the installer and its
 # .blockmap) and resources\app-update.yml. The URL is a placeholder: each PC's app reads updates from
 # <apiUrl in counter.json>/updates on the Main PC (electron/updater.ts), which copies them from UPDATE_FEED_URL.

@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify
 from sqlalchemy import text
 
 from app.extensions import db
+from app.ocr import engine
 
 health_bp = Blueprint("health", __name__)
 
@@ -22,6 +23,7 @@ def health():
     body = {
         "status": "ok" if database == "up" else "degraded",
         "database": database,
+        "bill_reading": "up" if engine.is_available() else "not_installed",  # RapidOCR/Tesseract, Direct purchase
         "server_time": datetime.now(timezone.utc).isoformat(),
     }
     return jsonify(body), 200 if database == "up" else 503

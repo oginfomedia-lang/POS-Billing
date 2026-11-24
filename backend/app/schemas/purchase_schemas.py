@@ -275,12 +275,15 @@ class DirectPurchaseLine(BaseModel):
     product_id: int
     qty: Decimal = Field(..., gt=0, max_digits=12, decimal_places=3)
     unit_price: Decimal = Field(..., ge=0, max_digits=12, decimal_places=2)  # rate on the bill, before GST
+    discount_percent: Decimal = Field(Decimal("0"), ge=0, le=100, max_digits=5, decimal_places=2)
     tax_rate: Decimal = Field(Decimal("0"), ge=0, le=100, max_digits=5, decimal_places=2)
     mrp: Decimal | None = Field(None, gt=0, max_digits=12, decimal_places=2)
     hsn_code: str | None = Field(None, max_length=8)
     batch_number: str | None = Field(None, max_length=100)
     expiry_date: date | None = None
     to_shop: bool = False  # False = into the godown (the default when the godown is on); True = straight on the shelf
+    # The line's text as printed on the bill, when it was read from the bill: remembered for this supplier.
+    bill_description: str | None = Field(None, max_length=300)
 
     _hsn = field_validator("hsn_code", mode="before")(classmethod(lambda cls, v: _optional_hsn(v)))
 
@@ -304,3 +307,91 @@ class DirectPurchaseCreate(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("A product is listed twice. Put its total quantity on one line.")
         return self
+
+
+# ── Reading the supplier's bill (POST /purchases/direct/extract) ───────────────
+
+class BillProductOut(BaseModel):
+    """A product for a bill line; same fields as a row of the product search on the Purchases page."""
+    id: int
+    name: str
+    sku: str | None
+    price: float | None  # last purchase cost
+    selling: float | None  # selling price, before GST
+    tax_rate: float
+    score: int | None = None  # how close the name is (0-100); None when matched another way
+
+
+class DirectPurchaseEditLine(BaseModel):
+    product: BillProductOut
+    qty: float
+    unit_price: float
+    discount_percent: float
+    tax_rate: float
+    mrp: float | None
+    hsn_code: str | None
+    batch_number: str | None
+    expiry_date: date | None
+
+
+class DirectPurchaseEditOut(BaseModel):
+    """A saved direct purchase, back in the form to correct it (GET /purchases/<id>/direct)."""
+    po_id: int
+    po_number: str
+    supplier_id: int
+    store_id: int
+    invoice_number: str
+    invoice_date: date
+    due_date: date | None
+    other_charges: float
+    grand_total: float
+    difference_reason: str | None
+    bill_file_name: str | None
+    items: list[DirectPurchaseEditLine]
+
+
+class BillLineOut(BaseModel):
+    description: str  # as printed on the bill
+    hsn_code: str | None
+    qty: float | None  # free units included
+    free_qty: float | None
+    # What goes in "Rate on bill" and "Disc %": qty × unit_price − discount_percent gives the bill's taxable value.
+    # The bill's own rate and %; a ₹ discount that no 2-decimal % gives exactly, or free units, are taken into the rate.
+    unit_price: float | None
+    bill_rate: float | None  # the rate printed on the bill
+    discount: float | None  # as printed: a % or a ₹ amount
+    discount_percent: float
+    tax_rate: float | None
+    mrp: float | None
+    batch_number: str | None
+    expiry_date: date | None
+    amount: float | None
+    status: Literal["matched", "check", "not_found"]
+    product: BillProductOut | None
+    match_source: str | None  # alias / supplier_code / barcode / name
+    candidates: list[BillProductOut]
+    # rate_from_amount, qty_from_amount, math_mismatch, amount_missing, bad_gst, hard_to_read, mrp_below_rate
+    problems: list[str]
+    confidence: int  # OCR confidence 0-100 (100 for a digital PDF)
+
+
+class BillExtractOut(BaseModel):
+    source: Literal["pdf_text", "ocr"]
+    supplier_id: int | None
+    supplier_name: str | None
+    gstin: str | None
+    # Who sent the bill, from its GSTIN: matched, different (another saved supplier than the one chosen),
+    # not_found (no saved supplier has that GSTIN), unverified (no GSTIN could be read).
+    supplier_check: Literal["matched", "different", "not_found", "unverified"]
+    invoice_number: str | None
+    invoice_date: date | None
+    taxable_total: float | None
+    cgst: float | None
+    sgst: float | None
+    igst: float | None
+    round_off: float | None
+    grand_total: float | None
+    lines_total: float | None  # the lines' amounts added up
+    lines: list[BillLineOut]
+    # no_lines, lines_total_mismatch, bill_totals_mismatch, pages_skipped, used_template
+    warnings: list[str]

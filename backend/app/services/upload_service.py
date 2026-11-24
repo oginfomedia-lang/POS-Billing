@@ -1,6 +1,7 @@
 """Secure file upload and retrieval for supplier documents."""
 from __future__ import annotations
 
+import io
 import mimetypes
 import re
 import uuid
@@ -78,6 +79,15 @@ def store_file(file: FileStorage | None) -> StoredFile:
     stored = f"{uuid.uuid4().hex}{ext}"
     (_upload_dir() / stored).write_bytes(content)
     return StoredFile(_safe_filename(file.filename), stored, len(content), mime)
+
+
+def open_copy(doc: SupplierDocument) -> FileStorage:
+    """A saved document as if it was just uploaded, to attach it again to another record."""
+    path = _upload_dir() / doc.stored_filename
+    if not path.is_file():
+        raise NotFoundError("The saved bill file is missing. Choose the bill again.")
+    return FileStorage(stream=io.BytesIO(path.read_bytes()), filename=doc.original_filename,
+                       content_type=doc.mime_type)
 
 
 def discard_file(stored: StoredFile) -> None:
