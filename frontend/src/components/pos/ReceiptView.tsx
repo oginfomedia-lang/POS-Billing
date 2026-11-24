@@ -4,15 +4,14 @@ import { useTranslation } from 'react-i18next';
 import type { ReceiptOut } from '../../types/sale';
 import { VENDOR_CREDIT } from '../../utils/brand';
 import { formatDateTime } from '../../utils/format';
-import { formatRupees, paiseToString, toPaise } from '../../utils/money';
+import { formatRupees, paiseToString } from '../../utils/money';
+import { receiptWithGst } from './receiptGst';
 
 export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
   const { t, i18n } = useTranslation();
-  // Item offers + manual discounts (everything except the bill offer).
-  const itemSavingsPaise =
-    toPaise(receipt.discount_amount) - toPaise(receipt.bill_offer_discount) - toPaise(receipt.reward_discount);
-  // Prices are before GST; the printed subtotal includes GST so that subtotal − savings = total.
-  const subtotalWithGstPaise = toPaise(receipt.subtotal) + toPaise(receipt.tax_amount);
+  // Prices are saved before GST; every rate, amount and saving is printed with GST, so subtotal − savings = total.
+  const gst = receiptWithGst(receipt);
+  const money = (paise: number) => paiseToString(paise);
 
   return (
     <article className="receipt">
@@ -46,8 +45,8 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
               <tr>
                 <td>{n + 1}. {i.product_name}</td>
                 <td className="num">{i.is_variable_weight ? `${i.qty} ${i.uom}` : i.qty}</td>
-                <td className="num">{i.unit_price}</td>
-                <td className="num">{i.line_total}</td>
+                <td className="num">{money(gst.lines[n].rate)}</td>
+                <td className="num">{money(gst.lines[n].amount)}</td>
               </tr>
               {(i.hsn_code || i.mrp) && (
                 <tr className="receipt-small">
@@ -62,13 +61,13 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
               {Number(i.offer_discount) > 0 && (
                 <tr>
                   <td colSpan={3}>&nbsp;&nbsp;{i.offer_name ?? t('receipt.offer')}</td>
-                  <td className="num">-{i.offer_discount}</td>
+                  <td className="num">-{money(gst.lines[n].offer)}</td>
                 </tr>
               )}
               {Number(i.manual_discount) > 0 && (
                 <tr>
                   <td colSpan={3}>&nbsp;&nbsp;{t('receipt.discount')}{i.manual_discount_reason ? ` (${i.manual_discount_reason})` : ''}</td>
-                  <td className="num">-{i.manual_discount}</td>
+                  <td className="num">-{money(gst.lines[n].manual)}</td>
                 </tr>
               )}
             </Fragment>
@@ -85,15 +84,15 @@ export function ReceiptView({ receipt }: { receipt: ReceiptOut }) {
       </div>
       <hr />
 
-      <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(paiseToString(subtotalWithGstPaise))}</span></div>
-      {itemSavingsPaise > 0 && (
-        <div className="receipt-row"><span>{t('receipt.itemSavings')}</span><span>− {formatRupees(paiseToString(itemSavingsPaise))}</span></div>
+      <div className="receipt-row"><span>{t('receipt.subtotal')}</span><span>{formatRupees(money(gst.subtotal))}</span></div>
+      {gst.itemSavings > 0 && (
+        <div className="receipt-row"><span>{t('receipt.itemSavings')}</span><span>− {formatRupees(money(gst.itemSavings))}</span></div>
       )}
       {Number(receipt.bill_offer_discount) > 0 && (
-        <div className="receipt-row"><span>{receipt.bill_offer_name ?? t('receipt.billOffer')}</span><span>− {formatRupees(receipt.bill_offer_discount)}</span></div>
+        <div className="receipt-row"><span>{receipt.bill_offer_name ?? t('receipt.billOffer')}</span><span>− {formatRupees(money(gst.billOffer))}</span></div>
       )}
       {Number(receipt.reward_discount) > 0 && (
-        <div className="receipt-row"><span>{t('receipt.pointsUsed', { points: receipt.points_redeemed })}</span><span>− {formatRupees(receipt.reward_discount)}</span></div>
+        <div className="receipt-row"><span>{t('receipt.pointsUsed', { points: receipt.points_redeemed })}</span><span>− {formatRupees(money(gst.reward))}</span></div>
       )}
       <div className="receipt-row receipt-total"><span>{t('receipt.total')}</span><span>{formatRupees(receipt.total)}</span></div>
       {Number(receipt.total_saving) > 0 && (

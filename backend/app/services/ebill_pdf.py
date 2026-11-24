@@ -5,6 +5,9 @@ Devanagari fallback font so Marathi store/product names render correctly.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
+
 from fpdf import FPDF
 
 from app.schemas.sale_schemas import ReceiptOut
@@ -20,6 +23,57 @@ METHODS = {"cash": "Cash", "card": "Card", "upi": "UPI", "split": "Split"}
 
 def rs(value) -> str:
     return inr(value, keep_paise=True)
+
+
+_PAISA = Decimal("0.01")
+
+
+def add_gst(amount, rate) -> Decimal:
+    """amount × (1 + GST %), rounded half up to the paisa, as GST is rounded on the bill."""
+    amount = Decimal(str(amount or 0))
+    return (amount * (1 + Decimal(str(rate or 0)) / 100)).quantize(_PAISA, ROUND_HALF_UP)
+
+
+@dataclass
+class GstLine:
+    rate: Decimal  # per unit, incl. GST
+    amount: Decimal  # qty × rate before discounts, incl. GST
+    offer: Decimal
+    manual: Decimal
+
+
+@dataclass
+class ReceiptGst:
+    lines: list[GstLine] = field(default_factory=list)
+    subtotal: Decimal = Decimal("0")
+    item_savings: Decimal = Decimal("0")
+    bill_offer: Decimal = Decimal("0")
+    reward: Decimal = Decimal("0")
+
+
+def with_gst(r: ReceiptOut) -> ReceiptGst:
+    """Prices are saved before GST; the bill prints every rate, amount and saving with GST so the lines add up to
+    the total paid. Same maths as frontend/src/components/pos/receiptGst.ts."""
+    out = ReceiptGst()
+    for i in r.items:
+        bill_offer = max(Decimal("0"), i.discount_amount - i.offer_discount - i.manual_discount - i.reward_discount)
+        line = GstLine(add_gst(i.unit_price, i.tax_rate), add_gst(i.line_total, i.tax_rate),
+                       add_gst(i.offer_discount, i.tax_rate), add_gst(i.manual_discount, i.tax_rate))
+        out.lines.append(line)
+        out.subtotal += line.amount
+        out.item_savings += line.offer + line.manual
+        out.bill_offer += add_gst(bill_offer, i.tax_rate)
+        out.reward += add_gst(i.reward_discount, i.tax_rate)
+    # Rounding each line can leave the savings a paisa or two off: the biggest saving takes the difference.
+    diff = out.subtotal - out.item_savings - out.bill_offer - out.reward - r.total
+    if diff:
+        if out.item_savings >= out.bill_offer and out.item_savings >= out.reward and out.item_savings > 0:
+            out.item_savings += diff
+        elif out.bill_offer >= out.reward and out.bill_offer > 0:
+            out.bill_offer += diff
+        elif out.reward > 0:
+            out.reward += diff
+    return out
 
 
 class _Bill(FPDF):
@@ -86,39 +140,39 @@ def _draw(pdf: _Bill, r: ReceiptOut) -> None:
         pdf.row("Customer", r.customer_mobile)
     pdf.rule()
 
+    gst = with_gst(r)
     pdf.row("Item", "Amt", bold=True)
-    for n, i in enumerate(r.items, start=1):
-        pdf.row(f"{n}. {i.product_name}", f"{i.line_total}")
+    for n, (i, g) in enumerate(zip(r.items, gst.lines), start=1):
+        pdf.row(f"{n}. {i.product_name}", f"{g.amount}")
         if i.is_variable_weight:
-            details = [f"{float(i.qty):.3f} {i.uom} × {i.unit_price}/{i.uom}"]
+            details = [f"{float(i.qty):.3f} {i.uom} × {g.rate}/{i.uom}"]
         else:
-            details = [f"{i.qty} × {i.unit_price}"]
+            details = [f"{i.qty} × {g.rate}"]
         if i.hsn_code:
             details.append(f"HSN {i.hsn_code}")
         if i.mrp:
             details.append(f"MRP {i.mrp}")
         pdf.row("  " + " · ".join(details), "", size=7)
         if i.offer_discount > 0:
-            pdf.row(f"  {i.offer_name or 'Offer'}", f"-{i.offer_discount}", size=7)
+            pdf.row(f"  {i.offer_name or 'Offer'}", f"-{g.offer}", size=7)
         if i.manual_discount > 0:
             reason = f" ({i.manual_discount_reason})" if i.manual_discount_reason else ""
-            pdf.row(f"  Discount{reason}", f"-{i.manual_discount}", size=7)
+            pdf.row(f"  Discount{reason}", f"-{g.manual}", size=7)
     pdf.rule()
     items_text, qty_text = item_summary(r)
     pdf.row(items_text, qty_text, bold=True)
     pdf.rule()
 
-    item_savings = r.discount_amount - r.bill_offer_discount - r.reward_discount
-    # Prices are before GST; the subtotal includes GST so that subtotal − savings = total.
-    pdf.row("Subtotal", rs(r.subtotal + r.tax_amount))
-    if item_savings > 0:
-        pdf.row("Item savings", f"− {rs(item_savings)}")
+    # Everything with GST, so subtotal − savings = total.
+    pdf.row("Subtotal", rs(gst.subtotal))
+    if gst.item_savings > 0:
+        pdf.row("Item savings", f"− {rs(gst.item_savings)}")
     if r.bill_offer_discount > 0:
-        pdf.row(r.bill_offer_name or "Bill offer", f"− {rs(r.bill_offer_discount)}")
+        pdf.row(r.bill_offer_name or "Bill offer", f"− {rs(gst.bill_offer)}")
     if r.reward_discount > 0:
-        pdf.row(f"Reward points ({r.points_redeemed} pts)", f"− {rs(r.reward_discount)}")
+        pdf.row(f"Reward points ({r.points_redeemed} pts)", f"− {rs(gst.reward)}")
     pdf.ln(0.5)
-    pdf.row("TOTAL", rs(r.total), bold=True, size=11)
+    pdf.row("Total (incl. GST)", rs(r.total), bold=True, size=11)
     if r.total_saving > 0:
         on_mrp = " on MRP" if any(i.mrp is not None for i in r.items) else ""
         pdf.ln(1)
