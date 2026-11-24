@@ -1,6 +1,6 @@
 {
   "name": "literetailer",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "private": true,
   "description": "LiteRetail - retail billing and inventory (Electron + React + TypeScript).",
   "author": "LiteCode Software Pvt Ltd",
