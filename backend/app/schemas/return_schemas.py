@@ -76,6 +76,9 @@ class BillForMobileOut(BaseModel):
     completed_at: datetime
     total: Decimal
     items_count: int
+    customer_name: str | None = None
+    customer_mobile: str | None = None
+
 
 
 class ReturnItemOut(BaseModel):

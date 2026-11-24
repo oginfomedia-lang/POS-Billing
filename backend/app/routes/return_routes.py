@@ -21,6 +21,13 @@ def bills_for_mobile():
     bills = return_service.bills_for_mobile(request.args.get("mobile", ""), auth_service.current_user())
     return jsonify([b.model_dump(mode="json") for b in bills]), 200
 
+@return_bp.get("/returns/bills/search")
+@require_permission("sales.read")
+def bills_for_customer():
+    """Lost receipt: ?q= a customer mobile or part of their name."""
+    bills = return_service.bills_for_customer(request.args.get("q", ""), auth_service.current_user())
+    return jsonify([b.model_dump(mode="json") for b in bills]), 200
+
 
 @return_bp.post("/returns")
 @require_permission("sales.create")

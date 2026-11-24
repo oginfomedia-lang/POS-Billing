@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { IconArrowLeft, IconSearch, IconX } from '../../components/common/Icons';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 import { getErrorMessage } from '../../services/api/httpClient';
-import { createReturn, getBillsForMobile, getReturnableBill } from '../../services/api/returnApi';
+import { createReturn, getBillsForCustomer, getReturnableBill } from '../../services/api/returnApi';
 import { openDrawer } from '../../services/hardware/printerService';
 import type { BillForMobile, ReturnableBill, ReturnableLine } from '../../types/returns';
 import { formatDateTime } from '../../utils/format';
@@ -53,7 +53,7 @@ export function ReturnsPage() {
   const [billNumber, setBillNumber] = useState('');
   const [bill, setBill] = useState<ReturnableBill | null>(null);
   // Customer's bills when a mobile number was typed instead of a bill number.
-  const [mobileBills, setMobileBills] = useState<{ mobile: string; bills: BillForMobile[] } | null>(null);
+  const [mobileBills, setMobileBills] = useState<{ label: string; bills: BillForMobile[] } | null>(null);
   const [lines, setLines] = useState<Record<number, LineState>>({});
   const [reason, setReason] = useState<Reason>('damaged');
   const [note, setNote] = useState('');
@@ -75,13 +75,15 @@ export function ReturnsPage() {
       return;
     }
     setMobileError('');
-    if (isMobile(text)) {
+    const byName = !/\d/.test(text);
+    if (isMobile(text) || byName) {
+      if( byName && text.length < 2) return;
       setLoading(true);
       setError('');
       setBill(null);
       try {
-        const mobile = normalizeMobile(text) as string;
-        setMobileBills({ mobile, bills: await getBillsForMobile(mobile) });
+        const label = isMobile(text) ? (normalizeMobile(text) as string) : text;
+        setMobileBills({ label, bills: await getBillsForCustomer(label) });
       } catch (err) {
         setError(getErrorMessage(err));
       } finally {
@@ -194,12 +196,12 @@ export function ReturnsPage() {
             <p className="hint-text">{t('returns.noBillsForMobile')}</p>
           ) : (
             <>
-              <h3 className="section-title">{t('returns.billsForMobile', { mobile: mobileBills.mobile })}</h3>
+              <h3 className="section-title">{t('returns.billsForMobile', { mobile: mobileBills.label })}</h3>
               <div className="table-card">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>{t('returns.colBill')}</th><th>{t('returns.colDate')}</th>
+                      <th>{t('returns.colBill')}</th><th>{t('returns.colDate')}</th><th>{t('returns.colCustomer')}</th>
                       <th className="num">{t('returns.colItems')}</th><th className="num">{t('returns.colTotal')}</th><th />
                     </tr>
                   </thead>
@@ -208,6 +210,10 @@ export function ReturnsPage() {
                       <tr key={b.bill_number} className="clickable-row" onClick={() => loadBill(b.bill_number)}>
                         <td><strong>{b.bill_number}</strong></td>
                         <td>{formatDateTime(b.completed_at)}</td>
+                        <td>
+                          {b.customer_name || '-'}
+                          {b.customer_mobile && <div className="hint-text">{b.customer_mobile}</div>}
+                        </td>
                         <td className="num">{b.items_count}</td>
                         <td className="num">{formatRupees(b.total)}</td>
                         <td className="table-actions"><button type="button" className="btn-sm">{t('returns.find')}</button></td>

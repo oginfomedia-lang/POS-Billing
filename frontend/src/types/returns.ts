@@ -42,6 +42,9 @@ export interface BillForMobile {
   completed_at: string;
   total: string;
   items_count: number;
+  customer_name: string | null;
+  customer_mobile: string | null;
+
 }
 
 export interface ReturnLineIn {

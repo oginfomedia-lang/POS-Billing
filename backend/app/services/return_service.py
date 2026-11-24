@@ -38,7 +38,7 @@ from app.services import (
 from app.services.shift_service import expected_cash, require_active_shift
 from app.utils.dates import IST, now_ist
 from app.utils.money import round_money
-from app.utils.phone import normalize_mobile
+from app.utils.phone import is_mobile, normalize_mobile
 from app.utils.transactions import transaction
 
 ZERO = Decimal("0")
@@ -104,6 +104,30 @@ def bills_for_mobile(mobile: str, actor: User) -> list[BillForMobileOut]:
         )
         for s in SaleRepository().paid_by_mobile(number, actor.store_id)
     ]
+
+def bills_for_customer(text: str, actor: User) -> list[BillForMobileOut]:
+    """Lost receipt: a customer's recent paid bills by mobile number, or by name (2+ letters, no digits).
+    Own store only (head office: all)."""
+    text = " ".join((text or "").split())  # trim, and turn double spaces into one
+    repo = SaleRepository()
+    if is_mobile(text):
+        sales = repo.paid_by_mobile(normalize_mobile(text), actor.store_id)
+    elif len(text) >= 2 and not any(ch.isdigit() for ch in text):
+        sales = repo.paid_by_customer_name(text, actor.store_id)
+    else:
+        return []
+    return [
+        BillForMobileOut(
+            bill_number=s.bill_number,
+            completed_at=s.completed_at,
+            total=s.total,
+            items_count=len(s.items),
+            customer_name=s.customer_name or (s.customer.name if s.customer else None),
+            customer_mobile=s.customer_mobile,
+        )
+        for s in sales
+    ]
+
 
 
 def create_return(data: CreateReturnRequest, actor: User) -> SaleReturn:

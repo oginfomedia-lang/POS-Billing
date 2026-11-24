@@ -14,6 +14,13 @@ export async function getBillsForMobile(mobile: string): Promise<BillForMobile[]
   return resp.data;
 }
 
+/** Lost receipt: bills by customer mobile or part of the customer's name. */
+export async function getBillsForCustomer(q: string): Promise<BillForMobile[]> {
+  const resp = await httpClient.get<BillForMobile[]>('/returns/bills/search', { params: { q } });
+  return resp.data;
+}
+
+
 export async function createReturn(data: CreateReturnInput): Promise<ReturnOut> {
   const resp = await httpClient.post<ReturnOut>('/returns', data);
   return resp.data;
