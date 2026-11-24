@@ -169,7 +169,7 @@ export function PriceReviewPage() {
                       aria-label={t('priceReview.colNewPrice')}
                       onChange={(e) => setTyped((cur) => ({ ...cur, [r.product_id]: e.target.value }))}
                     />
-                    <div className={overMrp ? 'text-danger' : 'hint-text'}>
+                    <div className={overMrp ? 'text-danger' : 'hint-text'} style={overMrp ? {fontWeight: 700 } : undefined }>
                       {valid ? t('priceReview.withGst', { amount: formatRupees(paiseToString(inclPaise)) }) : '—'}
                       {newMargin !== null && ` · ${pct(newMargin)}`}
                       {overMrp && ` · ${t('priceReview.overMrp')}`}
