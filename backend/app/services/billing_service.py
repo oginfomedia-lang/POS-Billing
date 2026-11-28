@@ -275,7 +275,7 @@ def complete(sale_id: int, data: CompleteSaleRequest, actor: User) -> Sale:
             raise AppError("Cannot complete an empty bill.")
 
         _recalculate(sale)
-        manual = data.method in ("card", "upi") and settings_service.get_settings().card_upi_mode == "manual"
+        manual = data.method in ("card", "upi") and settings_service.card_upi_mode() == "manual"
         if data.method in ("card", "upi") and not manual:
             _require_paid_intent(sale, data)
         payment = payment_service.build_payment(data.method, sale.total, data.cash_tendered, data.reference)

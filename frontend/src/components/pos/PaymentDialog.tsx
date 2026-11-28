@@ -15,6 +15,7 @@ import { ManualPaymentPanel } from './ManualPaymentPanel';
 import { getCustomerCredit } from '../../services/api/customerApi';
 import type { CustomerCreditInfo } from '../../types/customer';
 import { RewardsStrip } from './RewardsStrip';
+import { useHasFeature } from '../../store/licenseStore';
 
 const METHODS: { value: TenderMethod; label: ParseKeys; icon: React.FC<{ size?: number }> }[] = [
   { value: 'cash', label: 'methods.cash', icon: IconCash },
@@ -51,6 +52,9 @@ export function PaymentDialog({
   saleId, total, customerMobile, customerName, onSaveMobile, pointsRedeemed, roomForReward, onRedeem, busy, error, onConfirm, onDigitalPaid, onClose,
 }: Props) {
   const { t } = useTranslation();
+  // Customer mobile, rewards and Udhari need the plan's "customers" feature.
+  const customersOn = useHasFeature()('customers');
+  const methods = METHODS.filter((m) => customersOn || m.value !== 'credit');
   const [method, setMethod] = useState<TenderMethod>('cash');
   const [tendered, setTendered] = useState(total);
   const [mobile, setMobile] = useState(customerMobile ?? '');
@@ -164,7 +168,7 @@ export function PaymentDialog({
         </div>
 
         <div className="pay-tabs" role="tablist">
-          {METHODS.map((m) => {
+          {methods.map((m) => {
             const Icon = m.icon;
             return (
               <button
@@ -184,6 +188,7 @@ export function PaymentDialog({
 
         {error && <div className="form-error">{error}</div>}
 
+        {customersOn && (<>
         <label className="field-label mobile-field">
           <span>{t('pay.customerMobile')}</span>
           <input
@@ -223,6 +228,7 @@ export function PaymentDialog({
           onRedeem={onRedeem}
           disabled={busy || savingMobile}
         />
+        </>)}
 
         <form onSubmit={handleSubmit} className="modal-form">
           {method === 'cash' ? (

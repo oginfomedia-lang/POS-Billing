@@ -20,7 +20,7 @@ from app.schemas.product_schemas import (
     ProductUpdate,
     PendingProductCreate
 )
-from app.services import inventory_service, settings_service, sku_service
+from app.services import inventory_service, license_service, settings_service, sku_service
 from app.utils.barcode_utils import generate_inhouse_barcode, parse_scale_barcode
 from app.utils.money import round_money
 from app.utils.transactions import transaction
@@ -372,6 +372,8 @@ def scan_barcode(scanned_value: str, store_id: int | None = None) -> dict:
 
 def _scan_scale_sticker(code: str, store_id: int | None) -> dict | None:
     """None = not a scale sticker, or no loose item has that code (then it's tried as a normal barcode)."""
+    if not license_service.allows("weighing_scale"):  # not in this shop's plan: scanned as a normal barcode
+        return None
     s = settings_service.get_settings()
     parsed = parse_scale_barcode(code, s.scale_prefix, s.scale_plu_digits)
     if parsed is None:

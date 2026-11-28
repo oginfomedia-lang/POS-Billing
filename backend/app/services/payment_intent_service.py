@@ -16,7 +16,7 @@ def _paise(amount) -> int:
 
 
 def start(sale_id: int, method: str, actor: User) -> PaymentIntent:
-    if settings_service.get_settings().card_upi_mode == "manual":
+    if settings_service.card_upi_mode() == "manual":
         raise AppError("Card/UPI is set to manual in Admin → Settings.")
     with transaction():
         sale = billing_service._lock_owned_sale(sale_id, actor)

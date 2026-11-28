@@ -13,6 +13,7 @@ import type {
   RestoreStatusOut,
 } from '../../types/api';
 import { formatDateTime } from '../../utils/format';
+import { useHasFeature } from '../../store/licenseStore';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ function ConfirmModal({
 
 function BackupsTab() {
   const { t } = useTranslation();
+  const cloudOn = useHasFeature()('cloud_backup');  // VPS upload / fetch need the plan's cloud backup
   const [backups, setBackups] = useState<BackupRunOut[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -228,7 +230,7 @@ function BackupsTab() {
                             <IconShield size={14} />
                           </button>
                         )}
-                        {b.storage_location === 'local' && (
+                        {cloudOn && b.storage_location === 'local' && (
                           <button
                             className="btn-sm"
                             style={{ fontSize: 11 }}
@@ -239,7 +241,7 @@ function BackupsTab() {
                             {uploadingId === b.id ? '…' : '☁ VPS'}
                           </button>
                         )}
-                        {b.storage_location === 'sftp' && (
+                        {cloudOn && b.storage_location === 'sftp' && (
                           <button
                             className="btn-sm"
                             style={{ fontSize: 11 }}
@@ -699,17 +701,18 @@ function ScheduleTab() {
 
 type TabKey = 'backups' | 'cloud' | 'restore' | 'replication' | 'schedule';
 
-const TABS: { key: TabKey; label: string }[] = [
+const TABS: { key: TabKey; label: string; feature?: string }[] = [
   { key: 'backups',     label: 'Backups' },
-  { key: 'cloud',       label: 'Cloud Uploads' },
+  { key: 'cloud',       label: 'Cloud Uploads', feature: 'cloud_backup' },
   { key: 'restore',     label: 'Restore' },
-  { key: 'replication', label: 'Replication' },
+  { key: 'replication', label: 'Replication', feature: 'cloud_backup' },
   { key: 'schedule',    label: 'Schedule' },
 ];
 
 export function BackupPage() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<TabKey>('backups');
+  const hasFeature = useHasFeature();
 
   return (
     <div className="admin-page">
@@ -732,7 +735,7 @@ export function BackupPage() {
           overflowX: 'auto',
         }}
       >
-        {TABS.map((t) => (
+        {TABS.filter((tb) => hasFeature(tb.feature)).map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}

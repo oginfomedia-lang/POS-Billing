@@ -8,6 +8,7 @@ from app.models.enums import PaymentMethod, SaleStatus, ShiftStatus, UserRole
 from app.models.store import Store
 from app.models.user import User
 from app.extensions import db
+from app.services import license_service
 from app.utils.store_scope import is_head_office, require_store_access
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.return_repository import ReturnRepository
@@ -43,6 +44,7 @@ def open_shift(actor: User, data: OpenShiftRequest) -> CashierShift:
         counter = CounterRepository().get_by_id(data.counter_id)
         if counter is None or counter.store_id != data.store_id or not counter.is_active:
             raise NotFoundError(f"Counter {data.counter_id} not found in store {data.store_id}.")
+        license_service.check_counter_allowed(counter.id)
     shift = CashierShift(
         user_id=user_id,
         store_id=data.store_id,

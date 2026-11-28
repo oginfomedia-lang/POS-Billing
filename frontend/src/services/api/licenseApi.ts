@@ -13,6 +13,15 @@ export interface LicenseStatus {
   customer_name: string | null;
   /** False on a development server: no licence screen. Only sent by GET /license. */
   required?: boolean;
+  /** starter | business | enterprise (keys from before plans: enterprise). */
+  plan?: string | null;
+  /** Features the plan switches on (ALL_FEATURES in the server's license_service.py). */
+  features?: string[];
+  /** Plan caps; a missing one is unlimited. */
+  limits?: Partial<Record<'counters' | 'stores' | 'users', number>>;
+  /** Updates and support until this date. */
+  amc_until?: string | null;
+  key_version?: number | null;
 }
 
 export async function getLicense(): Promise<LicenseStatus> {

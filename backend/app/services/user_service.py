@@ -8,7 +8,7 @@ from app.models.store import Store
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.user_schemas import PinChange, PinReset, UserCreate, UserUpdate
-from app.services import audit_service
+from app.services import audit_service, license_service
 from app.utils.security import check_user_pin, hash_pin
 from app.utils.transactions import transaction
 
@@ -28,6 +28,7 @@ def create_user(data: UserCreate, actor: User | None, must_change_pin: bool = Tr
             "Login names must be unique across all stores; the full name can be the same."
         )
     _check_store(data.role, data.store_id, new=True)
+    license_service.check_limit("users", User.query.filter_by(is_active=True).count())
 
     user = User(
         username=data.username,
@@ -56,6 +57,8 @@ def update_user(user_id: int, data: UserUpdate, actor: User) -> User:
         user.role = data.role
     if data.store_id is not None:
         user.store_id = data.store_id
+    if data.is_active and not user.is_active:
+        license_service.check_limit("users", User.query.filter_by(is_active=True).count())
     if data.is_active is not None:
         user.is_active = data.is_active
     # A new role or store (or turning the account off) logs the person out of every PC: their open

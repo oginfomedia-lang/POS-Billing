@@ -6,6 +6,7 @@ import { LicensePage } from '../pages/auth/LicensePage';
 import { getLicense, type LicenseStatus } from '../services/api/licenseApi';
 import { useAuthStore } from '../store/authStore';
 import { useCounterStore } from '../store/counterStore';
+import { useLicenseStore } from '../store/licenseStore';
 import { useOfflineStore } from '../store/offlineStore';
 
 const WARNING_DAYS = 30;
@@ -40,6 +41,7 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
     try {
       const found = await getLicense();
       if (found.valid || found.required === false) rememberLicenceOk();
+      useLicenseStore.getState().setStatus(found);
       setStatus(found);
     } catch {
       setStatus(null);

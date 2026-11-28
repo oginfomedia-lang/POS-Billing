@@ -9,6 +9,7 @@ import { IntegrationsCard } from '../../components/admin/IntegrationsCard';
 import { PrinterSettingsCard } from '../../components/admin/PrinterSettingsCard';
 import { ScaleTestBox } from '../../components/admin/ScaleTestBox';
 import { useAuth } from '../../hooks/useAuth';
+import { useHasFeature } from '../../store/licenseStore';
 import { getErrorMessage } from '../../services/api/httpClient';
 import { getSettings, saveSettings } from '../../services/api/reportApi';
 import { hasPrinterBridge } from '../../services/hardware/printerService';
@@ -40,6 +41,7 @@ const DEFAULTS: SettingsData = {
 export function SettingsPage() {
   const { t } = useTranslation();
   const { isAdmin } = useAuth();
+  const hasFeature = useHasFeature();  // sections the shop's plan doesn't include are not shown
   const [settings, setSettings] = useState<SettingsData>(DEFAULTS);
   const [savedSettings, setSavedSettings] = useState<SettingsData>(DEFAULTS);
   const [loading, setLoading] = useState(true);
@@ -200,6 +202,7 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.profit.hint')}</span>
           </label>
+          {hasFeature('customers') && (<>
           <h3 className="section-title settings-anchor" id="settings-rewards">{t('settings.rewards.title')}</h3>
           <label className="field-label checkbox-label">
             <input
@@ -250,6 +253,8 @@ export function SettingsPage() {
             />
             <span className="hint-text">{t('settings.rewards.hint')}</span>
           </label>
+          </>)}
+          {hasFeature('ebill_whatsapp') && (<>
           <h3 className="section-title settings-anchor" id="settings-ebill">{t('settings.ebill.title')}</h3>
           <label className="field-label checkbox-label">
             <input
@@ -261,6 +266,8 @@ export function SettingsPage() {
             {t('settings.ebill.enabled')}
           </label>
           <p className="hint-text">{t('settings.ebill.hint')}</p>
+          </>)}
+          {hasFeature('card_upi') && (<>
           <h3 className="section-title settings-anchor" id="settings-cardupi">{t('settings.cardUpi.title')}</h3>
           {(['manual', 'razorpay'] as const).map((mode) => (
             <label key={mode} className="field-label checkbox-label">
@@ -274,6 +281,8 @@ export function SettingsPage() {
               <span><strong>{t(`settings.cardUpi.${mode}`)}</strong> — {t(`settings.cardUpi.${mode}Hint`)}</span>
             </label>
           ))}
+          </>)}
+          {hasFeature('weighing_scale') && (<>
           <h3 className="section-title settings-anchor" id="settings-scale">{t('settings.scale.title')}</h3>
           <p className="hint-text">{t('settings.scale.hint')}</p>
           <div className="form-row-3">
@@ -323,6 +332,7 @@ export function SettingsPage() {
           <ScaleTestBox
             unsaved={(['scale_prefix', 'scale_plu_digits', 'scale_value'] as const).some((k) => settings[k] !== savedSettings[k])}
           />
+          </>)}
           {isAdmin ? (
             <div className="modal-buttons">
               <button className="btn-primary" type="submit" disabled={saving}>
@@ -334,7 +344,7 @@ export function SettingsPage() {
           )}
         </form>
       )}
-      {!loading && (
+      {!loading && hasFeature('daily_report') && (
         <div className="settings-anchor" id="settings-daily-report">
         <DailyReportCard
           value={settings}

@@ -21,7 +21,9 @@ from app.models.notification import NotificationLog
 from app.models.sale import Sale
 from app.models.user import User
 from app.repositories.notification_repository import NotificationRepository
-from app.services import audit_service, ebill_pdf, integration_settings_service, settings_service, whatsapp_gateway
+from app.services import (
+    audit_service, ebill_pdf, integration_settings_service, license_service, settings_service, whatsapp_gateway,
+)
 from app.services.daily_report_service import SendResult, inr
 from app.utils.dates import IST
 from app.utils.phone import mask_mobile, normalize_mobile
@@ -34,6 +36,8 @@ RETRY_WINDOW = timedelta(days=2)  # older unsent e-bills are given up on
 def queue(sale: Sale) -> bool:
     """Inside the completing sale's transaction: records that this bill's e-bill is due. True = queued."""
     if not sale.customer_mobile or not settings_service.get_settings().ebill_enabled:
+        return False
+    if not license_service.allows("ebill_whatsapp"):  # not in this shop's plan
         return False
     NotificationRepository().ensure_ebill(
         sale.id, sale.store_id, sale.completed_at.astimezone(IST).date(), sale.customer_mobile

@@ -28,7 +28,9 @@ from app.schemas.offline_schemas import (
     OfflineSettings,
     OfflineStore,
 )
-from app.services import audit_service, inventory_service, payment_service, pricing_service, settings_service
+from app.services import (
+    audit_service, inventory_service, license_service, payment_service, pricing_service, settings_service,
+)
 from app.utils.transactions import transaction
 
 # A counter's clock can be a little ahead of the server's; a bill dated further ahead than this is refused.
@@ -60,7 +62,9 @@ def catalog(store_id: int) -> OfflineCatalogOut:
         generated_at=now,
         store=OfflineStore(id=store.id, name=store.name, address=store.address, phone=store.phone, gstin=store.gstin),
         settings=OfflineSettings(
-            scale_prefix=s.scale_prefix, scale_plu_digits=s.scale_plu_digits, scale_value=s.scale_value,
+            # "-" never starts a 13-digit barcode: offline billing reads no scale stickers when the plan has no scale.
+            scale_prefix=s.scale_prefix if license_service.allows("weighing_scale") else "-",
+            scale_plu_digits=s.scale_plu_digits, scale_value=s.scale_value,
             receipt_header=s.receipt_header, receipt_footer=s.receipt_footer,
             receipt_footer_mr=s.receipt_footer_mr, fssai_number=s.fssai_number,
         ),

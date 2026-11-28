@@ -27,6 +27,7 @@ import {
   IconUsers,
   IconX,
 } from '../common/Icons';
+import { useHasFeature, useLicenseStore } from '../../store/licenseStore';
 import { useStoreContext, useStoreDisplayName } from '../../store/storeContext';
 import { VENDOR_NAME } from '../../utils/brand';
 import { StoreSwitcher } from './StoreSwitcher';
@@ -36,16 +37,20 @@ interface LinkItem {
   label: ParseKeys;
   icon: React.FC<{ size?: number; color?: string }>;
   adminOnly?: boolean;
+  /** Plan feature this page needs (hidden when the shop's plan doesn't include it). */
+  feature?: string;
 }
 
 /** Parts of the Settings page, shown as a tree under Settings: one click goes straight there. */
-const SETTINGS_SECTIONS: { id: string; label: ParseKeys; adminOnly?: boolean; printerOnly?: boolean }[] = [
+const SETTINGS_SECTIONS: {
+  id: string; label: ParseKeys; adminOnly?: boolean; printerOnly?: boolean; feature?: string;
+}[] = [
   { id: 'general', label: 'nav.settingsGeneral' },
-  { id: 'rewards', label: 'settings.rewards.title' },
-  { id: 'ebill', label: 'settings.ebill.title' },
-  { id: 'cardupi', label: 'settings.cardUpi.title' },
-  { id: 'scale', label: 'settings.scale.title' },
-  { id: 'daily-report', label: 'settings.dailyReport.title' },
+  { id: 'rewards', label: 'settings.rewards.title', feature: 'customers' },
+  { id: 'ebill', label: 'settings.ebill.title', feature: 'ebill_whatsapp' },
+  { id: 'cardupi', label: 'settings.cardUpi.title', feature: 'card_upi' },
+  { id: 'scale', label: 'settings.scale.title', feature: 'weighing_scale' },
+  { id: 'daily-report', label: 'settings.dailyReport.title', feature: 'daily_report' },
   { id: 'integrations', label: 'settings.integrations.title', adminOnly: true },
   { id: 'printer', label: 'printer.title', printerOnly: true },
 ];
@@ -57,9 +62,9 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
     links: [
       { to: '/admin', label: 'nav.dashboard', icon: IconDashboard },
       { to: '/admin/reports', label: 'nav.reports', icon: IconBarChart },
-      { to: '/admin/accounting', label: 'nav.accounting', icon: IconFileText },
+      { to: '/admin/accounting', label: 'nav.accounting', icon: IconFileText, feature: 'accounting' },
       { to: '/admin/bills', label: 'nav.bills', icon: IconReceipt },
-      { to: '/admin/customers', label: 'nav.customers', icon: IconUsers },
+      { to: '/admin/customers', label: 'nav.customers', icon: IconUsers, feature: 'customers' },
     ],
   },
   {
@@ -68,16 +73,16 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
       { to: '/admin/products', label: 'nav.products', icon: IconPackage },
       { to: '/admin/categories', label: 'nav.categories', icon: IconFolder },
       { to: '/admin/inventory', label: 'nav.inventory', icon: IconBoxes },
-      { to: '/admin/labels', label: 'nav.labels', icon: IconTag },
-      { to: '/admin/discounts', label: 'nav.discounts', icon: IconPercent },
-      { to: '/admin/suppliers', label: 'nav.suppliers', icon: IconTruck },
+      { to: '/admin/labels', label: 'nav.labels', icon: IconTag, feature: 'labels' },
+      { to: '/admin/discounts', label: 'nav.discounts', icon: IconPercent, feature: 'discounts' },
+      { to: '/admin/suppliers', label: 'nav.suppliers', icon: IconTruck, feature: 'purchases' },
     ],
   },
   {
     title: 'nav.purchasing',
     links: [
-      { to: '/admin/purchases', label: 'nav.purchases', icon: IconClipboardList },
-      { to: '/admin/price-review', label: 'nav.priceReview', icon: IconTag },
+      { to: '/admin/purchases', label: 'nav.purchases', icon: IconClipboardList, feature: 'purchases' },
+      { to: '/admin/price-review', label: 'nav.priceReview', icon: IconTag, feature: 'price_review' },
     ],
   },
   {
@@ -86,7 +91,7 @@ const SECTIONS: { title: ParseKeys; links: LinkItem[] }[] = [
       { to: '/admin/stores', label: 'nav.stores', icon: IconStore },
       { to: '/admin/users', label: 'nav.users', icon: IconUsers },
       { to: '/admin/settings', label: 'nav.settings', icon: IconSettings },
-      { to: '/admin/audit-logs', label: 'nav.auditLogs', icon: IconFileText, adminOnly: true },
+      { to: '/admin/audit-logs', label: 'nav.auditLogs', icon: IconFileText, adminOnly: true, feature: 'audit_logs' },
       { to: '/admin/backups', label: 'nav.backups', icon: IconDatabase, adminOnly: true },
     ],
   },
@@ -103,6 +108,27 @@ function initials(name: string): string {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('');
+}
+
+/** "Business plan" and until when updates & support (AMC) run, under the sidebar. Nothing for development servers
+ * or servers from before plans. */
+function PlanLine() {
+  const { t } = useTranslation();
+  const status = useLicenseStore((s) => s.status);
+  if (!status?.valid || !status.plan) return null;
+  const plan = status.plan.charAt(0).toUpperCase() + status.plan.slice(1);
+  const amc = status.amc_until ? new Date(`${status.amc_until}T00:00:00`) : null;
+  const amcText = amc
+    ? t(amc.getTime() < Date.now() ? 'nav.amcExpired' : 'nav.amcUntil', {
+      date: amc.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+    })
+    : null;
+  return (
+    <div className="sidebar-plan">
+      <strong>{t('nav.planName', { plan })}</strong>
+      {amcText && <span>{amcText}</span>}
+    </div>
+  );
 }
 
 function Brand() {
@@ -126,6 +152,7 @@ function Brand() {
 export function AdminNav() {
   const { t } = useTranslation();
   const { user, isAdmin, logout } = useAuth();
+  const hasFeature = useHasFeature();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -135,7 +162,7 @@ export function AdminNav() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsExpanded = onSettings || settingsOpen;
   const settingsSections = SETTINGS_SECTIONS.filter(
-    (s) => (isAdmin || !s.adminOnly) && (!s.printerOnly || hasPrinterBridge()),
+    (s) => (isAdmin || !s.adminOnly) && (!s.printerOnly || hasPrinterBridge()) && hasFeature(s.feature),
   );
   const navRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -196,7 +223,7 @@ export function AdminNav() {
 
         <nav className="admin-nav" ref={navRef} onScroll={(e) => { navScrollTop = e.currentTarget.scrollTop; }}>
           {SECTIONS.map((section) => {
-            const links = section.links.filter((l) => isAdmin || !l.adminOnly);
+            const links = section.links.filter((l) => (isAdmin || !l.adminOnly) && hasFeature(l.feature));
             if (links.length === 0) return null;
             return (
               <div key={section.title} className="nav-section">
@@ -278,6 +305,7 @@ export function AdminNav() {
               </button>
             </div>
           )}
+          <PlanLine />
           <div className="sidebar-vendor">© {VENDOR_NAME}</div>
         </div>
       </aside>

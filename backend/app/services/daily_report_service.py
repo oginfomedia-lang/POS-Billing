@@ -18,7 +18,7 @@ from app.models.user import User
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.store_repository import StoreRepository
 from app.schemas.report_schemas import CollectionReportOut, ReportQuery
-from app.services import audit_service, report_service, settings_service, whatsapp_gateway
+from app.services import audit_service, license_service, report_service, settings_service, whatsapp_gateway
 from app.utils.dates import business_date, now_ist
 from app.utils.money import round_money
 from app.utils.transactions import transaction
@@ -90,6 +90,8 @@ def run_due(now: datetime | None = None) -> list[SendResult]:
     """Sends today's summary if it's switched on and the send time has passed. Safe to call any number of times."""
     settings = settings_service.get_settings()
     if not settings.daily_report_enabled or not settings.report_mobiles:
+        return []
+    if not license_service.allows("daily_report"):  # not in this shop's plan
         return []
     now = now or now_ist()
     hh, mm = map(int, settings.daily_report_time.split(":"))

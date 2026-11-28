@@ -9,11 +9,12 @@ from app.models.store import Counter, Store
 from app.models.user import User
 from app.repositories.store_repository import CounterRepository, StoreRepository
 from app.schemas.store_schemas import CounterCreate, CounterUpdate, StoreCreate, StoreUpdate
-from app.services import audit_service
+from app.services import audit_service, license_service
 from app.utils.transactions import transaction
 
 
 def create_store(data: StoreCreate, actor: User) -> Store:
+    license_service.check_limit("stores", Store.query.filter_by(is_active=True).count())
     store = Store(
         name=data.name,
         address=data.address,
@@ -39,6 +40,8 @@ def update_store(store_id: int, data: StoreUpdate, actor: User) -> Store:
         store.phone = data.phone
     if data.gstin is not None:
         store.gstin = data.gstin
+    if data.is_active and not store.is_active:
+        license_service.check_limit("stores", Store.query.filter_by(is_active=True).count())
     if data.is_active is not None:
         store.is_active = data.is_active
 
