@@ -54,6 +54,13 @@ class TooManyAttemptsError(AppError):
     code = "TOO_MANY_ATTEMPTS"
 
 
+class PlanLimitError(AppError):
+    """The shop's plan allows fewer counters / stores / users than this would need."""
+
+    status_code = 403
+    code = "PLAN_LIMIT_REACHED"
+
+
 class InsufficientStockError(AppError):
     """details = [{"product_id": ..., "product_name": ..., "requested": ..., "available": ...}]"""
 

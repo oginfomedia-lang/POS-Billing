@@ -87,7 +87,8 @@ def _do_backup() -> None:
     logger.info("Scheduled backup complete: %s (status=%s)", run.filename, run.status)
 
     # Auto-upload to VPS if configured
-    if run.status == "success" and current_app.config.get("VPS_HOST"):
+    from app.services import license_service
+    if run.status == "success" and current_app.config.get("VPS_HOST") and license_service.allows("cloud_backup"):
         from app.services import cloud_upload_service
         attempt = cloud_upload_service.upload_backup(run.id, provider="sftp")
         logger.info("Auto VPS upload: backup #%s → %s", run.id, attempt.status)

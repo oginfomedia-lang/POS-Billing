@@ -7,7 +7,7 @@ from __future__ import annotations
 from app.models.user import User
 from app.repositories.settings_repository import SettingsRepository
 from app.schemas.settings_schemas import SettingsData
-from app.services import audit_service
+from app.services import audit_service, license_service
 from app.utils.transactions import transaction
 
 
@@ -16,6 +16,13 @@ def get_settings() -> SettingsData:
     saved = SettingsRepository().all()
     known = {k: v for k, v in saved.items() if k in SettingsData.model_fields}
     return SettingsData.model_validate(known)
+
+
+def card_upi_mode() -> str:
+    """How card/UPI is taken. "razorpay" (the total pushed to Razorpay) only if the plan includes it;
+    otherwise "manual": the cashier takes it on the shop's own machine / QR and confirms."""
+    mode = get_settings().card_upi_mode
+    return mode if license_service.allows("card_upi") else "manual"
 
 
 def update_settings(data: SettingsData, actor: User) -> SettingsData:

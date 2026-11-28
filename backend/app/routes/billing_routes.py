@@ -132,7 +132,7 @@ def void_sale(sale_id: int):
 @require_permission("sales.create")
 def payment_mode():
     """How the payment screen takes card/UPI: through Razorpay, or manually on the shop's own machine / QR."""
-    return jsonify({"card_upi_mode": settings_service.get_settings().card_upi_mode}), 200
+    return jsonify({"card_upi_mode": settings_service.card_upi_mode()}), 200
 
 
 @billing_bp.post("/sales/<int:sale_id>/payment-intents")

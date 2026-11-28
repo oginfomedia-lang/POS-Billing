@@ -34,6 +34,7 @@ def create_app(config_name: str | None = None) -> Flask:
     _security_headers(app)
     _pause_during_restore(app)
     _require_shop_license(app)
+    _require_plan_feature(app)
     _require_own_pin(app)
     register_cli(app)
 
@@ -102,6 +103,58 @@ def _require_shop_license(app: Flask) -> None:
                                   "This shop's LiteRetail licence is not active. Activate it on any PC.",
                                   status.to_dict())
         return None
+
+
+# Blueprint -> the plan feature it needs. Blueprints not listed (billing, products, inventory, reports, ...)
+# are in every plan.
+_FEATURE_BLUEPRINTS = {
+    "customers": "customers",
+    "discounts": "discounts",
+    "accounting": "accounting",
+    "price_review": "price_review",
+    "audit": "audit_logs",
+    "suppliers": "purchases",
+    "purchases": "purchases",
+    "supplier_invoices": "purchases",
+    "supplier_payments": "purchases",
+    "uploads": "purchases",
+}
+
+# Single endpoints inside blueprints every plan has (billing, receipts, settings, backups) that need a feature.
+_FEATURE_ENDPOINTS = {
+    "billing.set_customer_mobile": "customers",
+    "billing.redeem_points": "customers",
+    "billing.start_payment": "card_upi",
+    "billing.check_payment": "card_upi",
+    "billing.cancel_payment": "card_upi",
+    "receipts.send_ebill": "ebill_whatsapp",
+    "settings.send_daily_report": "daily_report",
+    "settings.daily_report_logs": "daily_report",
+    "backup.upload_backup": "cloud_backup",
+    "backup.fetch_backup": "cloud_backup",
+    "backup.list_uploads": "cloud_backup",
+    "backup.get_replication": "cloud_backup",
+    "backup.take_replication_snapshot": "cloud_backup",
+}
+
+
+def _require_plan_feature(app: Flask) -> None:
+    """A licensed shop only reaches the modules its plan includes. Runs after the licence check."""
+    from flask import request
+
+    from app.services import license_service
+
+    @app.before_request
+    def check_plan_feature():
+        if not app.config.get("LICENSE_REQUIRED") or request.method == "OPTIONS":
+            return None
+        feature = (_FEATURE_BLUEPRINTS.get(request.blueprint or "")
+                   or _FEATURE_ENDPOINTS.get(request.endpoint or ""))
+        if feature is None or license_service.has_feature(feature):
+            return None
+        return error_response(403, "FEATURE_NOT_IN_PLAN",
+                              "This feature is not in your LiteRetail plan. Upgrade the plan to use it.",
+                              {"feature": feature})
 
 
 def _require_own_pin(app: Flask) -> None:

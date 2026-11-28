@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { IconArrowLeft, IconDashboard } from '../../components/common/Icons';
 import { EbillBar } from '../../components/pos/EbillBar';
+import { useHasFeature } from '../../store/licenseStore';
 import { ReceiptView } from '../../components/pos/ReceiptView';
 import { useAuth } from '../../hooks/useAuth';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
@@ -14,6 +15,7 @@ import type { ReceiptOut } from '../../types/sale';
 
 export function ReprintPage() {
   const { t } = useTranslation();
+  const ebillOn = useHasFeature()('ebill_whatsapp');  // resending the WhatsApp e-bill needs the plan's e-bill
   const { saleId } = useParams();
   // ?print=1 (straight after payment) prints automatically; reopening a past bill doesn't.
   const [searchParams] = useSearchParams();
@@ -82,7 +84,7 @@ export function ReprintPage() {
 
       {error && <div className="page-error">{error}</div>}
       {printError && <div className="page-error no-print">{t('receipt.printFailed', { error: printError })}</div>}
-      {receipt && <EbillBar receipt={receipt} printFailed={!!printError} />}
+      {receipt && ebillOn && <EbillBar receipt={receipt} printFailed={!!printError} />}
       {!receipt && !error && <div className="loading-text">{t('common.loading')}</div>}
 
       {receipt && <ReceiptView receipt={receipt} />}
